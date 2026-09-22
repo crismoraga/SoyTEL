@@ -33,23 +33,20 @@ export default function BurstScreen() {
   );
 
   useEffect(() => {
-    if (phase !== 'playing' || !current) {
-      return;
+    if (phase === 'playing' && current) {
+      setSecondsLeft(current.durationSeconds);
+      const interval = setInterval(() => {
+        setSecondsLeft((value) => {
+          if (value <= 1) {
+            clearInterval(interval);
+            timeoutAnswer.current();
+            return 0;
+          }
+          return value - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
     }
-
-    setSecondsLeft(current.durationSeconds);
-    const interval = setInterval(() => {
-      setSecondsLeft((value) => {
-        if (value <= 1) {
-          clearInterval(interval);
-          timeoutAnswer.current();
-          return 0;
-        }
-        return value - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
   }, [current, phase, round]);
 
   function start() {

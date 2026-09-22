@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -11,6 +11,9 @@ import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { recordGameResult } from '@/storage/profile';
 import { completeChapter, loadStoryProgress, type StoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
+
+const campusMap = require('../assets/Assets_SoyTEL_4.png');
+const telixSprite = require('../assets/Assets_SoyTEL_2.png');
 
 type StoryPhase = 'map' | 'dialogue' | 'challenge' | 'done';
 
@@ -109,45 +112,45 @@ export default function StoryScreen() {
           Alguien —o algo— dejó el campus sin conexión. Ayuda a Telix a restaurarla capítulo a capítulo.
         </TelText>
 
-        <View style={styles.map}>
-          {storyChapters.map((item, index) => {
-            const unlocked = isUnlocked(index);
-            const done = completed.includes(item.id);
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Capítulo ${item.number}: ${item.title}. ${done ? 'Completado' : unlocked ? 'Disponible' : 'Bloqueado'}`}
-                disabled={!unlocked}
-                onPress={() => openChapter(item)}
-                style={({ pressed }) => [
-                  styles.chapterNode,
-                  done && styles.chapterDone,
-                  !unlocked && styles.chapterLocked,
-                  pressed && unlocked && styles.chapterPressed,
-                ]}
-              >
-                <View style={styles.chapterHeader}>
-                  <Ionicons
-                    color={done ? colors.success : unlocked ? colors.accent : 'rgba(255,255,255,0.4)'}
-                    name={done ? 'checkmark-circle' : unlocked ? 'radio-button-on' : 'lock-closed'}
-                    size={28}
-                  />
-                  <View style={styles.chapterText}>
-                    <TelText variant="caption" color={unlocked ? 'accentSoft' : 'muted'}>
-                      Capítulo {item.number} · {item.location}
-                    </TelText>
-                    <TelText variant="subtitle" color={unlocked ? 'white' : 'muted'}>
-                      {item.title}
+        <View style={styles.mapContainer}>
+          <Image source={campusMap} style={styles.mapImage} resizeMode="cover" />
+          <View style={styles.mapOverlay}>
+            {storyChapters.map((item, index) => {
+              const unlocked = isUnlocked(index);
+              const done = completed.includes(item.id);
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Capítulo ${item.number}: ${item.title}. ${done ? 'Completado' : unlocked ? 'Disponible' : 'Bloqueado'}`}
+                  disabled={!unlocked}
+                  onPress={() => openChapter(item)}
+                  style={({ pressed }) => [
+                    styles.chapterNode,
+                    done && styles.chapterDone,
+                    !unlocked && styles.chapterLocked,
+                    pressed && unlocked && styles.chapterPressed,
+                    index === 0 && { top: '20%', left: '20%' },
+                    index === 1 && { top: '45%', right: '15%' },
+                    index === 2 && { bottom: '15%', left: '40%' },
+                  ]}
+                >
+                  <View style={styles.chapterBadge}>
+                    <Ionicons
+                      color={done ? colors.success : unlocked ? colors.primary : colors.muted}
+                      name={done ? 'checkmark-circle' : unlocked ? 'radio-button-on' : 'lock-closed'}
+                      size={24}
+                    />
+                  </View>
+                  <View style={styles.chapterLabel}>
+                    <TelText variant="caption" color={unlocked ? 'white' : 'muted'} style={{ fontWeight: '700' }}>
+                      {item.number}. {item.title}
                     </TelText>
                   </View>
-                </View>
-                <TelText variant="caption" color={unlocked ? 'accentSoft' : 'muted'}>
-                  Recompensa: {item.rewardXp} XP
-                </TelText>
-              </Pressable>
-            );
-          })}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {allDone && (
@@ -172,7 +175,7 @@ export default function StoryScreen() {
     return (
       <Screen dark contentStyle={styles.centered}>
         <View style={styles.dialogueAvatar}>
-          <Ionicons color={colors.accent} name="planet" size={64} />
+          <Image source={telixSprite} style={styles.telixImage} resizeMode="contain" />
         </View>
         <TelText variant="overline" color="accentSoft" align="center">
           Capítulo {chapter.number} · {chapter.title}
@@ -261,39 +264,59 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
   },
-  map: {
-    gap: spacing.sm,
-  },
-  chapterNode: {
-    gap: spacing.sm,
+  mapContainer: {
+    height: 340,
     borderRadius: radius.lg,
-    backgroundColor: colors.primarySoft,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(167,212,237,0.25)',
-    padding: spacing.lg,
+  },
+  mapImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  chapterNode: {
+    position: 'absolute',
+    alignItems: 'center',
+    gap: spacing.xs,
+    maxWidth: 140,
+  },
+  chapterBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    backgroundColor: colors.cream,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.accent,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  chapterLabel: {
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(11,45,69,0.85)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
   },
   chapterDone: {
-    borderColor: colors.success,
+    opacity: 1,
   },
   chapterLocked: {
     opacity: 0.55,
   },
   chapterPressed: {
-    transform: [{ scale: 0.985 }],
-    borderColor: colors.accent,
-  },
-  chapterHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  chapterText: {
-    flex: 1,
-    gap: 2,
+    transform: [{ scale: 0.95 }],
   },
   dialogueAvatar: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     borderRadius: radius.pill,
     backgroundColor: 'rgba(111,179,217,0.12)',
     borderWidth: 1,
@@ -301,6 +324,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  telixImage: {
+    width: 120,
+    height: 120,
   },
   options: {
     gap: spacing.sm,

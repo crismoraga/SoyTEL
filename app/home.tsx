@@ -69,7 +69,7 @@ export default function HomeScreen() {
         <QuickAction
           icon="flash"
           label="Ráfaga TEL"
-          description="5 microretos"
+          description="6 microretos"
           onPress={() => router.push('/burst')}
         />
         <QuickAction
