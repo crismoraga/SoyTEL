@@ -1,0 +1,68 @@
+import type { Achievement } from '@/types/game';
+
+export const achievements: Achievement[] = [
+  {
+    id: 'first-signal',
+    title: 'Primera señal',
+    description: 'Completa tu primera actividad en SoyTEL.',
+    area: 'general',
+    tier: 'bronce',
+    threshold: 1,
+  },
+  {
+    id: 'burst-starter',
+    title: 'Reflejos TEL',
+    description: 'Completa tres ráfagas de microjuegos.',
+    area: 'redes',
+    tier: 'bronce',
+    threshold: 3,
+  },
+  {
+    id: 'quiz-bronze',
+    title: 'Voz y datos',
+    description: 'Acumula 10 respuestas correctas en Quién quiere ser Telemático.',
+    area: 'software',
+    tier: 'bronce',
+    threshold: 10,
+  },
+  {
+    id: 'journey-host',
+    title: 'Punto de encuentro',
+    description: 'Crea o únete a dos recorridos.',
+    area: 'general',
+    tier: 'plata',
+    threshold: 2,
+  },
+  {
+    id: 'perfect-run',
+    title: 'Sin pérdida de paquetes',
+    description: 'Logra una partida con 100% de precisión.',
+    area: 'teleco',
+    tier: 'oro',
+    threshold: 1,
+  },
+  {
+    id: 'level-five',
+    title: 'Enlace ascendente',
+    description: 'Alcanza el nivel 5 de experiencia.',
+    area: 'general',
+    tier: 'oro',
+    threshold: 5,
+  },
+  {
+    id: 'signal-restored',
+    title: 'Señal restaurada',
+    description: 'Completa el modo historia La señal perdida.',
+    area: 'seguridad',
+    tier: 'oro',
+    threshold: 3,
+  },
+  {
+    id: 'telix-friend',
+    title: 'Aliado de Telix',
+    description: 'Interactúa con la mascota siete días distintos.',
+    area: 'general',
+    tier: 'platino',
+    threshold: 7,
+  },
+];
