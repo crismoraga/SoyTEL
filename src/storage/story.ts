@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const STORY_KEY = '@soytel/story';
 const ONBOARDING_KEY = '@soytel/onboarded';
 const MASCOT_DAYS_KEY = '@soytel/mascot-days';
+const MASCOT_LOG_KEY = '@soytel/mascot-log';
 
 export interface StoryProgress {
   completedChapters: string[];
@@ -71,8 +72,6 @@ export async function logMascotDay(isoDate: string): Promise<string[]> {
   return updated;
 }
 
-const MASCOT_LOG_KEY = '@soytel/mascot-log';
-
 export interface MascotLog {
   date: string;
   count: number;
@@ -99,3 +98,5 @@ export async function loadMascotLog(): Promise<MascotLog> {
 export async function saveMascotLog(log: MascotLog): Promise<void> {
   await AsyncStorage.setItem(MASCOT_LOG_KEY, JSON.stringify(log));
 }
+
+export const STORY_KEYS = [STORY_KEY, ONBOARDING_KEY, MASCOT_DAYS_KEY, MASCOT_LOG_KEY];
