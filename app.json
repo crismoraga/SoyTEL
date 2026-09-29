@@ -4,9 +4,10 @@
     "slug": "soytel",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/brand/icon.png",
     "scheme": "soytel",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#0B2D45",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -15,17 +16,28 @@
     "android": {
       "package": "cl.diftel.soytel",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/brand/adaptive-icon.png",
         "backgroundColor": "#0B2D45"
       },
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/brand/favicon.png",
+      "themeColor": "#0B2D45",
+      "backgroundColor": "#0B2D45"
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/brand/badge.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B2D45"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
