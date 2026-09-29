@@ -1,8 +1,12 @@
+import type { MedallionGlyph } from '@/graphics/medallions';
+import type { Tier } from '@/theme/colors';
+
 export type KnowledgeArea = 'redes' | 'software' | 'hardware' | 'teleco' | 'seguridad';
 
 export type GameId =
   | 'burst'
   | 'millionaire'
+  | 'practice'
   | 'journey'
   | 'story'
   | 'mascot';
@@ -15,15 +19,37 @@ export type MicroGameId =
   | 'firewall'
   | 'signal-timing'
   | 'sequence-memory'
-  | 'packet-rush';
+  | 'packet-rush'
+  | 'cable-connect'
+  | 'packet-catch'
+  | 'wifi-boost'
+  | 'password-strong';
+
+export type AchievementId =
+  | 'first-signal'
+  | 'burst-starter'
+  | 'quiz-bronze'
+  | 'journey-host'
+  | 'perfect-run'
+  | 'level-five'
+  | 'signal-restored'
+  | 'telix-friend'
+  | 'career-explorer'
+  | 'burst-collector'
+  | 'quiz-master'
+  | 'streak-three'
+  | 'security-guard'
+  | 'level-ten';
 
 export interface Achievement {
-  id: string;
+  id: AchievementId;
   title: string;
   description: string;
+  hint: string;
   area: KnowledgeArea | 'general';
-  tier: 'bronce' | 'plata' | 'oro' | 'platino';
+  tier: Tier;
   threshold: number;
+  glyph: MedallionGlyph;
 }
 
 export interface UserProfile {
@@ -44,6 +70,13 @@ export interface GameResult {
   durationSeconds: number;
   completedAt: string;
   metadata?: Record<string, string | number | boolean>;
+}
+
+export interface GameOutcome {
+  profile: UserProfile;
+  xpGained: number;
+  leveledUp: boolean;
+  newAchievements: AchievementId[];
 }
 
 export interface JourneyParticipant {

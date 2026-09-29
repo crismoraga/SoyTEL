@@ -1,95 +1,55 @@
-import { QuizGame } from './QuizGame';
-import { SequenceGame } from './SequenceGame';
-import { TapRaceGame } from './TapRaceGame';
-import { TimingGame } from './TimingGame';
-import type { MicroGameDefinition } from './types';
+import type { ComponentType } from 'react';
+import type { MicroGameId } from '@/types/game';
+import { microGameCatalog } from './catalog';
+import { CableConnectGame } from './games/CableConnectGame';
+import { CleanSignalGame } from './games/CleanSignalGame';
+import { ColorCodeGame } from './games/ColorCodeGame';
+import { ConnectNetworkGame } from './games/ConnectNetworkGame';
+import { FirewallGame } from './games/FirewallGame';
+import { PacketCatchGame } from './games/PacketCatchGame';
+import { PacketRushGame } from './games/PacketRushGame';
+import { PasswordStrongGame } from './games/PasswordStrongGame';
+import { PingCheckGame } from './games/PingCheckGame';
+import { SequenceMemoryGame } from './games/SequenceMemoryGame';
+import { SignalTimingGame } from './games/SignalTimingGame';
+import { WifiBoostGame } from './games/WifiBoostGame';
+import type { MicroGameDefinition, MicroGameProps } from './types';
 
-export const microGameRegistry: MicroGameDefinition[] = [
-  {
-    id: 'connect-network',
-    title: 'Conecta la red',
-    instruction: '¿Qué equipo conecta la LAN con Internet?',
-    durationSeconds: 12,
-    Component: (props) => (
-      <QuizGame
-        {...props}
-        options={['Switch', 'Router', 'Mouse', 'Monitor']}
-        answer="Router"
-      />
-    ),
-  },
-  {
-    id: 'clean-signal',
-    title: 'Señal limpia',
-    instruction: 'Elige el medio menos propenso a interferencias cotidianas.',
-    durationSeconds: 12,
-    Component: (props) => (
-      <QuizGame
-        {...props}
-        options={['Cable UTP', 'Fibra óptica', 'Wi-Fi saturado', 'Bluetooth antiguo']}
-        answer="Fibra óptica"
-      />
-    ),
-  },
-  {
-    id: 'ping-check',
-    title: '¿Ping o no ping?',
-    instruction: 'El servidor responde con tiempo de ida y vuelta. ¿Hay conectividad?',
-    durationSeconds: 8,
-    Component: (props) => (
-      <QuizGame {...props} options={['Sí', 'No']} answer="Sí" />
-    ),
-  },
-  {
-    id: 'color-code',
-    title: 'Ruta lógica',
-    instruction: 'La ruta es Origen → Nodo → ¿?',
-    durationSeconds: 10,
-    Component: (props) => (
-      <QuizGame
-        {...props}
-        options={['Origen', 'Destino', 'Ruido', 'Cable']}
-        answer="Destino"
-      />
-    ),
-  },
-  {
-    id: 'firewall',
-    title: 'Firewall',
-    instruction: 'Toca la acción correcta ante un paquete malicioso.',
-    durationSeconds: 10,
-    Component: (props) => (
-      <QuizGame
-        {...props}
-        options={['Bloquearlo', 'Dejarlo pasar', 'Apagar la red', 'Borrar los logs']}
-        answer="Bloquearlo"
-      />
-    ),
-  },
-  {
-    id: 'signal-timing',
-    title: 'Sintoniza la antena',
-    instruction: 'Detén la aguja dentro de la zona verde para fijar la señal.',
-    durationSeconds: 8,
-    Component: (props) => <TimingGame {...props} />,
-  },
-  {
-    id: 'sequence-memory',
-    title: 'Ruta de paquetes',
-    instruction: 'Memoriza la secuencia de nodos y repítela en orden.',
-    durationSeconds: 14,
-    Component: (props) => <SequenceGame {...props} />,
-  },
-  {
-    id: 'packet-rush',
-    title: 'Congestión de red',
-    instruction: '¡Envía 12 paquetes antes de que se acabe el tiempo!',
-    durationSeconds: 8,
-    Component: (props) => <TapRaceGame {...props} />,
-  },
-];
+const components: Record<MicroGameId, ComponentType<MicroGameProps>> = {
+  'connect-network': ConnectNetworkGame,
+  'clean-signal': CleanSignalGame,
+  'ping-check': PingCheckGame,
+  'color-code': ColorCodeGame,
+  firewall: FirewallGame,
+  'signal-timing': SignalTimingGame,
+  'sequence-memory': SequenceMemoryGame,
+  'packet-rush': PacketRushGame,
+  'cable-connect': CableConnectGame,
+  'packet-catch': PacketCatchGame,
+  'wifi-boost': WifiBoostGame,
+  'password-strong': PasswordStrongGame,
+};
 
-export function pickBurstGames(count: number): MicroGameDefinition[] {
-  const shuffled = [...microGameRegistry].sort(() => Math.random() - 0.5);
+export const microGameRegistry: MicroGameDefinition[] = microGameCatalog.map((info) => ({
+  ...info,
+  Component: components[info.id],
+}));
+
+export function pickBurstGames(count: number, random: () => number = Math.random): MicroGameDefinition[] {
+  const shuffled = [...microGameRegistry];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[other]] = [shuffled[other], shuffled[index]];
+  }
   return shuffled.slice(0, Math.min(count, shuffled.length));
+}
+
+export function getMicroGame(id: string): MicroGameDefinition | undefined {
+  return microGameRegistry.find((game) => game.id === id);
+}
+
+// Duración de una ronda: la ráfaga acelera un 8% por ronda (mínimo 6 s).
+export function roundDuration(base: number, round: number, focus = false): number {
+  if (focus) return base;
+  return Math.max(6, Math.round(base * (1 - Math.min(round, 5) * 0.08)));
 }
