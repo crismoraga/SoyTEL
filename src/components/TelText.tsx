@@ -1,29 +1,31 @@
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, type TextProps, type TextStyle } from 'react-native';
-import { colors, typography } from '@/theme';
-
-type Variant = keyof typeof typography;
+import { colors, textStyle, type ColorToken, type TypeVariant } from '@/theme';
 
 interface TelTextProps extends TextProps {
-  variant?: Variant;
-  color?: keyof typeof colors;
+  variant?: TypeVariant;
+  color?: ColorToken;
   align?: TextStyle['textAlign'];
+  tabular?: boolean;
 }
 
 export function TelText({
   variant = 'body',
   color = 'ink',
   align,
+  tabular = false,
   style,
   children,
   ...props
 }: PropsWithChildren<TelTextProps>) {
   return (
     <Text
+      maxFontSizeMultiplier={1.4}
       {...props}
       style={[
-        typography[variant],
+        textStyle(variant),
         { color: colors[color], textAlign: align },
+        tabular && styles.tabular,
         style,
       ]}
     >
@@ -31,6 +33,12 @@ export function TelText({
     </Text>
   );
 }
+
+const styles = StyleSheet.create({
+  tabular: {
+    fontVariant: ['tabular-nums'],
+  },
+});
 
 export const textStyles = StyleSheet.create({
   shadow: {
