@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --watchman=false",
     "test:ci": "jest --watchman=false --runInBand",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "design:export": "node scripts/export-design.js",
+    "design:system": "node scripts/build-design-system.js"
   },
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",
