@@ -115,6 +115,9 @@ export function QuizReveal({ quiz, players, meId, large = false }: RevealProps) 
       <TelText variant="overline" color="accent" align="center">
         Pregunta {quiz.index + 1} de {quiz.total}
       </TelText>
+      <TelText variant={large ? 'title' : 'subtitle'} color="cream" align="center">
+        {quiz.question.prompt}
+      </TelText>
       {mine && (
         <Animated.View entering={ZoomIn.springify().damping(12)} style={[styles.result, { backgroundColor: mine.correct ? colors.success : mine.option === null ? colors.secondary : colors.danger }]}>
           <TelIcon name={mine.correct ? 'checkCircle' : mine.option === null ? 'clock' : 'closeCircle'} size={30} color={colors.white} />

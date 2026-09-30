@@ -13,3 +13,11 @@ web-build/
 
 expo-env.d.ts
 # @end expo-cli
+.vercel
+android/
+ios/
+*.jks
+*.keystore
+
+.vercel
+.env*

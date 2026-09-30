@@ -13,7 +13,9 @@
     "test:ci": "jest --watchman=false --runInBand",
     "lint": "expo lint",
     "design:export": "node scripts/export-design.js",
-    "design:system": "node scripts/build-design-system.js"
+    "design:system": "node scripts/build-design-system.js",
+    "build:web": "node scripts/build-web.js",
+    "deploy:web": "npx vercel@latest build --prod --yes && npx vercel@latest deploy --prebuilt --prod --yes"
   },
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",
