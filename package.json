@@ -15,7 +15,8 @@
     "design:export": "node scripts/export-design.js",
     "design:system": "node scripts/build-design-system.js",
     "build:web": "node scripts/build-web.js",
-    "deploy:web": "npx vercel@latest build --prod --yes && npx vercel@latest deploy --prebuilt --prod --yes"
+    "deploy:web": "npx vercel@latest build --prod --yes && npx vercel@latest deploy --prebuilt --prod --yes",
+    "android:release": "node scripts/build-android.js"
   },
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",

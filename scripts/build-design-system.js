@@ -23,6 +23,9 @@ const { telixDrawing, telixExpressions } = src('graphics/telix');
 const { illustrationDrawing, illustrationNames } = src('graphics/illustrations');
 const { patternPreviews } = src('graphics/patterns');
 const { campusMapDrawing } = src('graphics/campusMap');
+const { templeDrawing } = src('graphics/temple');
+const { pillars, avatars, answerStyles, routeStops } = src('route/content');
+const { create: createQr } = require('qrcode');
 
 const project = path.join(outDir, 'project');
 const uploads = path.join(outDir, 'uploads');
@@ -92,6 +95,20 @@ Object.entries(tierColors).forEach(([tier, info]) => {
     name: `tier-${tier}`,
     value: info.ring[1],
     usage: `Anillo de medallas de rareza ${info.label.toLowerCase()} (degradado ${info.ring.join(' → ')}).`,
+  });
+});
+pillars.forEach((pillar) => {
+  colorTokens.push({
+    name: `pilar-${pillar.id}`,
+    value: pillar.color,
+    usage: `Pilar ${pillar.pillar} de la ruta (proyecto «${pillar.project}»): columna del templo, borde de su tarjeta en B213 y acentos de su juego. Texto oscuro ${pillar.ink}.`,
+  });
+});
+answerStyles.forEach((style, index) => {
+  colorTokens.push({
+    name: `respuesta-${index + 1}`,
+    value: style.color,
+    usage: `Alternativa ${index + 1} de la trivia en vivo (${style.label.toLowerCase()}): color y forma juntos, para que se distingan sin depender del color.`,
   });
 });
 
@@ -241,6 +258,28 @@ illustrationNames.forEach((name) => {
   addAsset('Ilustraciones', `${name}-oscuro.svg`, drawingToSvg(illustrationDrawing(name, 'dark'), { width: 480, height: 400 }));
 });
 addAsset('Ilustraciones', 'mapa-campus.svg', drawingToSvg(campusMapDrawing(), { width: 640, height: 800 }));
+// Ruta Telemática: templo de los pilares, avatares y formas de la trivia.
+const temple = (litCount) => drawingToSvg(templeDrawing(pillars.map((pillar, index) => ({ color: pillar.color, lit: index < litCount }))), { width: 640, height: 392 });
+addAsset('Ruta', 'templo-apagado.svg', temple(0));
+addAsset('Ruta', 'templo-parcial.svg', temple(3));
+addAsset('Ruta', 'templo-encendido.svg', temple(5));
+const avatarSvg = (index, size = 96) => {
+  const info = avatars[index];
+  const inner = iconToSvg(icons[info.icon], { size: 50, color: colors.primary }).replace(/currentColor/g, colors.primary).replace('<svg ', '<svg x="23" y="23" ');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 96 96"><circle cx="48" cy="48" r="45" fill="${info.color}" stroke="${colors.cream}" stroke-width="4"/>${inner}</svg>`;
+};
+avatars.forEach((info, index) => addAsset('Ruta', `avatar-${index + 1}-${info.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}.svg`, avatarSvg(index)));
+const shapeSvg = (index) => {
+  const style = answerStyles[index];
+  const glyph = {
+    triangle: '<path d="M48 22 74 68H22z" fill="#fff"/>',
+    diamond: '<path d="M48 20 76 48 48 76 20 48z" fill="#fff"/>',
+    circle: '<circle cx="48" cy="48" r="24" fill="#fff"/>',
+    square: '<rect x="26" y="26" width="44" height="44" rx="6" fill="#fff"/>',
+  }[style.shape];
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="${style.color}"/>${glyph}</svg>`;
+};
+answerStyles.forEach((style, index) => addAsset('Ruta', `respuesta-${index + 1}-${style.shape}.svg`, shapeSvg(index)));
 Object.entries(patternPreviews()).forEach(([name, drawing]) => addAsset('Patrones', `${name}.svg`, drawingToSvg(drawing, { width: 720, height: 480 })));
 [
   ['logo-app.png', 'logo-app.png'],
@@ -259,6 +298,7 @@ const groupReadmes = {
   Medallas: '# Medallas\n\nMedallones de la marca: anillo crema, disco azul noche, arco celeste, estrellas de cuatro puntas y un glifo sólido crema. `medallionDrawing({ glyph, tier, state, progress, ribbon })` genera todas las variantes: rareza por anillo (`bronce`, `plata`, `oro`, `platino`, o `crema` por defecto) y estado (`unlocked`, `progress` con arco parcial, `locked` en gris con candado). Úsalas para logros, áreas de la carrera, estaciones y accesos del Inicio. Tamaños: 44–64 en listas, 76 en grillas, 88–132 en detalle.\n',
   Telix: '# Telix\n\nMascota de SoyTEL: robot-antena con pantalla por cara y barras de señal en el pecho que muestran su ánimo (0–4). Expresiones: `neutral`, `happy`, `celebrate`, `love`, `think`, `alert`, `sleepy`, `sad`, `sleep`; poses: `idle`, `wave`, `celebrate`, `think`. En la app flota, parpadea y su antena pulsa (componente `Telix`). Úsalo como guía y reacción emocional, nunca como decoración repetida en una misma pantalla.\n',
   Ilustraciones: '# Ilustraciones\n\nIlustraciones planas en el estilo de «Ilustraciones rápidas» de la marca, generadas desde una paleta: versión clara (fondo `highlight`) para pantallas claras y `-oscuro` para pantallas azules. `connect`, `burst`, `campus`, `globe`, `trophy`, `inbox` (estado vacío de avisos), `quiz`, `route`, `offline` (error), `career`. `mapa-campus.svg` es el mapa del modo historia.\n',
+  Ruta: '# Ruta Telemática\n\nGráficos del modo en vivo (stand → B215 → B213 → pasillo). `templo-*`: el Templo de Telemática de Didactic-Tel; cada columna toma el color de su pilar cuando el participante completa el juego del proyecto (Datos, Software, Redes, Telecomunicaciones, Hardware) y con los cinco se enciende el frontón. `avatar-*`: los 8 avatares que elige cada participante (círculo de color con anillo crema e ícono en tinta primaria). `respuesta-*`: color y forma de las cuatro alternativas de la trivia final, estilo Kahoot (triángulo, rombo, círculo, cuadrado), para que se distingan también sin color.\n',
   Patrones: '# Patrones\n\nFondos decorativos de las pantallas oscuras (`BrandBackdrop`): `estrellas` (por defecto), `red` (nodos conectados), `senal` (ondas desde una esquina) y `orbitas` (anillos crema como la bienvenida). Siempre detrás del contenido, sin competir con el texto; una capa de estrellas titila si el movimiento está activado.\n',
 };
 Object.entries(groupReadmes).forEach(([group, text]) => write(path.join(project, 'assets', group, 'README.md'), text));
@@ -466,9 +506,9 @@ Mascota animada (flota, parpadea, la antena pulsa). Props: \`expression\` (\`neu
 
 // Icon
 const iconSample = ['home', 'gamepad', 'school', 'trophy', 'bell', 'wifi', 'network', 'router', 'server', 'antenna', 'shieldCheck', 'lock', 'code', 'cpu', 'wave', 'fiber', 'packet', 'terminal', 'bolt', 'flame', 'heart', 'star', 'sparkle', 'robot', 'route', 'pin', 'qr', 'timer', 'target', 'globe'];
-preview('Icon', { group: 'Gráficos', height: 150, subtitle: '95 íconos · grilla 24 · trazo 2' }, `<div class="tel-stage tel-row" style="color:var(--primary);gap:18px">${iconSample.map((name) => `<span title="${name}">${svgIcon(name, 26)}</span>`).join('')}</div>`);
+preview('Icon', { group: 'Gráficos', height: 150, subtitle: `${Object.keys(icons).length} íconos · grilla 24 · trazo 2` }, `<div class="tel-stage tel-row" style="color:var(--primary);gap:18px">${iconSample.map((name) => `<span title="${name}">${svgIcon(name, 26)}</span>`).join('')}</div>`);
 readme('Icon', `
-\`TelIcon\`: 95 íconos propios en grilla 24×24 con trazo 2 y extremos redondeados, dibujados con \`currentColor\`. Props: \`name\`, \`size\`, \`color\`, \`strokeWidth\`, \`accessibilityLabel\` (solo cuando el ícono va solo, sin texto). Usa íconos de la familia de red (\`router\`, \`server\`, \`antenna\`, \`fiber\`, \`packet\`) para contenido técnico y los de interfaz (\`home\`, \`bell\`, \`chevronLeft\`) para navegación.
+\`TelIcon\`: ${Object.keys(icons).length} íconos propios en grilla 24×24 con trazo 2 y extremos redondeados, dibujados con \`currentColor\`. Props: \`name\`, \`size\`, \`color\`, \`strokeWidth\`, \`accessibilityLabel\` (solo cuando el ícono va solo, sin texto). Usa íconos de la familia de red (\`router\`, \`server\`, \`antenna\`, \`fiber\`, \`packet\`) para contenido técnico y los de interfaz (\`home\`, \`bell\`, \`chevronLeft\`) para navegación.
 `);
 
 // Illustration
@@ -539,6 +579,72 @@ readme('ListRow', `
 Fila de lista con ícono en cuadro \`highlight\` (historial, enlaces, avisos) y \`StatTile\` para cifras del perfil. Metadato en mayúsculas \`secondary\`, título \`subtitle\` a 15 px y descripción \`caption\`. Con \`onPress\` agrega un chevron.
 `);
 
+// ---------- Ruta Telemática ----------
+const qrPath = (() => {
+  const qr = createQr('https://soytel.vercel.app/ruta?codigo=LYJ667', { errorCorrectionLevel: 'M' });
+  let d = '';
+  for (let row = 0; row < qr.modules.size; row += 1) {
+    for (let column = 0; column < qr.modules.size; column += 1) if (qr.modules.get(row, column)) d += `M${column + 2} ${row + 2}h1v1h-1z`;
+  }
+  return { d, size: qr.modules.size + 4 };
+})();
+const avatarCircle = (index, size) => avatarSvg(index, size);
+const routeCss = `.rt-panel{background:var(--primary);border-radius:var(--radius-lg);padding:18px;display:flex;flex-direction:column;gap:10px;align-items:center;width:300px;color:var(--cream)}
+.rt-code{font-family:var(--font-display);font-weight:800;font-size:52px;letter-spacing:6px;line-height:58px;color:var(--cream)}
+.rt-qr{background:#fff;padding:10px;border-radius:18px}
+.rt-steps{display:flex;width:360px;padding:14px 8px;background:var(--primary);border-radius:18px}
+.rt-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;font-size:11px;font-weight:800;color:var(--slate)}
+.rt-step .dot{width:32px;height:32px;border-radius:16px;background:var(--primarySoft);display:flex;align-items:center;justify-content:center;border:2px solid var(--primarySoft);z-index:1}
+.rt-step.done .dot{background:var(--accent);border-color:var(--accent);color:var(--primary)}.rt-step.done{color:var(--accentSoft)}
+.rt-step.now .dot{background:var(--cream);border-color:var(--accent);color:var(--primary)}.rt-step.now{color:var(--cream)}
+.rt-step::before{content:"";position:absolute;top:15px;right:50%;width:100%;height:3px;background:var(--primarySoft)}.rt-step:first-child::before{display:none}
+.rt-step.done::before,.rt-step.now::before{background:var(--accent)}
+.rt-opt{display:flex;align-items:center;gap:12px;min-height:58px;padding:0 16px;border-radius:var(--radius-lg);color:#fff;font-weight:700;font-size:16px;width:320px}
+.rt-bars{display:flex;flex-direction:column;gap:8px;width:320px}
+.rt-bar{display:flex;align-items:center;gap:10px;padding:8px;border-radius:14px;background:var(--primarySoft);color:var(--cream);font-weight:700;font-size:14px}
+.rt-bar .track{height:6px;border-radius:3px;background:var(--primary);flex:1;overflow:hidden}.rt-bar .track span{display:block;height:100%}
+.rt-pod{display:flex;align-items:flex-end;gap:10px;width:340px}
+.rt-pod .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--cream);font-weight:700;font-size:13px}
+.rt-pod .blk{align-self:stretch;border-radius:16px 16px 0 0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:800;font-size:26px;color:var(--primary)}
+.rt-hud{display:flex;flex-direction:column;gap:8px;width:340px}
+.rt-hud .row{display:flex;align-items:center;gap:10px}
+.rt-pill{display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 10px;border-radius:999px;background:var(--primarySoft);color:var(--cream);font-weight:700;font-size:14px}
+.rt-banner{width:300px;border-radius:24px;border:1px solid rgba(167,212,237,.25);background:rgba(7,31,49,.94);padding:22px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.rt-chip{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:14px;background:var(--primarySoft);color:var(--cream);font-weight:700;font-size:14px;width:300px}`;
+const stepIcon = (name) => svgIcon(name, 16);
+preview('RouteProgress', { group: 'Ruta', height: 110, subtitle: 'Stand → B215 → B213 → pasillo' }, `<div class="tel-stage" style="background:var(--paper)"><div class="rt-steps"><div class="rt-step done"><span class="dot">${stepIcon('check')}</span>Stand</div><div class="rt-step now"><span class="dot">${stepIcon('router')}</span>Sala B215</div><div class="rt-step"><span class="dot">${stepIcon('temple')}</span>Sala B213</div><div class="rt-step"><span class="dot">${stepIcon('podium')}</span>Pasillo</div></div></div>`, routeCss);
+readme('RouteProgress', `
+Mapa lineal de la ruta en la cabecera de cada pantalla en vivo: ${routeStops.map((stop) => stop.place).join(' → ')}. Parada completada en \`accent\` con ✓, parada actual en \`cream\` con borde celeste, pendientes en \`primarySoft\`. Úsalo sobre fondos \`primary\`.
+`);
+preview('RouteCode', { group: 'Ruta', height: 450, subtitle: 'Código y QR del stand' }, `<div class="tel-stage dark"><div class="rt-panel"><div class="tel-row" style="justify-content:space-between;width:100%"><span class="tel-tag success">${svgIcon('wifi', 13)} En línea</span><span class="tel-tag glass">${svgIcon('users', 13)} 3</span></div><span class="tel-overline">Código de la ruta</span><span class="rt-code">LYJ667</span><span class="rt-qr"><svg width="190" height="190" viewBox="0 0 ${qrPath.size} ${qrPath.size}"><rect width="${qrPath.size}" height="${qrPath.size}" fill="#fff"/><path d="${qrPath.d}" fill="#0B2D45"/></svg></span><span style="color:var(--accentSoft);font-weight:700;font-size:14px">Escanea o entra a soytel.vercel.app/ruta</span></div></div>`, routeCss);
+readme('RouteCode', `
+Panel del modo stand: estado de la conexión (\`En línea\` / \`Conectando…\`), número de participantes, código de 6 caracteres en Montserrat 800 (sin 0, 1, I ni O) y QR con el enlace directo (incluye la huella de la llave del stand). Va en la pantalla grande del stand; en pantallas anchas ocupa la columna izquierda y el control de la ruta la derecha.
+`);
+preview('CheckinCard', { group: 'Ruta', height: 460, subtitle: 'Confirmar llegada a la sala' }, `<div class="tel-stage dark tel-col" style="align-items:center"><span style="width:88px;height:88px;border-radius:44px;background:var(--cream);display:flex;align-items:center;justify-content:center;color:var(--primary)">${svgIcon('router', 44)}</span><span class="tel-overline">Próxima parada · Sala B215</span><h2 class="tel-title" style="text-align:center">Vayan a la sala B215</h2><span class="tel-btn cream" style="width:300px">${svgIcon('door')} Estoy en la sala B215</span>${['Cami', 'Nico', 'Sofi'].map((name, index) => `<div class="rt-chip">${avatarCircle(index + 1, 36)}<span style="flex:1">${name}</span>${index < 2 ? svgIcon('checkCircle', 20, '#2E7D5B') : svgIcon('clock', 20, '#8CA3B4')}</div>`).join('')}</div>`, routeCss);
+readme('CheckinCard', `
+Paso de llegada a cada sala: ícono de la parada en círculo crema, instrucción («Vayan a la sala B215»), botón crema grande «Estoy en la sala…» y la lista del grupo con ✓ verde (llegó) o reloj (en camino). La fase avanza sola cuando todo el grupo conectado confirmó; el stand puede adelantarla.
+`);
+preview('Temple', { group: 'Ruta', height: 250, subtitle: 'Los cinco pilares de Didactic-Tel' }, `<div class="tel-stage dark tel-row" style="gap:24px">${[3, 5].map((litCount) => `<div class="tel-col" style="align-items:center;gap:6px">${drawingToSvg(templeDrawing(pillars.map((pillar, index) => ({ color: pillar.color, lit: index < litCount }))), { width: 300, height: 184 })}<div style="display:flex;width:300px">${pillars.map((pillar, index) => `<span style="flex:1;text-align:center;font-size:11px;font-weight:800;color:${index < litCount ? 'var(--cream)' : 'var(--slate)'}">${pillar.pillar === 'Telecomunicaciones' ? 'Teleco' : pillar.pillar}</span>`).join('')}</div></div>`).join('')}</div>`, routeCss);
+readme('Temple', `
+Templo de Telemática en la sala B213. Cada columna es un pilar y se enciende con su color al completar el juego de su proyecto: ${pillars.map((pillar) => `${pillar.pillar} (${pillar.color})`).join(', ')}. Con los cinco, el frontón se vuelve dorado y aparecen rayos: «¡Templo restaurado!». Siempre con las etiquetas debajo, para no depender solo del color.
+`);
+preview('PlayerAvatar', { group: 'Ruta', height: 110, subtitle: '8 avatares' }, `<div class="tel-stage tel-row" style="background:var(--paper)">${avatars.map((_, index) => avatarCircle(index, 52)).join('')}</div>`, routeCss);
+readme('PlayerAvatar', `
+Avatar del participante: círculo de color con anillo crema e ícono en \`primary\` (${avatars.map((item) => item.label).join(', ')}). Sin conexión se atenúa al 45% con un punto gris. Se elige al unirse y acompaña al alias en listas, ranking y podio.
+`);
+preview('QuizAnswer', { group: 'Ruta', height: 310, subtitle: 'Trivia en vivo, pregunta y resultado' }, `<div class="tel-stage dark tel-row" style="align-items:flex-start;gap:24px"><div class="tel-col">${answerStyles.map((style, index) => `<div class="rt-opt" style="background:${style.color}">${shapeSvg(index).replace('width="96" height="96"', 'width="26" height="26"')}${['Jitter', 'Firewall', 'Bluetooth', 'Píxel'][index]}</div>`).join('')}</div><div class="rt-bars">${answerStyles.map((style, index) => `<div class="rt-bar" style="opacity:${index === 0 ? 1 : 0.6}">${shapeSvg(index).replace('width="96" height="96"', 'width="24" height="24"')}<span style="width:90px">${['Jitter', 'Firewall', 'Bluetooth', 'Píxel'][index]}</span><span class="track"><span style="width:${[80, 30, 20, 0][index]}%;background:${style.color}"></span></span>${[4, 1, 1, 0][index]}</div>`).join('')}</div></div>`, routeCss);
+readme('QuizAnswer', `
+Alternativas de la trivia final, estilo Kahoot: cuatro botones grandes con color y forma (${answerStyles.map((style) => style.label.toLowerCase()).join(', ')}). Al responder, las demás se atenúan. En el resultado, barras con cuántos eligieron cada una, la correcta con ✓ y la explicación. Puntaje: 500 por acertar + hasta 300 por rapidez + 200/120/60 a los tres primeros en acertar.
+`);
+preview('Podium', { group: 'Ruta', height: 300, subtitle: 'Top 3 y felicitación final' }, `<div class="tel-stage dark"><div class="rt-pod">${[[1, 'Nico', '8.420', 92, tierColors.plata.ring[1]], [0, 'Cami', '9.130', 124, tierColors.oro.ring[1]], [2, 'Sofi', '7.610', 72, tierColors.bronce.ring[1]]].map(([place, name, points, height, color], index) => `<div class="col">${place === 0 ? svgIcon('crown', 28, tierColors.oro.ring[1]) : '<span style="height:28px"></span>'}${avatarCircle(index + 2, place === 0 ? 60 : 50)}<span>${name}</span><span style="color:var(--accentSoft);font-size:12px">${points} pts</span><span class="blk" style="height:${height}px;background:${color}">${place + 1}º</span></div>`).join('')}</div></div>`, routeCss);
+readme('Podium', `
+Podio del cierre (2º · 1º · 3º) con los colores de rareza plata, oro y bronce, corona sobre el primer lugar, avatar, alias y puntaje, más confeti. Debajo va el ranking completo con el participante destacado con borde celeste. En la pantalla del stand se muestra a mayor escala.
+`);
+preview('StationHud', { group: 'Juegos', height: 290, subtitle: 'Barra de juego y presentación de etapa' }, `<div class="tel-stage dark tel-row" style="align-items:flex-start;gap:28px"><div class="rt-hud"><div class="row"><div style="flex:1"><div class="tel-small" style="color:var(--accentSoft);letter-spacing:1.2px">ETAPA 2 DE 3</div><div class="tel-subtitle" style="color:var(--cream)">Enruta los paquetes</div></div><div style="text-align:center;color:var(--cream)"><div class="tel-num">358</div><div class="tel-small" style="color:var(--accentSoft)">pts</div></div><span class="rt-pill">${svgIcon('timer', 16)} 44s</span></div><div class="tel-bar" style="background:var(--primarySoft);height:5px"><span style="width:90%;background:var(--accent)"></span></div></div><div class="rt-banner"><span style="width:84px;height:84px;border-radius:42px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:var(--primary)">${svgIcon('send', 40)}</span><span class="tel-overline">Etapa 2</span><span class="tel-title" style="font-size:24px">Enruta los paquetes</span><span style="color:var(--accentSoft);font-size:15px;line-height:22px">Ahora tú eres el router: envía cada paquete por la interfaz correcta.</span></div></div>`, routeCss);
+readme('StationHud', `
+Estructura común de los seis juegos de la ruta: \`StationHud\` (etapa, título, puntaje y reloj que se vuelve rojo en los últimos 5 s), \`StageBanner\` (presenta cada etapa, se cierra solo o al tocar) y \`StationSummary\` (puntaje final, desglose por etapa y lo aprendido). Cada juego dura 1–2 minutos, suma hasta 1.000 puntos y usa el color de su pilar como acento.
+`);
+
 // Cover
 const cover = `<!-- @dsCard height=288 -->
 <!doctype html>
@@ -603,7 +709,7 @@ write(path.join(project, 'README.md'), fs.readFileSync(path.join(__dirname, 'des
 // ---------- índice ----------
 if (idsFile) {
   const ids = JSON.parse(fs.readFileSync(idsFile, 'utf8'));
-  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Telix: 'm', Ilustraciones: 'm', Patrones: 'l' };
+  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Telix: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
   const types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg' };
   const assetGroups = {};
   Object.keys(tiles).filter((group) => assetFiles[group]).forEach((group) => {
@@ -630,7 +736,7 @@ if (idsFile) {
     assetGroups,
     blobs: previous?.blobs ?? {},
     docs: previous?.docs ?? { sections: [] },
-    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: 'Sistema de diseño SoyTEL generado desde el código de la app (tokens, 95 íconos, 41 medallas, Telix, ilustraciones y componentes).' },
+    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: `Ruta Telemática en vivo: templo de pilares, avatares, trivia, podio y ${Object.keys(icons).length} íconos. Generado desde el código de la app.` },
   };
   write(path.join(project, 'design-system.json'), `${JSON.stringify(index, null, 2)}\n`);
 }
