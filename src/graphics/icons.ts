@@ -238,6 +238,16 @@ export const icons = {
   hash: [path('M5 9h15'), path('M4 15h15'), path('M10 3.5 8 20.5'), path('M16 3.5l-2 17')],
   mail: [rect(3, 5, 18, 14, 2.5), path('M3.8 6.5 12 13l8.2-6.5')],
   external: [path('M14 4h6v6'), path('M20 4 11 13'), path('M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10')],
+  phone: [path('M6.6 3.5h2.6l1.5 4-2 1.3a11 11 0 0 0 5.5 5.5l1.3-2 4 1.5v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.4 5.7a2 2 0 0 1 2.2-2.2z')],
+  lanSwitch: [rect(2.5, 7.5, 19, 9, 2), path('M5.5 13h2'), path('M9.5 13h2'), path('M13.5 13h2'), path('M17.5 13h1'), dot(6.5, 10.3, 0.8), dot(10.5, 10.3, 0.8), dot(14.5, 10.3, 0.8)],
+  accessPoint: [ellipse(12, 16.5, 8, 3.2), dot(12, 16.5), path('M8.6 10.2a4.8 4.8 0 0 1 6.8 0'), path('M6.2 7.6a8.2 8.2 0 0 1 11.6 0')],
+  laser: [rect(2.5, 9.5, 7, 5, 1.2), path('M9.5 12H21'), path('M16.5 8.5 18 7'), path('M16.5 15.5 18 17'), dot(5, 12)],
+  board: [rect(3.5, 6, 17, 13, 2), rect(9, 10, 6, 5, 1), path('M7 6V3.5'), path('M10.3 6V3.5'), path('M13.7 6V3.5'), path('M17 6V3.5'), dot(6.8, 16)],
+  neural: [circle(5, 6, 1.8), circle(5, 18, 1.8), circle(12, 12, 2), circle(19, 6, 1.8), circle(19, 18, 1.8), path('M6.6 7.4l3.7 3.2'), path('M6.6 16.6l3.7-3.2'), path('M13.7 10.6l3.7-3.2'), path('M13.7 13.4l3.7 3.2')],
+  image: [rect(3, 4.5, 18, 15, 2), circle(9, 10, 1.8), path('M4 17.5l5-5 4 4 3-3 4 4')],
+  temple: [path('M3 9 12 4l9 5'), path('M4 9h16'), path('M6.5 11.5v6'), path('M10.2 11.5v6'), path('M13.8 11.5v6'), path('M17.5 11.5v6'), path('M3.5 20h17')],
+  podium: [path('M9 20V9h6v11'), path('M3 20v-6h6'), path('M15 20v-4h6v4'), path('M2 20.5h20')],
+  door: [rect(6, 3, 12, 18, 1.5), dot(15, 12.5), path('M3 21h18')],
 } satisfies Record<string, Shape[]>;
 
 export type IconName = keyof typeof icons;
