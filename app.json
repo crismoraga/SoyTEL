@@ -48,6 +48,12 @@
     "experiments": {
       "typedRoutes": true
     },
-    "description": "Ruta Telemática en vivo, microjuegos y trivia para descubrir Ingeniería Civil Telemática USM."
+    "description": "Ruta Telemática en vivo, microjuegos y trivia para descubrir Ingeniería Civil Telemática USM.",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "10906c4c-a414-481d-8518-f760c55669fb"
+      }
+    }
   }
 }
