@@ -72,10 +72,10 @@ export default function WelcomeScreen() {
           <Animated.View entering={entering.fadeUp(5)} style={styles.actions}>
             <TelButton label="Comenzar" variant="cream" size="lg" iconRight="arrowRight" onPress={() => router.push('/onboarding')} />
             <TelButton
-              label="Unirme con un código"
+              label="Unirme con el código del stand"
               variant="outlineLight"
               icon="qr"
-              onPress={() => router.push({ pathname: '/onboarding', params: { next: 'journey' } })}
+              onPress={() => router.push({ pathname: '/onboarding', params: { next: 'ruta' } })}
             />
             <TelText variant="caption" color="accentSoft" align="center">
               App oficial de Telemática USM

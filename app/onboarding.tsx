@@ -66,7 +66,7 @@ export default function OnboardingScreen() {
           route: '/games',
         },
       ]);
-      router.replace(next === 'journey' ? { pathname: '/journey', params: { mode: 'join' } } : '/home');
+      router.replace(next === 'ruta' ? '/ruta' : '/home');
     } finally {
       setSaving(false);
     }

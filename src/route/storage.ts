@@ -89,4 +89,17 @@ export async function writeLease(code: string, owner: string, at: number): Promi
   await AsyncStorage.setItem(leaseKey(code), JSON.stringify({ owner, at }));
 }
 
+const RECORDED_KEY = '@soytel/route/recorded';
+
+// Evita sumar dos veces al perfil la misma ruta (por ejemplo, al reabrir el podio).
+export async function wasRouteRecorded(code: string): Promise<boolean> {
+  const list = await readJson<string[]>(RECORDED_KEY);
+  return Array.isArray(list) && list.includes(code);
+}
+
+export async function markRouteRecorded(code: string): Promise<void> {
+  const list = (await readJson<string[]>(RECORDED_KEY)) ?? [];
+  await AsyncStorage.setItem(RECORDED_KEY, JSON.stringify([code, ...list.filter((item) => item !== code)].slice(0, 50)));
+}
+
 export const ROUTE_STORAGE_PREFIX = '@soytel/route/';

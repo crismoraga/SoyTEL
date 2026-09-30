@@ -20,9 +20,9 @@ function context(partial: Partial<AchievementContext> = {}): AchievementContext 
 }
 
 describe('achievement data', () => {
-  it('has fourteen unique achievements with valid glyphs and thresholds', () => {
-    expect(achievements).toHaveLength(14);
-    expect(new Set(achievements.map((item) => item.id)).size).toBe(14);
+  it('has eighteen unique achievements with valid glyphs and thresholds', () => {
+    expect(achievements).toHaveLength(18);
+    expect(new Set(achievements.map((item) => item.id)).size).toBe(18);
     for (const achievement of achievements) {
       expect(achievement.threshold).toBeGreaterThan(0);
       expect(medallionGlyphs[achievement.glyph]).toBeDefined();
@@ -44,18 +44,32 @@ describe('achievement evaluation', () => {
     expect(evaluateAchievements(context({ results: [result({ gameId: 'story' })] }))).toContain('first-signal');
   });
 
-  it('counts bursts, quiz answers and journeys', () => {
+  it('counts bursts, quiz answers and routes', () => {
     const results = [
       result({}),
       result({}),
       result({}),
       result({ gameId: 'millionaire', metadata: { correctAnswers: 6 } }),
       result({ gameId: 'millionaire', metadata: { correctAnswers: 4 } }),
-      result({ gameId: 'journey' }),
-      result({ gameId: 'journey' }),
+      result({ gameId: 'route', metadata: { rank: 1, players: 1, pillars: 5, solo: true } }),
     ];
     const unlocked = evaluateAchievements(context({ results }));
-    expect(unlocked).toEqual(expect.arrayContaining(['burst-starter', 'quiz-bronze', 'journey-host']));
+    expect(unlocked).toEqual(expect.arrayContaining(['burst-starter', 'quiz-bronze', 'route-complete', 'temple-restored']));
+    // Ganar en el modo individual no cuenta como podio.
+    expect(unlocked).not.toContain('route-champion');
+  });
+
+  it('rewards the podium only in live routes with a group', () => {
+    const live = [result({ gameId: 'route', metadata: { rank: 1, players: 4, pillars: 3, solo: false } })];
+    expect(evaluateAchievements(context({ results: live }))).toEqual(expect.arrayContaining(['route-podium', 'route-champion']));
+    const third = [result({ gameId: 'route', metadata: { rank: 3, players: 5, pillars: 5, solo: false } })];
+    expect(evaluateAchievements(context({ results: third }))).toContain('route-podium');
+    expect(evaluateAchievements(context({ results: third }))).not.toContain('route-champion');
+  });
+
+  it('counts the six route games for the explorer badge', () => {
+    const results = ['red-b215', 'datos', 'software', 'redes', 'teleco', 'hardware'].map((game) => result({ gameId: 'station', metadata: { game } }));
+    expect(achievementProgress('station-explorer', context({ results }))).toBe(6);
   });
 
   it('only counts perfect runs in burst or millionaire', () => {

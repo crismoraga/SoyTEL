@@ -14,6 +14,7 @@ import { TelText } from '@/components/TelText';
 import { achievements } from '@/data/achievements';
 import { USM_URL } from '@/data/career';
 import { areaLabels } from '@/data/questions';
+import { getStationGame } from '@/features/stations/registry';
 import { formatNumber, relativeTime } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
 import { levelTitle, progressToNextLevel, xpToNextLevel } from '@/lib/progression';
@@ -36,6 +37,10 @@ function describeResult(result: GameResult): { title: string; icon: IconName } {
     }
     case 'journey':
       return { title: `Recorrido ${String(result.metadata?.code ?? '')}`.trim(), icon: 'route' };
+    case 'route':
+      return { title: `Ruta Telemática · ${String(result.metadata?.rank ?? '?')}º lugar`, icon: 'route' };
+    case 'station':
+      return { title: getStationGame(String(result.metadata?.game ?? ''))?.title ?? 'Juego de la ruta', icon: getStationGame(String(result.metadata?.game ?? ''))?.icon ?? 'gamepad' };
     case 'story':
       return { title: `Historia · capítulo ${String(result.metadata?.chapter ?? '')}`, icon: 'book' };
     default:
