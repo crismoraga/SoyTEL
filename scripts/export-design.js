@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Exporta los gráficos declarativos de src/graphics a archivos SVG y a una hoja de contacto HTML.
 // Uso: node scripts/export-design.js [carpetaSalida]
 const fs = require('fs');

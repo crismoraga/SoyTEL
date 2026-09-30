@@ -1,10 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 // Carga datos locales cada vez que la pantalla gana foco (útil al volver de un juego).
 export function useFocusData<T>(loader: () => Promise<T>) {
   const loaderRef = useRef(loader);
-  loaderRef.current = loader;
+  useLayoutEffect(() => {
+    loaderRef.current = loader;
+  });
   const [data, setData] = useState<T | null>(null);
 
   useFocusEffect(

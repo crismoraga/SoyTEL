@@ -39,7 +39,7 @@ export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, ch
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(7, 31, 49, 0.62)',
   },
   anchor: {

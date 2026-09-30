@@ -20,6 +20,7 @@ import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback'
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
+import { now } from '@/lib/clock';
 import { recordGameResult } from '@/storage/profile';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome } from '@/types/game';
@@ -52,7 +53,7 @@ export default function MillionaireScreen() {
   const [finalScore, setFinalScore] = useState(0);
   const [endReason, setEndReason] = useState<'won' | 'wrong' | 'retired'>('won');
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
-  const startedAt = useRef(Date.now());
+  const startedAt = useRef(0);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroller = useScrollToEnd();
   const question = questions[index];
@@ -72,7 +73,7 @@ export default function MillionaireScreen() {
     setPoll(null);
     setCorrectCount(0);
     setOutcome(null);
-    startedAt.current = Date.now();
+    startedAt.current = now();
     setPhase('playing');
   }
 

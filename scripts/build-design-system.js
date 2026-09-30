@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Genera el sistema de diseño de SoyTEL para Claude Design (artifact tipo "Design System")
 // a partir de las fuentes reales de la app: tokens de src/theme, gráficos de src/graphics y fuentes TTF.
 // Uso:

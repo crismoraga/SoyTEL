@@ -30,12 +30,12 @@ export function PressableScale({
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   function handlePressIn(event: GestureResponderEvent) {
-    if (enabled) scale.value = withSpring(scaleTo, motion.spring.snappy);
+    if (enabled) scale.set(withSpring(scaleTo, motion.spring.snappy));
     onPressIn?.(event);
   }
 
   function handlePressOut(event: GestureResponderEvent) {
-    if (enabled) scale.value = withSpring(1, motion.spring.gentle);
+    if (enabled) scale.set(withSpring(1, motion.spring.gentle));
     onPressOut?.(event);
   }
 

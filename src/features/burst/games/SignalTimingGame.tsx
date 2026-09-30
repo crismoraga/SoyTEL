@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -16,11 +16,11 @@ const SPAN = 180;
 
 // Microjuego 6: la aguja del dial oscila; detenla dentro de la zona de buena señal.
 export function SignalTimingGame({ active, level, onAnswer }: MicroGameProps) {
-  const zone = useMemo(() => {
+  const [zone] = useState(() => {
     const width = Math.max(0.12, 0.2 - level * 0.015);
     const center = 0.28 + Math.random() * 0.44;
     return { start: center - width / 2, end: center + width / 2, center, width };
-  }, [level]);
+  });
   const period = Math.max(1100, 1800 - level * 120);
   const sweep = useSharedValue(0);
   const startedAt = useRef(0);
@@ -33,8 +33,8 @@ export function SignalTimingGame({ active, level, onAnswer }: MicroGameProps) {
       return;
     }
     startedAt.current = Date.now();
-    sweep.value = 0;
-    sweep.value = withRepeat(withTiming(1, { duration: period / 2, easing: Easing.linear }), -1, true);
+    sweep.set(0);
+    sweep.set(withRepeat(withTiming(1, { duration: period / 2, easing: Easing.linear }), -1, true));
     return () => cancelAnimation(sweep);
   }, [active, period, sweep]);
 
@@ -47,7 +47,7 @@ export function SignalTimingGame({ active, level, onAnswer }: MicroGameProps) {
     answered.current = true;
     const value = needlePosition(Date.now() - startedAt.current, period);
     cancelAnimation(sweep);
-    sweep.value = value;
+    sweep.set(value);
     setStopped(value);
     const inZone = value >= zone.start && value <= zone.end;
     const precision = Math.max(0, 1 - Math.abs(value - zone.center) / (zone.width / 2));

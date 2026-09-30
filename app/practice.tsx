@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated from 'react-native-reanimated';
@@ -16,6 +16,7 @@ import { areaLabels, pickPracticeQuestions, shuffleOptions } from '@/data/questi
 import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
+import { now } from '@/lib/clock';
 import { recordGameResult } from '@/storage/profile';
 import { spacing } from '@/theme';
 import type { GameOutcome, KnowledgeArea } from '@/types/game';
@@ -41,8 +42,12 @@ export default function PracticeScreen() {
   const [correct, setCorrect] = useState(0);
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
   const [done, setDone] = useState(false);
-  const startedAt = useRef(Date.now());
+  const startedAt = useRef(0);
   const scroller = useScrollToEnd();
+
+  useEffect(() => {
+    startedAt.current = now();
+  }, []);
   const question = questions[index];
   const isRight = answered && picked === question?.answerIndex;
 

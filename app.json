@@ -8,7 +8,6 @@
     "scheme": "soytel",
     "userInterfaceStyle": "light",
     "backgroundColor": "#0B2D45",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cl.diftel.soytel"
@@ -18,8 +17,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-icon.png",
         "backgroundColor": "#0B2D45"
-      },
-      "edgeToEdgeEnabled": true
+      }
     },
     "web": {
       "favicon": "./assets/brand/favicon.png",
@@ -37,7 +35,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0B2D45"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true
