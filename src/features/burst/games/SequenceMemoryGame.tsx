@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { PressableScale } from '@/components/PressableScale';
@@ -33,14 +33,14 @@ const GAP_MS = 200;
 // Microjuego 7: memoriza la ruta que siguen los paquetes entre nodos y repítela.
 export function SequenceMemoryGame({ active, level, onAnswer }: MicroGameProps) {
   const length = level >= 3 ? 4 : 3;
-  const sequence = useMemo(() => {
+  const [sequence] = useState(() => {
     const result: string[] = [];
     while (result.length < length) {
       const candidate = nodes[Math.floor(Math.random() * nodes.length)].id;
       if (candidate !== result[result.length - 1]) result.push(candidate);
     }
     return result;
-  }, [length]);
+  });
   const [lit, setLit] = useState<string | null>(null);
   const [showing, setShowing] = useState(true);
   const [input, setInput] = useState(0);

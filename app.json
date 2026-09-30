@@ -2,16 +2,16 @@
   "expo": {
     "name": "SoyTEL",
     "slug": "soytel",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "soytel",
     "userInterfaceStyle": "light",
     "backgroundColor": "#0B2D45",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "cl.diftel.soytel"
+      "bundleIdentifier": "cl.diftel.soytel",
+      "buildNumber": "2"
     },
     "android": {
       "package": "cl.diftel.soytel",
@@ -19,12 +19,16 @@
         "foregroundImage": "./assets/brand/adaptive-icon.png",
         "backgroundColor": "#0B2D45"
       },
-      "edgeToEdgeEnabled": true
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/brand/favicon.png",
       "themeColor": "#0B2D45",
-      "backgroundColor": "#0B2D45"
+      "backgroundColor": "#0B2D45",
+      "name": "SoyTEL · Ruta Telemática",
+      "shortName": "SoyTEL",
+      "lang": "es",
+      "output": "single"
     },
     "plugins": [
       "expo-router",
@@ -37,10 +41,19 @@
           "resizeMode": "contain",
           "backgroundColor": "#0B2D45"
         }
-      ]
+      ],
+      "expo-status-bar",
+      "./plugins/withAndroidReleaseSigning"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "description": "Ruta Telemática en vivo, microjuegos y trivia para descubrir Ingeniería Civil Telemática USM.",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "10906c4c-a414-481d-8518-f760c55669fb"
+      }
     }
   }
 }

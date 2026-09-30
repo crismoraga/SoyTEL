@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
+import { usePanHandlers } from '@/lib/usePanHandlers';
 import { colors, radius, spacing } from '@/theme';
 import { shuffle } from '../logic';
 import type { MicroGameProps } from '../types';
@@ -12,6 +13,11 @@ interface Cable {
   id: string;
   label: string;
   color: string;
+}
+
+interface Point {
+  x: number;
+  y: number;
 }
 
 const ALL_CABLES: Cable[] = [
@@ -30,81 +36,53 @@ function cablePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M${x1} ${y1}C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}`;
 }
 
+const rowY = (index: number, count: number) => (HEIGHT * (index + 1)) / (count + 1);
+
 // Microjuego 9: arrastra cada cable hasta el puerto del mismo color (o toca cable y luego puerto).
 export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
-  const cables = useMemo(() => ALL_CABLES.slice(0, level >= 3 ? 4 : 3), [level]);
-  const ports = useMemo(() => shuffle(cables), [cables]);
+  const [cables] = useState(() => ALL_CABLES.slice(0, level >= 3 ? 4 : 3));
+  const [ports] = useState(() => shuffle(cables));
   const [width, setWidth] = useState(320);
   const [connections, setConnections] = useState<Record<string, number>>({});
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [errors, setErrors] = useState(0);
-  const state = useRef({ connections, errors, active, width, done: false });
-  state.current = { ...state.current, connections, errors, active, width };
+  const done = useRef(false);
 
-  const rowY = (index: number, count: number) => (HEIGHT * (index + 1)) / (count + 1);
-  const plugPos = (index: number) => ({ x: EDGE, y: rowY(index, cables.length) });
-  const portPos = (index: number) => ({ x: width - EDGE, y: rowY(index, ports.length) });
+  const plugPos = (index: number): Point => ({ x: EDGE, y: rowY(index, cables.length) });
+  const portPos = (index: number): Point => ({ x: width - EDGE, y: rowY(index, ports.length) });
 
   function attempt(cableId: string, portIndex: number) {
-    const current = state.current;
-    if (!current.active || current.done || current.connections[cableId] !== undefined) return;
-    if (Object.values(current.connections).includes(portIndex)) return;
+    if (!active || done.current || connections[cableId] !== undefined) return;
+    if (Object.values(connections).includes(portIndex)) return;
     if (ports[portIndex].id !== cableId) {
-      const nextErrors = current.errors + 1;
+      const nextErrors = errors + 1;
       setErrors(nextErrors);
       void feedbackWarning();
       if (nextErrors >= 2) {
-        state.current.done = true;
+        done.current = true;
         onAnswer(false);
       }
       return;
     }
-    const updated = { ...current.connections, [cableId]: portIndex };
+    const updated = { ...connections, [cableId]: portIndex };
     setConnections(updated);
     void feedbackSuccess();
     if (Object.keys(updated).length >= cables.length) {
-      state.current.done = true;
-      onAnswer(true, current.errors === 0 ? 40 : 15);
+      done.current = true;
+      onAnswer(true, errors === 0 ? 40 : 15);
     }
   }
 
-  const responders = useMemo(
-    () =>
-      cables.map((cable, index) =>
-        PanResponder.create({
-          onStartShouldSetPanResponder: () => state.current.active && state.current.connections[cable.id] === undefined,
-          onMoveShouldSetPanResponder: () => state.current.active,
-          onPanResponderGrant: () => {
-            void feedbackTap();
-            const start = { x: EDGE, y: (HEIGHT * (index + 1)) / (cables.length + 1) };
-            setDrag({ id: cable.id, ...start });
-          },
-          onPanResponderMove: (_, gesture) => {
-            const start = { x: EDGE, y: (HEIGHT * (index + 1)) / (cables.length + 1) };
-            setDrag({ id: cable.id, x: start.x + gesture.dx, y: start.y + gesture.dy });
-          },
-          onPanResponderRelease: (_, gesture) => {
-            setDrag(null);
-            if (Math.hypot(gesture.dx, gesture.dy) < 8) {
-              setSelected((value) => (value === cable.id ? null : cable.id));
-              return;
-            }
-            const start = { x: EDGE, y: (HEIGHT * (index + 1)) / (cables.length + 1) };
-            const end = { x: start.x + gesture.dx, y: start.y + gesture.dy };
-            const target = ports.findIndex((_, portIndex) => {
-              const pos = { x: state.current.width - EDGE, y: (HEIGHT * (portIndex + 1)) / (ports.length + 1) };
-              return Math.hypot(pos.x - end.x, pos.y - end.y) < HIT;
-            });
-            if (target >= 0) attempt(cable.id, target);
-          },
-          onPanResponderTerminate: () => setDrag(null),
-        }),
-      ),
-    // attempt usa refs; los responders solo dependen de la disposición.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cables, ports],
-  );
+  function drop(cableId: string, end: Point | null) {
+    setDrag(null);
+    if (!end) return;
+    const target = ports.findIndex((_, portIndex) => {
+      const pos = portPos(portIndex);
+      return Math.hypot(pos.x - end.x, pos.y - end.y) < HIT;
+    });
+    if (target >= 0) attempt(cableId, target);
+  }
 
   function onLayout(event: LayoutChangeEvent) {
     setWidth(event.nativeEvent.layout.width);
@@ -135,27 +113,19 @@ export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
             <Path d={cablePath(plugPos(dragging).x, plugPos(dragging).y, drag.x, drag.y)} stroke={cables[dragging].color} strokeWidth={9} strokeLinecap="round" fill="none" opacity={0.85} />
           )}
         </Svg>
-        {cables.map((cable, index) => {
-          const pos = plugPos(index);
-          const connected = connections[cable.id] !== undefined;
-          return (
-            <View
-              key={cable.id}
-              {...responders[index].panHandlers}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={`Cable ${cable.label}${connected ? ', conectado' : selected === cable.id ? ', seleccionado' : ''}`}
-              style={[
-                styles.plug,
-                { left: pos.x - 24, top: pos.y - 24, backgroundColor: cable.color },
-                selected === cable.id && styles.plugSelected,
-                connected && styles.plugDone,
-              ]}
-            >
-              <TelIcon name="plug" size={22} color={colors.white} />
-            </View>
-          );
-        })}
+        {cables.map((cable, index) => (
+          <Plug
+            key={cable.id}
+            cable={cable}
+            origin={plugPos(index)}
+            active={active}
+            connected={connections[cable.id] !== undefined}
+            selected={selected === cable.id}
+            onDrag={(point) => setDrag({ id: cable.id, ...point })}
+            onDrop={(point) => drop(cable.id, point)}
+            onTap={() => setSelected((value) => (value === cable.id ? null : cable.id))}
+          />
+        ))}
         {ports.map((port, index) => {
           const pos = portPos(index);
           const taken = Object.values(connections).includes(index);
@@ -181,6 +151,54 @@ export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
       <TelText variant="caption" color="accentSoft" align="center">
         {errors > 0 ? '¡Ojo! Un error más y se cae el enlace.' : 'Arrastra o toca un cable y luego su puerto.'}
       </TelText>
+    </View>
+  );
+}
+
+interface PlugProps {
+  cable: Cable;
+  origin: Point;
+  active: boolean;
+  connected: boolean;
+  selected: boolean;
+  onDrag: (point: Point) => void;
+  onDrop: (point: Point | null) => void;
+  onTap: () => void;
+}
+
+function Plug({ cable, origin, active, connected, selected, onDrag, onDrop, onTap }: PlugProps) {
+  const panHandlers = usePanHandlers({
+    canStart: () => active && !connected,
+    onGrant: () => {
+      void feedbackTap();
+      onDrag(origin);
+    },
+    onMove: (_, gesture) => onDrag({ x: origin.x + gesture.dx, y: origin.y + gesture.dy }),
+    onRelease: (_, gesture) => {
+      if (Math.hypot(gesture.dx, gesture.dy) < 8) {
+        onDrop(null);
+        onTap();
+        return;
+      }
+      onDrop({ x: origin.x + gesture.dx, y: origin.y + gesture.dy });
+    },
+    onTerminate: () => onDrop(null),
+  });
+
+  return (
+    <View
+      {...panHandlers}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={`Cable ${cable.label}${connected ? ', conectado' : selected ? ', seleccionado' : ''}`}
+      style={[
+        styles.plug,
+        { left: origin.x - 24, top: origin.y - 24, backgroundColor: cable.color },
+        selected && styles.plugSelected,
+        connected && styles.plugDone,
+      ]}
+    >
+      <TelIcon name="plug" size={22} color={colors.white} />
     </View>
   );
 }

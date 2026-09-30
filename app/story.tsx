@@ -24,6 +24,7 @@ import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
 import { useFocusData } from '@/lib/useFocusData';
+import { now } from '@/lib/clock';
 import { recordGameResult } from '@/storage/profile';
 import { completeChapter, loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
@@ -36,18 +37,20 @@ const NODE = 52;
 
 // Texto que aparece letra a letra (se completa al instante si se reduce el movimiento).
 function useTypewriter(text: string, speed = 18) {
-  const [shown, setShown] = useState('');
+  const [progress, setProgress] = useState({ text, count: 0 });
+  // Al cambiar de línea se parte desde cero sin esperar al efecto.
+  const count = progress.text === text ? progress.count : 0;
   useEffect(() => {
-    setShown('');
     let index = 0;
     const timer = setInterval(() => {
       index += 2;
-      setShown(text.slice(0, index));
+      setProgress({ text, count: index });
       if (index >= text.length) clearInterval(timer);
     }, speed);
     return () => clearInterval(timer);
   }, [speed, text]);
-  return { shown, done: shown.length >= text.length, finish: () => setShown(text) };
+  const shown = text.slice(0, count);
+  return { shown, done: shown.length >= text.length, finish: () => setProgress({ text, count: text.length }) };
 }
 
 export default function StoryScreen() {
@@ -78,7 +81,7 @@ export default function StoryScreen() {
     setAnswered(false);
     setAttempts(0);
     setOutcome(null);
-    setStartedAt(Date.now());
+    setStartedAt(now());
     setPhase('dialogue');
   }
 

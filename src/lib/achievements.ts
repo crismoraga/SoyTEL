@@ -16,6 +16,23 @@ export function wonMicroGames(results: GameResult[]): MicroGameId[] {
     .flatMap((result) => String(result.metadata?.won).split(',').filter(Boolean)) as MicroGameId[];
 }
 
+// Rutas en vivo con grupo (el modo individual no cuenta para el podio).
+function liveRoutes(results: GameResult[]): GameResult[] {
+  return results.filter((result) => result.gameId === 'route' && result.metadata?.solo !== true && Number(result.metadata?.players ?? 0) >= 3);
+}
+
+export function playedStations(results: GameResult[]): string[] {
+  const games = new Set<string>();
+  results.forEach((result) => {
+    if (result.gameId === 'station' && typeof result.metadata?.game === 'string') games.add(result.metadata.game);
+    if (result.gameId === 'route') {
+      if (Number(result.metadata?.pillars ?? 0) >= 5) ['datos', 'software', 'redes', 'teleco', 'hardware'].forEach((id) => games.add(id));
+      games.add('red-b215');
+    }
+  });
+  return [...games];
+}
+
 // Valor actual de cada logro (se compara con su umbral). Función pura y testeable.
 export function achievementProgress(id: AchievementId, context: AchievementContext): number {
   const { profile, results, mascotDays, careerAreas } = context;
@@ -30,8 +47,16 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
         .reduce((total, result) => total + Number(result.metadata?.correctAnswers ?? 0), 0);
     case 'career-explorer':
       return careerAreas;
-    case 'journey-host':
-      return results.filter((result) => result.gameId === 'journey').length;
+    case 'route-complete':
+      return results.filter((result) => result.gameId === 'route').length;
+    case 'temple-restored':
+      return results.some((result) => result.gameId === 'route' && Number(result.metadata?.pillars ?? 0) >= 5) ? 1 : 0;
+    case 'route-podium':
+      return liveRoutes(results).some((result) => Number(result.metadata?.rank ?? 99) <= 3) ? 1 : 0;
+    case 'route-champion':
+      return liveRoutes(results).some((result) => Number(result.metadata?.rank ?? 99) === 1) ? 1 : 0;
+    case 'station-explorer':
+      return playedStations(results).length;
     case 'streak-three':
       return profile.streakDays;
     case 'security-guard':

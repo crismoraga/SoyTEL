@@ -78,11 +78,10 @@ export function Telix({
     };
   }, [expression, float, motionEnabled, pulse]);
 
+  const canBlink = motionEnabled && BLINKING.includes(expression);
+
   useEffect(() => {
-    if (!motionEnabled || !BLINKING.includes(expression)) {
-      setBlink(false);
-      return;
-    }
+    if (!canBlink) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
@@ -101,7 +100,7 @@ export function Telix({
       active = false;
       clearTimeout(timer);
     };
-  }, [expression, motionEnabled]);
+  }, [canBlink]);
 
   useEffect(() => {
     if (reactKey === undefined || !motionEnabled) return;
@@ -119,7 +118,8 @@ export function Telix({
   const signalStyle = useAnimatedStyle(() => ({ opacity: 0.35 + 0.65 * pulse.value }));
 
   const body = useMemo(() => telixBody(pose, signal), [pose, signal]);
-  const face = useMemo(() => telixFace(expression, blink), [blink, expression]);
+  const eyesClosed = canBlink && blink;
+  const face = useMemo(() => telixFace(expression, eyesClosed), [eyesClosed, expression]);
   const extras = useMemo(() => telixExtras(expression), [expression]);
   const arcs = useMemo(() => telixSignalArcs(), []);
 

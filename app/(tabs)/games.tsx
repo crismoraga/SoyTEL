@@ -16,6 +16,7 @@ import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { storyChapters } from '@/data/story';
 import { microGameCatalog } from '@/features/burst/catalog';
+import { stationGames } from '@/features/stations/registry';
 import { wonMicroGames } from '@/lib/achievements';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
@@ -54,14 +55,6 @@ const modes: ModeCard[] = [
     route: '/story',
     stat: (_, chapters) => `${chapters}/${storyChapters.length} capítulos`,
   },
-  {
-    title: 'Recorrido conjunto',
-    subtitle: 'Crea un ID, compártelo con tu grupo y superen cinco estaciones.',
-    duration: '15–20 min',
-    illustration: 'route',
-    route: '/journey',
-    stat: (results) => `${results.filter((item) => item.gameId === 'journey').length} recorridos`,
-  },
 ];
 
 // Pestaña "Jugar": todos los modos y la colección de microjuegos ganados.
@@ -80,6 +73,64 @@ export default function GamesScreen() {
       header={<AppHeader kicker="Sala de juegos" title="Jugar" subtitle="Sesiones cortas de 3 a 20 minutos" />}
     >
       <Animated.View entering={entering.fadeUp()}>
+        <TelCard tone="navy" style={styles.featured}>
+          <View style={styles.featuredArt}>
+            <Illustration name="route" width={150} tone="dark" />
+          </View>
+          <View style={styles.featuredText}>
+            <Tag tone="glass" live label="EN VIVO · GRUPAL" />
+            <TelText variant="title" color="cream">
+              Ruta Telemática
+            </TelText>
+            <TelText variant="caption" color="accentSoft">
+              Stand → B215 → B213 → pasillo. Seis juegos y una trivia final en vivo con tu grupo.
+            </TelText>
+            {data && data.results.some((item) => item.gameId === 'route') && (
+              <TelText variant="label" color="accent" tabular>
+                {data.results.filter((item) => item.gameId === 'route').length} rutas completadas
+              </TelText>
+            )}
+          </View>
+          <TelButton label="Ingresar código del stand" variant="cream" icon="qr" onPress={() => router.push('/ruta')} />
+        </TelCard>
+      </Animated.View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Juegos de la ruta" subtitle="Practícalos antes de la feria o repítelos cuando quieras" />
+        <View style={styles.stationGrid}>
+          {stationGames.map((game, index) => {
+            const best = data ? data.results.filter((item) => item.gameId === 'station' && item.metadata?.game === game.id).reduce((max, item) => Math.max(max, item.score), 0) : 0;
+            return (
+              <Animated.View key={game.id} entering={entering.pop(index)} style={styles.stationCell}>
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel={`${game.title}, ${game.place}. Practicar`}
+                  haptic
+                  onPress={() => router.push({ pathname: '/estacion', params: { juego: game.id } })}
+                  style={styles.station}
+                >
+                  <View style={[styles.stationIcon, { backgroundColor: game.color }]}>
+                    <TelIcon name={game.icon} size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.flex}>
+                    <TelText variant="small" color="secondary">
+                      {game.place.toUpperCase()} · {game.pillar}
+                    </TelText>
+                    <TelText variant="label" color="primary" numberOfLines={1}>
+                      {game.title}
+                    </TelText>
+                    <TelText variant="small" color={best ? 'successInk' : 'muted'}>
+                      {best ? `Récord ${formatNumber(best)} pts` : game.minutes}
+                    </TelText>
+                  </View>
+                </PressableScale>
+              </Animated.View>
+            );
+          })}
+        </View>
+      </View>
+
+      <Animated.View entering={entering.fadeUp(1)}>
         <TelCard tone="navy" style={styles.featured}>
           <View style={styles.featuredArt}>
             <Illustration name="burst" width={150} tone="dark" />
@@ -247,5 +298,28 @@ const styles = StyleSheet.create({
   },
   microMeta: {
     fontSize: 11,
+  },
+  stationGrid: {
+    gap: spacing.xs,
+  },
+  stationCell: {
+    width: '100%',
+  },
+  station: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -109,7 +109,7 @@ function ConfettiPiece({ particle, progress }: { particle: Particle; progress: S
 
 const styles = StyleSheet.create({
   layer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,

@@ -18,6 +18,8 @@ import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { tipForDate } from '@/data/tips';
+import { RouteProgress } from '@/features/route/parts';
+import { useMemberView } from '@/route/hooks';
 import { expressionForMood, signalForMood } from '@/graphics/telix';
 import { formatNumber, greeting } from '@/lib/format';
 import { nextMission } from '@/lib/missions';
@@ -39,7 +41,7 @@ const explore: ExploreItem[] = [
   { label: 'Ráfaga', glyph: 'bolt', route: '/burst' },
   { label: 'Telemático', glyph: 'question', route: '/millionaire' },
   { label: 'Historia', glyph: 'book', route: '/story' },
-  { label: 'Recorrido', glyph: 'route', route: '/journey' },
+  { label: 'Ruta', glyph: 'route', route: '/ruta' },
   { label: 'Telix', glyph: 'robot', route: '/mascot' },
   { label: 'Práctica', glyph: 'target', route: '/career' },
   { label: 'Carrera', glyph: 'cap', route: '/career' },
@@ -67,6 +69,8 @@ export default function HomeScreen() {
     if (profile) void ensureDailyInbox(profile.mascotMood);
   }, [profile]);
 
+  const route = useMemberView();
+  const routeActive = route.status !== 'idle' && Boolean(route.code);
   const mission = data ? nextMission(data.results, data.story.completedChapters) : null;
   const tip = tipForDate(new Date());
 
@@ -151,6 +155,27 @@ export default function HomeScreen() {
           )}
         </TelCard>
       </View>
+
+      <Animated.View entering={entering.fadeUp(1)}>
+        <TelCard tone="navy" style={styles.routeCard}>
+          <View style={styles.routeHead}>
+            <Tag tone="glass" live label={routeActive ? (route.solo ? 'RUTA INDIVIDUAL' : `RUTA ${route.code}`) : 'FERIA · STAND TELEMÁTICA'} />
+          </View>
+          <TelText variant="heading" color="cream">
+            {routeActive ? 'Tienes una ruta en curso' : 'Ruta Telemática en vivo'}
+          </TelText>
+          <TelText variant="caption" color="accentSoft">
+            {routeActive ? 'Vuelve para seguir jugando con tu grupo.' : 'Ingresa el código del stand y juega con tu grupo en B215, B213 y el pasillo.'}
+          </TelText>
+          <RouteProgress stop={route.snapshot?.stop ?? 'stand'} finished={route.snapshot?.phase === 'podium'} />
+          <TelButton
+            label={routeActive ? 'Volver a la ruta' : 'Ingresar código del stand'}
+            variant="cream"
+            icon={routeActive ? 'route' : 'qr'}
+            onPress={() => router.push(routeActive ? '/ruta/juego' : '/ruta')}
+          />
+        </TelCard>
+      </Animated.View>
 
       <View style={styles.section}>
         <SectionHeader title="Explora" />
@@ -325,6 +350,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 2,
+  },
+  routeCard: {
+    gap: spacing.sm,
+  },
+  routeHead: {
+    flexDirection: 'row',
   },
   telixCard: {
     flexDirection: 'row',

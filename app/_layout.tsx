@@ -7,6 +7,8 @@ import * as SystemUI from 'expo-system-ui';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastHost } from '@/components/feedback/ToastHost';
+import { useRouteForeground } from '@/route/hooks';
+import { routeMember } from '@/route/member';
 import { loadInbox } from '@/storage/inbox';
 import { initSettings } from '@/storage/settings';
 import { colors, setFontsLoaded } from '@/theme';
@@ -17,11 +19,14 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const ready = fontsLoaded || Boolean(fontError);
+  useRouteForeground();
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.primary);
     void initSettings();
     void loadInbox();
+    // Si la app se cerró en medio de una ruta, retoma la conexión con el stand.
+    void routeMember.restore();
   }, []);
 
   useEffect(() => {
@@ -54,7 +59,10 @@ export default function RootLayout() {
           <Stack.Screen name="burst" options={{ animation: 'fade_from_bottom', gestureEnabled: false, contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="millionaire" options={{ animation: 'fade_from_bottom', contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="practice" />
-          <Stack.Screen name="journey" />
+          <Stack.Screen name="ruta/index" options={{ contentStyle: { backgroundColor: colors.paper } }} />
+          <Stack.Screen name="ruta/juego" options={{ animation: 'fade_from_bottom', gestureEnabled: false, contentStyle: { backgroundColor: colors.primary } }} />
+          <Stack.Screen name="ruta/stand" options={{ contentStyle: { backgroundColor: colors.primary } }} />
+          <Stack.Screen name="estacion" options={{ animation: 'fade_from_bottom', gestureEnabled: false, contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="story" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="mascot" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="profile" />

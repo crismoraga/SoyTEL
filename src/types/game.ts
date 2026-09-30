@@ -9,7 +9,9 @@ export type GameId =
   | 'practice'
   | 'journey'
   | 'story'
-  | 'mascot';
+  | 'mascot'
+  | 'route'
+  | 'station';
 
 export type MicroGameId =
   | 'connect-network'
@@ -29,7 +31,11 @@ export type AchievementId =
   | 'first-signal'
   | 'burst-starter'
   | 'quiz-bronze'
-  | 'journey-host'
+  | 'route-complete'
+  | 'route-podium'
+  | 'route-champion'
+  | 'temple-restored'
+  | 'station-explorer'
   | 'perfect-run'
   | 'level-five'
   | 'signal-restored'
@@ -79,17 +85,3 @@ export interface GameOutcome {
   newAchievements: AchievementId[];
 }
 
-export interface JourneyParticipant {
-  id: string;
-  alias: string;
-  score: number;
-  checkpoint: number;
-}
-
-export interface JourneySession {
-  id: string;
-  code: string;
-  createdAt: string;
-  status: 'lobby' | 'running' | 'finished';
-  participants: JourneyParticipant[];
-}

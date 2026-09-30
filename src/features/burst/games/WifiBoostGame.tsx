@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
-import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { useRef, useState } from 'react';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Line, Rect } from 'react-native-svg';
 import { PulseRings } from '@/components/feedback/PulseRings';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
+import { usePanHandlers } from '@/lib/usePanHandlers';
 import { colors, radius, spacing } from '@/theme';
 import { signalBars, wifiSignal, type Point } from '../logic';
 import type { MicroGameProps } from '../types';
@@ -15,7 +16,7 @@ const ROUTER = 54;
 // Microjuego 11: arrastra el router por la casa hasta dar señal completa al notebook (¡ojo con el microondas!).
 export function WifiBoostGame({ active, onAnswer }: MicroGameProps) {
   const [width, setWidth] = useState(320);
-  const layout = useMemo(() => {
+  const [layout] = useState(() => {
     const corners: Point[] = [
       { x: 0.16, y: 0.18 },
       { x: 0.84, y: 0.18 },
@@ -25,11 +26,11 @@ export function WifiBoostGame({ active, onAnswer }: MicroGameProps) {
     const laptopIndex = Math.floor(Math.random() * 4);
     const microwaveIndex = (laptopIndex + 1 + Math.floor(Math.random() * 3)) % 4;
     return { laptop: corners[laptopIndex], microwave: corners[microwaveIndex] };
-  }, []);
+  });
   const [router, setRouter] = useState<Point>({ x: 0.5, y: 0.5 });
   const [won, setWon] = useState(false);
-  const state = useRef({ active, width, won: false, start: router, router });
-  state.current = { ...state.current, active, width, router };
+  const dragStart = useRef<Point>(router);
+  const wonRef = useRef(false);
 
   const toPx = (point: Point) => ({ x: point.x * width, y: point.y * HEIGHT });
   const laptopPx = toPx(layout.laptop);
@@ -38,33 +39,24 @@ export function WifiBoostGame({ active, onAnswer }: MicroGameProps) {
   const { strength, interference } = wifiSignal(routerPx, laptopPx, microwavePx, { width, height: HEIGHT });
   const bars = signalBars(strength);
 
-  const responder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => state.current.active && !state.current.won,
-        onMoveShouldSetPanResponder: () => state.current.active && !state.current.won,
-        onPanResponderGrant: () => {
-          void feedbackTap();
-          state.current.start = state.current.router;
-        },
-        onPanResponderMove: (_, gesture) => {
-          const w = state.current.width;
-          const start = state.current.start;
-          const x = Math.max(0.06, Math.min(0.94, start.x + gesture.dx / w));
-          const y = Math.max(0.08, Math.min(0.92, start.y + gesture.dy / HEIGHT));
-          setRouter({ x, y });
-          const result = wifiSignal({ x: x * w, y: y * HEIGHT }, { x: layout.laptop.x * w, y: layout.laptop.y * HEIGHT }, { x: layout.microwave.x * w, y: layout.microwave.y * HEIGHT }, { width: w, height: HEIGHT });
-          if (result.strength >= 0.92 && !state.current.won) {
-            state.current.won = true;
-            setWon(true);
-            onAnswer(true, 30);
-          }
-        },
-      }),
-    // El responder lee el estado desde la ref para no recrearse en cada movimiento.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout],
-  );
+  const panHandlers = usePanHandlers({
+    canStart: () => active && !wonRef.current,
+    onGrant: () => {
+      void feedbackTap();
+      dragStart.current = router;
+    },
+    onMove: (_, gesture) => {
+      const x = Math.max(0.06, Math.min(0.94, dragStart.current.x + gesture.dx / width));
+      const y = Math.max(0.08, Math.min(0.92, dragStart.current.y + gesture.dy / HEIGHT));
+      setRouter({ x, y });
+      const result = wifiSignal({ x: x * width, y: y * HEIGHT }, laptopPx, microwavePx, { width, height: HEIGHT });
+      if (result.strength >= 0.92 && !wonRef.current) {
+        wonRef.current = true;
+        setWon(true);
+        onAnswer(true, 30);
+      }
+    },
+  });
 
   function onLayout(event: LayoutChangeEvent) {
     setWidth(event.nativeEvent.layout.width);
@@ -113,7 +105,7 @@ export function WifiBoostGame({ active, onAnswer }: MicroGameProps) {
           </TelText>
         </View>
         <View
-          {...responder.panHandlers}
+          {...panHandlers}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel="Router Wi-Fi: arrástralo"

@@ -17,6 +17,7 @@ import { getAchievement } from '@/data/achievements';
 import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
 import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback';
+import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
 import { useEntering, useMotionEnabled } from '@/lib/motion';
 import { loadResults, recordGameResult } from '@/storage/profile';
@@ -95,6 +96,7 @@ export default function BurstScreen() {
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
   const secondsRef = useRef(0);
   const startedAt = useRef(0);
+  const [runId, setRunId] = useState(0);
   const recorded = useRef(false);
   const timer = useSharedValue(1);
   const current = state.games[state.round];
@@ -107,7 +109,8 @@ export default function BurstScreen() {
   const start = useCallback(() => {
     recorded.current = false;
     setOutcome(null);
-    startedAt.current = Date.now();
+    startedAt.current = now();
+    setRunId((value) => value + 1);
     const games = focusGame ? Array.from({ length: FOCUS_ROUNDS }, () => focusGame) : pickBurstGames(ROUNDS);
     dispatch({ type: 'start', games });
     void feedbackHeavy();
@@ -115,15 +118,17 @@ export default function BurstScreen() {
 
   useEffect(() => {
     if (state.phase !== 'ready') return;
-    const timeout = setTimeout(() => dispatch({ type: 'play' }), READY_MS);
+    const timeout = setTimeout(() => {
+      setSecondsLeft(duration);
+      dispatch({ type: 'play' });
+    }, READY_MS);
     return () => clearTimeout(timeout);
-  }, [state.phase, state.round]);
+  }, [duration, state.phase, state.round]);
 
   useEffect(() => {
     if (state.phase !== 'playing') return;
     const deadline = Date.now() + duration * 1000;
     secondsRef.current = duration;
-    setSecondsLeft(duration);
     timer.value = 1;
     timer.value = withTiming(0, { duration: duration * 1000, easing: Easing.linear });
     const interval = setInterval(() => {
@@ -209,7 +214,7 @@ export default function BurstScreen() {
     const unlocked = outcome?.newAchievements.map((id) => getAchievement(id)) ?? [];
     return (
       <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
-        <Celebration burstKey={correct >= Math.ceil(state.games.length / 2) ? startedAt.current : null} count={correct === state.games.length ? 44 : 28} />
+        <Celebration burstKey={correct >= Math.ceil(state.games.length / 2) ? runId : null} count={correct === state.games.length ? 44 : 28} />
         <View style={styles.finishHero}>
           <Telix
             size={160}
@@ -471,7 +476,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(7, 31, 49, 0.82)',
     borderRadius: radius.xl,
   },

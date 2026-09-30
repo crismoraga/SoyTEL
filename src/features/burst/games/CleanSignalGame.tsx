@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { TelText } from '@/components/TelText';
@@ -35,7 +35,7 @@ const noiseRound: WaveOption[] = [
 
 // Microjuego 2: compara señales. Dos variantes: menos ruido o mayor frecuencia.
 export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
-  const round = useMemo(() => {
+  const [round] = useState(() => {
     const mode: 'noise' | 'frequency' = Math.random() < 0.5 ? 'noise' : 'frequency';
     if (mode === 'noise') {
       return { mode, prompt: '¿Qué medio entrega la señal más limpia?', answer: 'fibra', options: shuffle(noiseRound) };
@@ -45,7 +45,7 @@ export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
     const options = cycles.map((value, index) => ({ id: `f${value}`, label: `Señal ${letters[index]}`, cycles: value, noise: 0 }));
     const answer = options.reduce((best, item) => (item.cycles > best.cycles ? item : best), options[0]).id;
     return { mode, prompt: '¿Qué señal tiene mayor frecuencia?', answer, options };
-  }, []);
+  });
   const [chosen, setChosen] = useState<string | null>(null);
 
   function choose(option: WaveOption) {

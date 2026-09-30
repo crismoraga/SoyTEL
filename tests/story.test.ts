@@ -1,4 +1,3 @@
-import { journeyStations } from '@/data/journey';
 import { getChapter, storyChapters } from '@/data/story';
 import { medallionGlyphs } from '@/graphics/medallions';
 import { telixExpressions } from '@/graphics/telix';
@@ -44,17 +43,5 @@ describe('story mode data', () => {
   it('finds chapters by id', () => {
     expect(getChapter('chapter-2')?.title).toBe('Interferencia en el laboratorio');
     expect(getChapter('nope')).toBeUndefined();
-  });
-});
-
-describe('journey stations', () => {
-  it('has five numbered stations with a group task and a challenge', () => {
-    expect(journeyStations.map((station) => station.number)).toEqual([1, 2, 3, 4, 5]);
-    for (const station of journeyStations) {
-      expect(station.task.length).toBeGreaterThan(20);
-      expect(station.challenge.options).toHaveLength(4);
-      expect(station.points).toBeGreaterThan(0);
-      expect(medallionGlyphs[station.glyph]).toBeDefined();
-    }
   });
 });

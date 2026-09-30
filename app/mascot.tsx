@@ -92,7 +92,7 @@ export default function MascotScreen() {
 
     const unlocked = await syncAchievements();
     if (unlocked.length > 0) {
-      setBurst(Date.now());
+      setBurst((value) => (value ?? 0) + 1);
       react('love', 'celebrate', 3000);
     }
   }
