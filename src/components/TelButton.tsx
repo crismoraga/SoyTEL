@@ -1,86 +1,129 @@
-import type { PropsWithChildren } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, type PressableProps } from 'react-native';
-import { colors, radius, spacing } from '@/theme';
+import { StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { colors, radius, spacing, type ColorToken } from '@/theme';
+import { DotsLoader } from './feedback/Loaders';
+import { PressableScale } from './PressableScale';
+import { TelIcon, type IconName } from './TelIcon';
 import { TelText } from './TelText';
 
-interface TelButtonProps extends Omit<PressableProps, 'children'> {
+export type ButtonVariant =
+  | 'primary'
+  | 'accent'
+  | 'cream'
+  | 'secondary'
+  | 'subtle'
+  | 'outline'
+  | 'outlineLight'
+  | 'ghost'
+  | 'danger'
+  | 'dangerOutline'
+  | 'success';
+
+interface TelButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   label: string;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: ButtonVariant;
+  size?: 'sm' | 'md' | 'lg';
+  icon?: IconName;
+  iconRight?: IconName;
   loading?: boolean;
   fullWidth?: boolean;
+  haptic?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
+
+const variantColors: Record<ButtonVariant, { bg: string; fg: ColorToken; border?: string }> = {
+  primary: { bg: colors.primary, fg: 'cream' },
+  accent: { bg: colors.accent, fg: 'primary' },
+  cream: { bg: colors.cream, fg: 'primary' },
+  secondary: { bg: colors.accentSoft, fg: 'primary' },
+  subtle: { bg: colors.surfaceAlt, fg: 'secondary' },
+  outline: { bg: 'transparent', fg: 'primary', border: colors.primary },
+  outlineLight: { bg: 'rgba(11, 45, 69, 0.55)', fg: 'cream', border: 'rgba(167, 212, 237, 0.55)' },
+  ghost: { bg: 'transparent', fg: 'secondary' },
+  danger: { bg: colors.danger, fg: 'white' },
+  dangerOutline: { bg: 'transparent', fg: 'danger', border: colors.danger },
+  success: { bg: colors.success, fg: 'white' },
+};
+
+const sizes = {
+  sm: { height: 40, radius: radius.sm, padding: spacing.md, icon: 18 },
+  md: { height: 52, radius: radius.md, padding: spacing.lg, icon: 20 },
+  lg: { height: 56, radius: radius.md, padding: spacing.lg, icon: 20 },
+} as const;
 
 export function TelButton({
   label,
   variant = 'primary',
+  size = 'md',
+  icon,
+  iconRight,
   loading = false,
   fullWidth = true,
+  haptic = true,
   disabled,
   style,
+  accessibilityLabel,
   ...props
-}: PropsWithChildren<TelButtonProps>) {
-  const isDisabled = disabled || loading;
+}: TelButtonProps) {
+  const isDisabled = Boolean(disabled) || loading;
+  const palette = variantColors[variant];
+  const metrics = sizes[size];
+  const filled = !palette.border && palette.bg !== 'transparent';
+  const fgToken: ColorToken = isDisabled && filled ? 'muted' : palette.fg;
+  const fg = colors[fgToken];
 
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
-      style={({ pressed }) => [
+      haptic={haptic}
+      style={[
         styles.base,
-        styles[variant],
+        {
+          minHeight: metrics.height,
+          borderRadius: metrics.radius,
+          paddingHorizontal: metrics.padding,
+          backgroundColor: isDisabled && filled ? colors.border : palette.bg,
+          borderColor: palette.border,
+          borderWidth: palette.border ? 1.5 : 0,
+        },
         fullWidth && styles.fullWidth,
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
-        typeof style === 'object' ? style : undefined,
+        isDisabled && !filled && styles.disabledOutline,
+        style,
       ]}
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'ghost' ? colors.primary : colors.white} />
+        <DotsLoader color={fg} />
       ) : (
-        <TelText
-          variant="bodyStrong"
-          color={variant === 'ghost' ? 'primary' : 'white'}
-          align="center"
-        >
-          {label}
-        </TelText>
+        <View style={styles.content}>
+          {icon && <TelIcon name={icon} size={metrics.icon} color={fg} strokeWidth={2.2} />}
+          <TelText variant={size === 'sm' ? 'label' : 'button'} color={fgToken} align="center" numberOfLines={2}>
+            {label}
+          </TelText>
+          {iconRight && <TelIcon name={iconRight} size={metrics.icon} color={fg} strokeWidth={2.2} />}
+        </View>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 52,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   fullWidth: {
-    width: '100%',
+    alignSelf: 'stretch',
   },
-  primary: {
-    backgroundColor: colors.secondary,
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
-  secondary: {
-    backgroundColor: colors.accent,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-  },
-  danger: {
-    backgroundColor: colors.danger,
-  },
-  pressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.985 }],
-  },
-  disabled: {
-    opacity: 0.55,
+  disabledOutline: {
+    opacity: 0.5,
   },
 });

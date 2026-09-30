@@ -1,196 +1,532 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
+import { AppHeader } from '@/components/AppHeader';
+import { Tag } from '@/components/Chips';
+import { Celebration } from '@/components/feedback/Celebration';
+import { Illustration } from '@/components/graphics/Illustration';
+import { Medallion } from '@/components/graphics/Medallion';
+import { Telix } from '@/components/graphics/Telix';
+import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
-import { TelCard } from '@/components/TelCard';
+import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
-import { pickBurstGames, microGameRegistry } from '@/features/burst/registry';
+import { getAchievement } from '@/data/achievements';
+import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
-import { recordGameResult } from '@/storage/profile';
+import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback';
+import { formatNumber } from '@/lib/format';
+import { useEntering, useMotionEnabled } from '@/lib/motion';
+import { loadResults, recordGameResult } from '@/storage/profile';
 import { colors, radius, spacing } from '@/theme';
+import type { GameOutcome, MicroGameId } from '@/types/game';
 
-type BurstPhase = 'intro' | 'playing' | 'feedback' | 'finished';
+const ROUNDS = 6;
+const FOCUS_ROUNDS = 3;
+const LIVES = 3;
+const READY_MS = 1300;
+const FEEDBACK_MS = 1150;
 
-const ROUNDS_PER_SESSION = 6;
+type Phase = 'intro' | 'ready' | 'playing' | 'feedback' | 'finished';
 
+interface RoundResult {
+  id: MicroGameId;
+  correct: boolean;
+}
+
+interface BurstState {
+  phase: Phase;
+  games: MicroGameDefinition[];
+  round: number;
+  lives: number;
+  score: number;
+  results: RoundResult[];
+  lastPoints: number;
+}
+
+type Action =
+  | { type: 'start'; games: MicroGameDefinition[] }
+  | { type: 'play' }
+  | { type: 'answer'; correct: boolean; bonus: number; secondsLeft: number }
+  | { type: 'advance' };
+
+const initialState: BurstState = { phase: 'intro', games: [], round: 0, lives: LIVES, score: 0, results: [], lastPoints: 0 };
+
+function reducer(state: BurstState, action: Action): BurstState {
+  switch (action.type) {
+    case 'start':
+      return { ...initialState, phase: 'ready', games: action.games };
+    case 'play':
+      return state.phase === 'ready' ? { ...state, phase: 'playing' } : state;
+    case 'answer': {
+      if (state.phase !== 'playing') return state;
+      const game = state.games[state.round];
+      const points = action.correct ? 100 + action.bonus + action.secondsLeft * 10 : 0;
+      return {
+        ...state,
+        phase: 'feedback',
+        score: state.score + points,
+        lives: action.correct ? state.lives : state.lives - 1,
+        results: [...state.results, { id: game.id, correct: action.correct }],
+        lastPoints: points,
+      };
+    }
+    case 'advance': {
+      if (state.phase !== 'feedback') return state;
+      const over = state.lives <= 0 || state.round + 1 >= state.games.length;
+      return over ? { ...state, phase: 'finished' } : { ...state, phase: 'ready', round: state.round + 1 };
+    }
+    default:
+      return state;
+  }
+}
+
+// Ráfaga TEL: microjuegos encadenados estilo WarioWare, con vidas y velocidad creciente.
 export default function BurstScreen() {
-  const [phase, setPhase] = useState<BurstPhase>('intro');
-  const [games, setGames] = useState<MicroGameDefinition[]>([]);
-  const [round, setRound] = useState(0);
-  const [score, setScore] = useState(0);
-  const [correct, setCorrect] = useState(0);
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const focusGame = focus ? getMicroGame(focus) : undefined;
+  const entering = useEntering();
+  const motionEnabled = useMotionEnabled();
+  const [state, dispatch] = useReducer(reducer, initialState);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const [lastAnswerCorrect, setLastAnswerCorrect] = useState(false);
-  const startedAt = useRef<number>(Date.now());
-  const timeoutAnswer = useRef<() => void>(() => undefined);
-  const current: MicroGameDefinition | undefined = games[round];
-
-  const accuracy = useMemo(
-    () => (games.length === 0 ? 0 : correct / games.length),
-    [correct, games.length],
-  );
+  const [best, setBest] = useState(0);
+  const [outcome, setOutcome] = useState<GameOutcome | null>(null);
+  const secondsRef = useRef(0);
+  const startedAt = useRef(0);
+  const recorded = useRef(false);
+  const timer = useSharedValue(1);
+  const current = state.games[state.round];
+  const duration = current ? roundDuration(current.durationSeconds, state.round, Boolean(focusGame)) : 0;
 
   useEffect(() => {
-    if (phase === 'playing' && current) {
-      setSecondsLeft(current.durationSeconds);
-      const interval = setInterval(() => {
-        setSecondsLeft((value) => {
-          if (value <= 1) {
-            clearInterval(interval);
-            timeoutAnswer.current();
-            return 0;
-          }
-          return value - 1;
-        });
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [current, phase, round]);
+    void loadResults().then((results) => setBest(results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0)));
+  }, []);
 
-  function start() {
+  const start = useCallback(() => {
+    recorded.current = false;
+    setOutcome(null);
     startedAt.current = Date.now();
-    setGames(pickBurstGames(ROUNDS_PER_SESSION));
-    setRound(0);
-    setScore(0);
-    setCorrect(0);
-    setLastAnswerCorrect(false);
-    setPhase('playing');
-  }
+    const games = focusGame ? Array.from({ length: FOCUS_ROUNDS }, () => focusGame) : pickBurstGames(ROUNDS);
+    dispatch({ type: 'start', games });
+    void feedbackHeavy();
+  }, [focusGame]);
 
-  async function answer(isCorrect: boolean, bonus = 0) {
-    setLastAnswerCorrect(isCorrect);
-    if (isCorrect) {
-      setCorrect((value) => value + 1);
-      setScore((value) => value + 100 + bonus + secondsLeft * 5);
-      await feedbackSuccess();
-    } else {
-      await feedbackWarning();
-    }
-    setPhase('feedback');
-  }
+  useEffect(() => {
+    if (state.phase !== 'ready') return;
+    const timeout = setTimeout(() => dispatch({ type: 'play' }), READY_MS);
+    return () => clearTimeout(timeout);
+  }, [state.phase, state.round]);
 
-  timeoutAnswer.current = () => {
-    void answer(false);
-  };
+  useEffect(() => {
+    if (state.phase !== 'playing') return;
+    const deadline = Date.now() + duration * 1000;
+    secondsRef.current = duration;
+    setSecondsLeft(duration);
+    timer.value = 1;
+    timer.value = withTiming(0, { duration: duration * 1000, easing: Easing.linear });
+    const interval = setInterval(() => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      secondsRef.current = left;
+      setSecondsLeft(left);
+      if (Date.now() >= deadline) {
+        clearInterval(interval);
+        void feedbackWarning();
+        dispatch({ type: 'answer', correct: false, bonus: 0, secondsLeft: 0 });
+      }
+    }, 200);
+    return () => {
+      clearInterval(interval);
+      cancelAnimation(timer);
+    };
+  }, [duration, state.phase, state.round, timer]);
 
-  async function next() {
-    if (round + 1 >= games.length) {
-      const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt.current) / 1000));
-      await recordGameResult({
-        gameId: 'burst',
-        score,
-        accuracy,
-        durationSeconds,
-        completedAt: new Date().toISOString(),
-        metadata: { rounds: games.length },
-      });
-      setPhase('finished');
-      return;
-    }
+  useEffect(() => {
+    if (state.phase !== 'feedback') return;
+    const timeout = setTimeout(() => dispatch({ type: 'advance' }), FEEDBACK_MS);
+    return () => clearTimeout(timeout);
+  }, [state.phase, state.round]);
 
-    setRound((value) => value + 1);
-    setPhase('playing');
-  }
+  useEffect(() => {
+    if (state.phase !== 'finished' || recorded.current) return;
+    recorded.current = true;
+    const won = [...new Set(state.results.filter((item) => item.correct).map((item) => item.id))];
+    const correct = state.results.filter((item) => item.correct).length;
+    void recordGameResult({
+      gameId: 'burst',
+      score: state.score,
+      accuracy: state.games.length ? correct / state.games.length : 0,
+      durationSeconds: Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
+      completedAt: new Date().toISOString(),
+      metadata: { rounds: state.results.length, won: won.join(','), lives: state.lives, focus: focus ?? '' },
+    }).then(setOutcome);
+  }, [focus, state.games.length, state.lives, state.phase, state.results, state.score]);
 
-  if (phase === 'intro') {
+  const onAnswer = useCallback((correct: boolean, bonus = 0) => {
+    if (correct) void feedbackSuccess();
+    else void feedbackWarning();
+    dispatch({ type: 'answer', correct, bonus, secondsLeft: secondsRef.current });
+  }, []);
+
+  const timerStyle = useAnimatedStyle(() => ({ width: `${timer.value * 100}%` }));
+
+  if (state.phase === 'intro') {
     return (
-      <Screen dark contentStyle={styles.centered}>
-        <TelText variant="overline" color="accentSoft" align="center">Modo WarioWare</TelText>
-        <TelText variant="hero" color="white" align="center">Ráfaga TEL</TelText>
-        <TelText color="accentSoft" align="center">
-          {ROUNDS_PER_SESSION} microretos al azar de un set de {microGameRegistry.length}: responde, memoriza, sintoniza y envía paquetes antes de que se acabe el tiempo.
-        </TelText>
-        <TelButton label="Iniciar ráfaga" onPress={start} />
+      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent onBack={() => router.back()} compact />}>
+        <Animated.View entering={entering.pop()} style={styles.introArt}>
+          <Illustration name="burst" width={250} tone="dark" />
+        </Animated.View>
+        <View style={styles.introText}>
+          <TelText variant="overline" color="accent" align="center">
+            {focusGame ? 'Práctica de microjuego' : 'Modo WarioWare'}
+          </TelText>
+          <TelText variant="hero" color="cream" align="center">
+            {focusGame ? focusGame.title : 'Ráfaga TEL'}
+          </TelText>
+          <TelText variant="body" color="onDark" align="center">
+            {focusGame ? focusGame.instruction : 'Microjuegos de segundos, uno tras otro. Lee la instrucción, reacciona y no pierdas tus 3 vidas.'}
+          </TelText>
+        </View>
+        <View style={styles.pills}>
+          <Pill icon="bolt" label={focusGame ? `${FOCUS_ROUNDS} rondas` : `${ROUNDS} microjuegos`} />
+          <Pill icon="heart" label={`${LIVES} vidas`} />
+          <Pill icon="timer" label={focusGame ? 'Sin aceleración' : 'Cada vez más rápido'} />
+        </View>
+        {best > 0 && !focusGame && (
+          <TelText variant="label" color="accentSoft" align="center" tabular>
+            Tu récord: {formatNumber(best)} pts
+          </TelText>
+        )}
+        <TelButton label="¡Empezar!" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
       </Screen>
     );
   }
 
-  if (phase === 'finished') {
+  if (state.phase === 'finished') {
+    const correct = state.results.filter((item) => item.correct).length;
+    const newRecord = !focusGame && state.score > best && best > 0;
+    const unlocked = outcome?.newAchievements.map((id) => getAchievement(id)) ?? [];
     return (
-      <Screen dark contentStyle={styles.centered}>
-        <TelText variant="overline" color="accentSoft" align="center">Ráfaga completada</TelText>
-        <TelText variant="hero" color="white" align="center">{score} pts</TelText>
-        <TelCard tone="cream">
-          <TelText variant="subtitle" color="primary" align="center">
-            Precisión: {Math.round(accuracy * 100)}%
+      <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
+        <Celebration burstKey={correct >= Math.ceil(state.games.length / 2) ? startedAt.current : null} count={correct === state.games.length ? 44 : 28} />
+        <View style={styles.finishHero}>
+          <Telix
+            size={160}
+            expression={state.lives <= 0 ? 'sad' : correct === state.games.length ? 'celebrate' : 'happy'}
+            pose={state.lives <= 0 ? 'idle' : 'celebrate'}
+            signal={state.lives <= 0 ? 1 : 4}
+          />
+          <TelText variant="overline" color="accent" align="center">
+            {state.lives <= 0 ? '¡Sin vidas!' : 'Ráfaga completada'}
           </TelText>
-          <TelText color="primarySoft" align="center">
-            {accuracy >= 1
-              ? '¡Sin pérdida de paquetes! Logro desbloqueado.'
-              : 'Tu XP ya se guardó localmente. Repite la ráfaga para subir nivel y mejorar a Telix.'}
+          <TelText variant="display" color="cream" align="center" tabular>
+            {formatNumber(state.score)}
           </TelText>
-        </TelCard>
-        <TelButton label="Jugar otra vez" onPress={start} />
-        <TelButton label="Volver al inicio" variant="ghost" onPress={() => router.replace('/home')} />
+          <TelText variant="label" color="accentSoft" align="center">
+            puntos · {correct} de {state.games.length} microjuegos
+          </TelText>
+          <View style={styles.rewardRow}>
+            {newRecord && <Tag tone="cream" icon="crown" label="¡Nuevo récord!" />}
+            {outcome && <Tag tone="glass" icon="sparkle" label={`+${outcome.xpGained} XP`} />}
+            {outcome?.leveledUp && <Tag tone="cream" icon="rocket" label={`Nivel ${outcome.profile.level}`} />}
+          </View>
+        </View>
+        <View style={styles.summary}>
+          {state.results.map((result, index) => {
+            const game = state.games[index];
+            return (
+              <View key={`${result.id}-${index}`} style={styles.summaryRow}>
+                <View style={[styles.summaryIcon, { backgroundColor: result.correct ? colors.accent : colors.primary }]}>
+                  <TelIcon name={game.icon} size={18} color={result.correct ? colors.primary : colors.slate} />
+                </View>
+                <TelText variant="label" color="cream" style={styles.flex}>
+                  {game.title}
+                </TelText>
+                <TelIcon name={result.correct ? 'checkCircle' : 'closeCircle'} size={20} color={result.correct ? '#6BC59A' : '#E58A8A'} />
+              </View>
+            );
+          })}
+        </View>
+        {unlocked.map((achievement) =>
+          achievement ? (
+            <View key={achievement.id} style={styles.unlock}>
+              <Medallion glyph={achievement.glyph} tier={achievement.tier} size={44} />
+              <View style={styles.flex}>
+                <TelText variant="small" color="accent">
+                  LOGRO DESBLOQUEADO
+                </TelText>
+                <TelText variant="label" color="cream">
+                  {achievement.title}
+                </TelText>
+              </View>
+            </View>
+          ) : null,
+        )}
+        <View style={styles.actions}>
+          <TelButton label="Jugar otra vez" variant="cream" icon="refresh" onPress={start} />
+          <TelButton label="Volver" variant="outlineLight" onPress={() => router.back()} />
+        </View>
       </Screen>
     );
   }
 
   if (!current) {
-    return <Screen dark contentStyle={styles.centered} />;
+    return <Screen tone="dark" />;
   }
 
+  if (state.phase === 'ready') {
+    const faster = !focusGame && state.round >= 2;
+    return (
+      <Screen tone="dark" backdrop="signal" scroll={false} contentStyle={styles.readyContent}>
+        <Lives lives={state.lives} />
+        <Animated.View key={`ready-${state.round}`} entering={motionEnabled ? ZoomIn.springify().damping(12) : undefined} style={styles.ready}>
+          <TelText variant="overline" color="accent" align="center">
+            Ronda {state.round + 1} de {state.games.length}
+          </TelText>
+          <View style={styles.readyIcon}>
+            <TelIcon name={current.icon} size={54} color={colors.primary} />
+          </View>
+          <TelText variant="hero" color="cream" align="center">
+            {current.title}
+          </TelText>
+          <TelText variant="subtitle" color="accentSoft" align="center">
+            {current.instruction}
+          </TelText>
+          {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
+        </Animated.View>
+        <TelText variant="caption" color="accentSoft" align="center">
+          {duration} segundos · prepárate…
+        </TelText>
+      </Screen>
+    );
+  }
+
+  const Game = current.Component;
   return (
-    <Screen dark scroll={false} contentStyle={styles.gameArea}>
+    <Screen tone="dark" backdrop="none" scroll={false} contentStyle={styles.playContent}>
       <View style={styles.topBar}>
-        <TelText variant="bodyStrong" color="white">Reto {round + 1}/{games.length}</TelText>
-        <View style={[styles.timer, secondsLeft <= 3 && styles.timerDanger]}>
-          <TelText variant="bodyStrong" color="white" align="center">{secondsLeft}s</TelText>
+        <Lives lives={state.lives} />
+        <TelText variant="label" color="accentSoft">
+          {state.round + 1}/{state.games.length}
+        </TelText>
+        <TelText variant="label" color="cream" tabular>
+          {formatNumber(state.score)} pts
+        </TelText>
+      </View>
+      <View style={styles.timerRow}>
+        <View style={styles.timerTrack}>
+          <Animated.View style={[styles.timerFill, secondsLeft <= 3 && styles.timerDanger, timerStyle]} />
+        </View>
+        <View style={[styles.seconds, secondsLeft <= 3 && styles.secondsDanger]}>
+          <TelText variant="label" color="cream" tabular>
+            {secondsLeft}s
+          </TelText>
         </View>
       </View>
-
-      <View style={styles.prompt}>
-        <TelText variant="overline" color="accentSoft" align="center">{current.title}</TelText>
-        <TelText variant="title" color="white" align="center">{current.instruction}</TelText>
-        {phase === 'feedback' && (
-          <TelText variant="bodyStrong" color={lastAnswerCorrect ? 'success' : 'warning'} align="center">
-            {lastAnswerCorrect ? '¡Conexión establecida!' : 'Se perdió el paquete.'}
-          </TelText>
+      <TelText variant="bodyStrong" color="accentSoft" align="center">
+        {current.instruction}
+      </TelText>
+      <View style={styles.gameArea}>
+        <Game key={`${state.round}-${current.id}`} durationSeconds={duration} level={focusGame ? 0 : state.round} active={state.phase === 'playing'} onAnswer={onAnswer} />
+        {state.phase === 'feedback' && (
+          <View style={styles.overlay} pointerEvents="box-none">
+            <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} style={styles.overlayInner}>
+              <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined} style={[styles.verdict, { backgroundColor: state.lastPoints > 0 ? '#6BC59A' : colors.danger }]}>
+                <TelIcon name={state.lastPoints > 0 ? 'check' : 'close'} size={64} color={colors.white} strokeWidth={3.4} />
+              </Animated.View>
+              <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="assertive">
+                {state.lastPoints > 0 ? '¡Conexión establecida!' : secondsLeft === 0 ? '¡Se acabó el tiempo!' : '¡Paquete perdido!'}
+              </TelText>
+              <TelText variant="subtitle" color={state.lastPoints > 0 ? 'accent' : 'dangerSoft'} align="center">
+                {state.lastPoints > 0 ? `+${state.lastPoints} pts` : '−1 vida'}
+              </TelText>
+            </PressableScale>
+          </View>
         )}
       </View>
-
-      <current.Component
-        durationSeconds={current.durationSeconds}
-        active={phase === 'playing'}
-        onAnswer={(isCorrect, bonus) => void answer(isCorrect, bonus)}
-      />
-
-      {phase === 'feedback' && (
-        <TelButton
-          label={round + 1 >= games.length ? 'Ver resultado' : 'Siguiente reto'}
-          onPress={() => void next()}
-        />
-      )}
     </Screen>
   );
 }
 
+function Lives({ lives }: { lives: number }) {
+  return (
+    <View style={styles.lives} accessibilityLabel={`${lives} vidas`}>
+      {Array.from({ length: LIVES }, (_, index) => (
+        <TelIcon key={index} name={index < lives ? 'heartSolid' : 'heart'} size={22} color={index < lives ? '#F4B8C4' : colors.secondary} />
+      ))}
+    </View>
+  );
+}
+
+function Pill({ icon, label }: { icon: IconName; label: string }) {
+  return (
+    <View style={styles.pill}>
+      <View style={styles.pillIcon}>
+        <TelIcon name={icon} size={18} color={colors.primary} />
+      </View>
+      <TelText variant="small" color="cream" align="center">
+        {label}
+      </TelText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  centered: {
+  flex: {
+    flex: 1,
+  },
+  introArt: {
+    alignItems: 'center',
+  },
+  introText: {
+    gap: spacing.sm,
+  },
+  pills: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  pill: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primarySoft,
+  },
+  pillIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  gameArea: {
+  readyContent: {
     justifyContent: 'space-between',
+  },
+  ready: {
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  readyIcon: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: colors.cream,
+    borderWidth: 6,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fasterTag: {
+    alignSelf: 'center',
+  },
+  playContent: {
+    gap: spacing.sm,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  timer: {
-    width: 62,
-    height: 44,
+  lives: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  timerTrack: {
+    flex: 1,
+    height: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    overflow: 'hidden',
+  },
+  timerFill: {
+    height: 12,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  timerDanger: {
+    backgroundColor: colors.danger,
+  },
+  seconds: {
+    minWidth: 52,
+    height: 34,
+    paddingHorizontal: 8,
     borderRadius: radius.pill,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timerDanger: {
+  secondsDanger: {
     backgroundColor: colors.danger,
   },
-  prompt: {
+  gameArea: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(7, 31, 49, 0.82)',
+    borderRadius: radius.xl,
+  },
+  overlayInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.sm,
+  },
+  verdict: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishHero: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  rewardRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  summary: {
+    gap: 6,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(18, 61, 92, 0.85)',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  summaryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  actions: {
+    gap: spacing.sm,
+    marginTop: 'auto',
   },
 });

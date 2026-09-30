@@ -1,162 +1,262 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Screen } from '@/components/Screen';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { brandImages } from '@/components/Brand';
+import { BrandBackdrop } from '@/components/graphics/BrandBackdrop';
+import { Illustration } from '@/components/graphics/Illustration';
+import { Telix } from '@/components/graphics/Telix';
+import { IconButton } from '@/components/IconButton';
+import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
-import { markOnboarded } from '@/storage/story';
+import { useEntering } from '@/lib/motion';
+import { pushInbox } from '@/storage/inbox';
 import { updateAlias } from '@/storage/profile';
-import { colors, radius, spacing } from '@/theme';
+import { markOnboarded } from '@/storage/story';
+import { colors, font, radius, spacing } from '@/theme';
 
 interface Slide {
-  icon: keyof typeof Ionicons.glyphMap;
+  kicker: string;
   title: string;
   body: string;
 }
 
 const slides: Slide[] = [
   {
-    icon: 'flash',
-    title: 'Juega en ráfagas',
-    body: 'Microretos de menos de 15 segundos sobre redes, señales, hardware y seguridad. Perfectos para el trayecto.',
+    kicker: 'Descubre Telemática',
+    title: 'Explora el mundo de las redes y la tecnología',
+    body: 'Juegos cortos de redes, señales, software, hardware y ciberseguridad para conocer Ingeniería Civil Telemática.',
   },
   {
-    icon: 'school',
-    title: 'Aprende sin darte cuenta',
-    body: 'Cada acierto viene con una microexplicación. Descubre qué hace un ingeniero telemático mientras juegas.',
+    kicker: 'Juega en ráfagas',
+    title: '12 microjuegos, segundos para cada uno',
+    body: 'Sesiones de 15 a 20 minutos: ráfagas frenéticas, un concurso de preguntas, una historia en el campus y recorridos en grupo.',
   },
   {
-    icon: 'people',
-    title: 'Comparte el recorrido',
-    body: 'Genera un ID de recorrido y completa estaciones con tu curso. La señal se restaura en equipo.',
+    kicker: 'Tu compañero Telix',
+    title: 'Cuida a Telix y colecciona medallas',
+    body: 'Cada partida sube su señal. Si lo dejas solo, se desanima. Sin cuentas ni correos: tu progreso vive en este teléfono.',
   },
 ];
 
+// Pantalla "Onboarding" de Claude Design: arte arriba, puntos de paso, textos y acciones abajo.
 export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
+  const entering = useEntering();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const [step, setStep] = useState(0);
   const [alias, setAlias] = useState('');
   const [saving, setSaving] = useState(false);
   const slide = slides[step];
+  const isLast = step === slides.length - 1;
 
-  async function finish() {
+  async function finish(skipped = false) {
     setSaving(true);
     try {
-      await updateAlias(alias);
+      const profile = await updateAlias(skipped ? '' : alias);
       await markOnboarded();
-      router.replace('/home');
+      await pushInbox([
+        {
+          kind: 'aviso',
+          title: `¡Bienvenido a SoyTEL, ${profile.alias}!`,
+          body: 'Tu ruta por Telemática USM está lista. Explora, aprende y conecta.',
+          route: '/games',
+        },
+      ]);
+      router.replace(next === 'journey' ? { pathname: '/journey', params: { mode: 'join' } } : '/home');
     } finally {
       setSaving(false);
     }
   }
 
-  if (step < slides.length) {
-    return (
-      <Screen dark contentStyle={styles.container}>
-        <View style={styles.slide}>
-          <View style={styles.iconWrap}>
-            <Ionicons color={colors.accent} name={slide.icon} size={72} />
-          </View>
-          <TelText variant="hero" color="white" align="center">{slide.title}</TelText>
-          <TelText color="accentSoft" align="center">{slide.body}</TelText>
-        </View>
-
-        <View style={styles.footer}>
-          <View style={styles.dots}>
-            {slides.map((item, index) => (
-              <View
-                key={item.title}
-                style={[styles.dot, index === step && styles.dotActive]}
-              />
-            ))}
-          </View>
-          <TelButton label={step + 1 >= slides.length ? 'Crear mi perfil' : 'Siguiente'} onPress={() => setStep((value) => value + 1)} />
-          <TelButton label="Saltar" variant="ghost" onPress={() => setStep(slides.length)} />
-        </View>
-      </Screen>
-    );
-  }
-
   return (
-    <Screen dark scroll={false} contentStyle={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.aliasContainer}
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.art}>
+        {step === 0 ? (
+          <Image source={brandImages.onboardingHero} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Laptop, libros y logo de Telemática USM sobre el campus" />
+        ) : (
+          <View style={styles.artStage}>
+            <BrandBackdrop variant={step === 1 ? 'network' : 'stars'} seed={step * 5 + 3} />
+            <Animated.View key={step} entering={entering.pop()}>
+              {step === 1 ? <Illustration name="burst" width={280} tone="dark" /> : <Telix size={230} expression="happy" pose="wave" signal={4} />}
+            </Animated.View>
+          </View>
+        )}
+        <LinearGradient colors={['rgba(11,45,69,0)', colors.primary]} style={styles.artFade} />
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Saltar introducción"
+          onPress={() => void finish(true)}
+          style={[styles.skip, { top: insets.top + spacing.sm }]}
+        >
+          <TelText variant="label" color="cream">
+            Saltar
+          </TelText>
+        </PressableScale>
+      </View>
+
+      <ScrollView
+        style={styles.panel}
+        contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + spacing.lg }]}
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
       >
-        <TelText variant="overline" color="accentSoft" align="center">Último paso</TelText>
-        <TelText variant="title" color="white" align="center">¿Cómo te llamará la red?</TelText>
-        <TelText color="accentSoft" align="center">
-          Elige un alias para tus logros y recorridos. Sin cuentas, sin correos: tu progreso vive en este dispositivo.
-        </TelText>
-        <TextInput
-          accessibilityLabel="Tu alias"
-          placeholder="Ej: Nodo Valparaíso"
-          placeholderTextColor={colors.muted}
-          value={alias}
-          onChangeText={(value) => setAlias(value.slice(0, 24))}
-          style={styles.input}
-          maxLength={24}
-          autoCapitalize="words"
-          returnKeyType="done"
-          onSubmitEditing={() => void finish()}
-        />
-        <TelButton label="Comenzar aventura" loading={saving} onPress={() => void finish()} />
-      </KeyboardAvoidingView>
-    </Screen>
+        <View style={styles.dotsRow}>
+          {slides.map((item, index) => (
+            <View key={item.kicker} style={[styles.dot, index === step && styles.dotActive]} />
+          ))}
+          <TelText variant="small" color="accentSoft" style={styles.stepLabel}>
+            {step + 1} / {slides.length}
+          </TelText>
+        </View>
+
+        <Animated.View key={`text-${step}`} entering={entering.fadeUp()} style={styles.textBlock}>
+          <TelText variant="overline" color="accent">
+            {slide.kicker}
+          </TelText>
+          <TelText variant="title" color="cream" accessibilityRole="header">
+            {slide.title}
+          </TelText>
+          <TelText variant="body" color="onDark">
+            {slide.body}
+          </TelText>
+        </Animated.View>
+
+        {isLast && (
+          <Animated.View entering={entering.fadeUp(1)} style={styles.field}>
+            <TelText variant="label" color="accentSoft" nativeID="alias-label">
+              ¿Cómo te llamamos?
+            </TelText>
+            <TextInput
+              accessibilityLabelledBy="alias-label"
+              accessibilityLabel="Tu nombre o apodo"
+              placeholder="Tu nombre o apodo"
+              placeholderTextColor={colors.slate}
+              value={alias}
+              onChangeText={(value) => setAlias(value.slice(0, 24))}
+              maxLength={24}
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={() => void finish()}
+              style={[styles.input, font('bodySemi')]}
+            />
+          </Animated.View>
+        )}
+
+        <View style={styles.actions}>
+          {step > 0 && (
+            <IconButton icon="chevronLeft" tone="dark" size={56} accessibilityLabel="Paso anterior" onPress={() => setStep((value) => value - 1)} style={styles.back} />
+          )}
+          <View style={styles.flex}>
+            {isLast ? (
+              <TelButton label="Empezar mi ruta" variant="cream" size="lg" iconRight="arrowRight" loading={saving} onPress={() => void finish()} />
+            ) : (
+              <TelButton label="Siguiente" variant="accent" size="lg" iconRight="arrowRight" onPress={() => setStep((value) => value + 1)} />
+            )}
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    justifyContent: 'space-between',
+  root: {
+    flex: 1,
+    backgroundColor: colors.primary,
   },
-  slide: {
+  art: {
+    height: '48%',
+    minHeight: 300,
+    overflow: 'hidden',
+  },
+  heroImage: {
+    width: '100%',
+    height: '108%',
+  },
+  artStage: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
+    paddingTop: spacing.xl,
   },
-  iconWrap: {
-    width: 150,
-    height: 150,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(111,179,217,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,212,237,0.35)',
+  artFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 90,
+  },
+  skip: {
+    position: 'absolute',
+    right: spacing.md,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(11, 45, 69, 0.72)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  footer: {
-    gap: spacing.sm,
+  panel: {
+    flex: 1,
   },
-  dots: {
+  panelContent: {
+    paddingHorizontal: 28,
+    paddingTop: spacing.xs,
+    gap: 18,
+    flexGrow: 1,
+  },
+  dotsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
     gap: spacing.xs,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.secondary,
   },
   dotActive: {
-    backgroundColor: colors.accent,
-    width: 26,
+    width: 28,
+    backgroundColor: colors.cream,
   },
-  aliasContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: spacing.md,
+  stepLabel: {
+    marginLeft: 'auto',
+    letterSpacing: 1,
+  },
+  textBlock: {
+    gap: 10,
+  },
+  field: {
+    gap: spacing.xs,
   },
   input: {
-    minHeight: 56,
+    height: 52,
+    paddingHorizontal: spacing.md,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.secondary,
+    backgroundColor: colors.primaryInput,
+    color: colors.cream,
+    fontSize: 16,
+  },
+  actions: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  back: {
     borderRadius: radius.md,
-    backgroundColor: colors.white,
-    color: colors.primary,
-    paddingHorizontal: spacing.lg,
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.secondary,
+    backgroundColor: 'transparent',
+  },
+  flex: {
+    flex: 1,
   },
 });

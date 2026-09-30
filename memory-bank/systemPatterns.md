@@ -2,19 +2,22 @@
 
 ## Architectural Patterns
 
-- Expo Router por rutas: `app/` contiene cada pantalla jugable como ruta declarativa.
-- Local-first: `src/storage/profile.ts` encapsula AsyncStorage y las reglas de persistencia.
-- Contenido como datos: preguntas y logros viven en `src/data/`, separados de la UI.
-- Lógica pura: XP, niveles e IDs de recorrido están en `src/lib/progression.ts` y tienen tests.
+- Expo Router por rutas: `app/(tabs)/` agrupa las pestañas y cada modo de juego es una ruta a pantalla completa en `app/`.
+- Local-first: `src/storage/` encapsula AsyncStorage (perfil, historia, buzón, carrera, ajustes); las pantallas no conocen claves.
+- Contenido como datos: preguntas, logros, capítulos, estaciones, áreas y tips viven en `src/data/`.
+- Arte como datos: `src/graphics/` describe formas SVG (`Drawing`/`Shape`) que usan tanto `ShapeLayer` en la app como los scripts de exportación.
+- Lógica pura y testeada: XP y niveles (`src/lib/progression.ts`), logros (`src/lib/achievements.ts`), misiones y lógica de microjuegos (`src/features/burst/logic.ts`).
 
 ## Design Patterns
 
-- Design system mínimo: `Screen`, `TelText`, `TelCard` y `TelButton` estandarizan color, tipografía, targets táctiles y estados.
-- Repositorio local: las pantallas no conocen claves de AsyncStorage directamente.
-- Estado por pantalla: cada juego mantiene su ciclo local y entrega un `GameResult` al repositorio.
+- Design system: `Screen`, `AppHeader`, `TelText`, `TelCard`, `TelButton`, `Chips`, `Blocks`, `Quiz`, `Sheet` y `TabBar` usan los tokens de `src/theme/`.
+- Microjuegos enchufables: cada juego recibe `MicroGameProps` (`durationSeconds`, `active`, `level`, `onAnswer`) y se registra en `catalog.ts` y `registry.tsx`.
+- Stores reactivos con `useSyncExternalStore` para ajustes y buzón; un bus de eventos (`src/lib/events.ts`) dispara toasts globales.
+- `recordGameResult` guarda la sesión, evalúa logros y devuelve un `GameOutcome` que la pantalla usa para celebrar.
 
 ## Common Idioms
 
-- Todas las pantallas incluyen estados de inicio, juego, feedback o final.
-- Los resultados se guardan al completar una sesión; no se bloquea el juego por red.
+- Todas las pantallas de juego tienen fases de intro, juego, feedback y final (reducers en Ráfaga).
+- Cargas con skeletons y `useFocusData`; explicaciones largas con `useScrollToEnd` para que el feedback quede visible.
+- Íconos solo con `TelIcon` (el color se hereda vía `currentColor`).
 - IDs de recorrido usan seis caracteres sin 0/1 para reducir errores de lectura.

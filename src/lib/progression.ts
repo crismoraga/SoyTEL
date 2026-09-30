@@ -21,11 +21,24 @@ export function progressToNextLevel(xp: number): number {
   return Math.min(1, Math.max(0, (xp - current) / (next - current)));
 }
 
+export function xpToNextLevel(xp: number): number {
+  return Math.max(0, xpForLevel(levelFromXp(xp) + 1) - xp);
+}
+
+// XP por sesión: base fija + puntaje (con tope, para que un modo no domine) + precisión + ritmo.
 export function calculateGameXp(score: number, accuracy: number, durationSeconds: number): number {
-  const safeScore = Math.max(0, score);
+  const safeScore = Math.min(2000, Math.max(0, score));
   const safeAccuracy = Math.min(1, Math.max(0, accuracy));
   const paceBonus = durationSeconds <= 300 ? 15 : 5;
-  return Math.round(safeScore * 0.2 + safeAccuracy * 60 + paceBonus);
+  return Math.round(20 + safeScore * 0.08 + safeAccuracy * 60 + paceBonus);
+}
+
+export function levelTitle(level: number): string {
+  if (level >= 10) return 'Arquitecto de redes';
+  if (level >= 7) return 'Ingeniero en terreno';
+  if (level >= 5) return 'Analista de señal';
+  if (level >= 3) return 'Técnico en práctica';
+  return 'Explorador TEL';
 }
 
 export function journeyCodeFromSeed(seed: number): string {
@@ -43,4 +56,11 @@ export function journeyCodeFromSeed(seed: number): string {
 
 export function isValidJourneyCode(code: string): boolean {
   return /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/.test(code.trim().toUpperCase());
+}
+
+export function sanitizeJourneyCode(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^23456789ABCDEFGHJKLMNPQRSTUVWXYZ]/g, '')
+    .slice(0, 6);
 }
