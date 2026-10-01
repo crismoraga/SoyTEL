@@ -8,7 +8,7 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32, seededShuffle } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
 import {
   DIAL_MAX,
   dialScore,
@@ -117,13 +117,14 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
   const [calling, setCalling] = useState(false);
   const [startedAt] = useState(() => Date.now());
   const done = useRef(false);
+  const askContinue = useAskContinue();
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
     onPoints(0);
-    onFinish();
-  }, [onFinish, onPoints]);
+    askContinue(onFinish);
+  }, [askContinue, onFinish, onPoints]);
   useStageTimeout(endsAt, timeout);
 
   function call() {
@@ -133,7 +134,7 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
       setCalling(true);
       onPoints(dialScore(clockNow() - startedAt, wrong));
       void feedbackSuccess();
-      setTimeout(onFinish, 1400);
+      askContinue(onFinish);
     } else {
       setWrong(wrong + 1);
       setTyped('');
@@ -197,13 +198,14 @@ function SipStage({ random, endsAt, onPoints, onFinish }: { random: () => number
   const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' }>({ text: 'Primero, ¿qué envía tu teléfono para iniciar la llamada?', tone: 'info' });
   const [shake, setShake] = useState<string | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
     onPoints(Math.round((sipScore(mistakes) * step) / sipFlow.length));
-    onFinish();
-  }, [mistakes, onFinish, onPoints, step]);
+    askContinue(onFinish);
+  }, [askContinue, mistakes, onFinish, onPoints, step]);
   useStageTimeout(endsAt, timeout);
 
   function choose(message: SipMessage) {
@@ -218,7 +220,7 @@ function SipStage({ random, endsAt, onPoints, onFinish }: { random: () => number
         done.current = true;
         onPoints(sipScore(mistakes));
         void feedbackSuccess();
-        setTimeout(onFinish, 1500);
+        askContinue(onFinish);
       }
     } else {
       setMistakes(mistakes + 1);
@@ -309,6 +311,7 @@ function JitterStage({
   const [wrong, setWrong] = useState(0);
   const [shake, setShake] = useState<number | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
   const now = useNow(true, 150);
 
   const delivered = Object.values(played).filter((value) => value === 'ok').length;
@@ -318,8 +321,8 @@ function JitterStage({
     done.current = true;
     onDelivered(delivered);
     onPoints(jitterScore(delivered, wrong));
-    setTimeout(onFinish, 1600);
-  }, [delivered, onDelivered, onFinish, onPoints, wrong]);
+    askContinue(onFinish, 'Ver resultado');
+  }, [askContinue, delivered, onDelivered, onFinish, onPoints, wrong]);
   useStageTimeout(endsAt, finish);
 
   // Si el paquete esperado caducó, se pierde y la voz sigue sin él.

@@ -8,7 +8,7 @@ import { NetworkOpsGame } from './games/NetworkOpsGame';
 import { ShieldedGame } from './games/ShieldedGame';
 import { TrainAIGame } from './games/TrainAIGame';
 import { VoipCallGame } from './games/VoipCallGame';
-import type { StationGameProps } from './kit';
+import { withContinue, type StationGameProps } from './kit';
 
 export interface StationGameInfo {
   id: StationGameId;
@@ -31,15 +31,16 @@ const b215: StationGameInfo = {
   icon: 'router',
   color: '#6FB3D9',
   minutes: '2 min',
-  Component: NetworkOpsGame,
+  Component: withContinue(NetworkOpsGame),
 };
 
+// Cada juego avanza al ritmo del jugador: sus etapas piden "Continuar" (ver kit/withContinue).
 const components = {
-  datos: TrainAIGame,
-  software: ShieldedGame,
-  redes: VoipCallGame,
-  teleco: FiberLaserGame,
-  hardware: MakerBoardsGame,
+  datos: withContinue(TrainAIGame),
+  software: withContinue(ShieldedGame),
+  redes: withContinue(VoipCallGame),
+  teleco: withContinue(FiberLaserGame),
+  hardware: withContinue(MakerBoardsGame),
 } satisfies Record<Exclude<StationGameId, 'red-b215'>, ComponentType<StationGameProps>>;
 
 function projectGame(id: keyof typeof components): StationGameInfo {

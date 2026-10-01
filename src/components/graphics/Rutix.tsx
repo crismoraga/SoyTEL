@@ -21,7 +21,7 @@ import {
   type RutixExpression,
   type RutixPose,
 } from '@/graphics/rutix';
-import { useMotionEnabled } from '@/lib/motion';
+import { useMotionLevel } from '@/lib/motion';
 import { motion } from '@/theme';
 
 export type { RutixExpression, RutixPose } from '@/graphics/rutix';
@@ -51,7 +51,10 @@ export function Rutix({
   style,
   accessibilityLabel = 'Rutix, la mascota de SoyTEL',
 }: RutixProps) {
-  const motionEnabled = useMotionEnabled() && animated;
+  const level = useMotionLevel();
+  const motionEnabled = level !== 'minimal' && animated;
+  // Las ondas de señal laten solo con animaciones completas; flotar y parpadear es barato.
+  const pulseEnabled = level === 'full' && animated;
   const [blink, setBlink] = useState(false);
   const float = useSharedValue(0);
   const pulse = useSharedValue(0);
@@ -71,12 +74,17 @@ export function Rutix({
       withSequence(withTiming(1, { duration: floatDuration, easing: ease }), withTiming(0, { duration: floatDuration, easing: ease })),
       -1,
     );
-    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 900 })), -1);
+    if (pulseEnabled) {
+      pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 900 })), -1);
+    } else {
+      cancelAnimation(pulse);
+      pulse.value = 0.6;
+    }
     return () => {
       cancelAnimation(float);
       cancelAnimation(pulse);
     };
-  }, [expression, float, motionEnabled, pulse]);
+  }, [expression, float, motionEnabled, pulse, pulseEnabled]);
 
   const canBlink = motionEnabled && BLINKING.includes(expression);
 
@@ -138,9 +146,9 @@ export function Rutix({
           shadowStyle,
         ]}
       />
-      <Animated.View style={[StyleSheet.absoluteFill, bodyStyle]} pointerEvents="none">
+      <Animated.View style={[StyleSheet.absoluteFill, bodyStyle]} pointerEvents="none" renderToHardwareTextureAndroid={motionEnabled} shouldRasterizeIOS={motionEnabled}>
         {signal > 0 && (
-          <Animated.View style={[StyleSheet.absoluteFill, signalStyle]}>
+          <Animated.View style={[StyleSheet.absoluteFill, signalStyle]} renderToHardwareTextureAndroid={pulseEnabled}>
             <Svg width={size} height={size} viewBox={VIEWBOX}>
               <ShapeLayer shapes={arcs} />
             </Svg>

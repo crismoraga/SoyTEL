@@ -1,10 +1,12 @@
-import { useEffect, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
+import { now as clockNow } from '@/lib/clock';
+import { useMotionEnabled } from '@/lib/motion';
 import { colors, radius, spacing } from '@/theme';
 
 export interface StationGameResult {
@@ -82,6 +84,63 @@ export function StationHud({ stage, stages, title, score, secondsLeft, totalSeco
   );
 }
 
+// ——— Avanzar al ritmo del jugador ———
+// Las etapas no saltan solas tras una explicación: piden "Continuar" y el jugador decide cuándo seguir.
+
+type AskContinue = (action: () => void, label?: string) => void;
+
+interface ContinueApi {
+  ask: AskContinue;
+  cancel: () => void;
+}
+
+const ContinueContext = createContext<ContinueApi>({ ask: (action) => action(), cancel: () => undefined });
+
+export function useAskContinue(): AskContinue {
+  return useContext(ContinueContext).ask;
+}
+
+function ContinueHost({ children }: PropsWithChildren) {
+  const motion = useMotionEnabled();
+  const [pending, setPending] = useState<{ action: () => void; label: string } | null>(null);
+  const ask = useCallback<AskContinue>((action, label = 'Continuar') => setPending({ action, label }), []);
+  const cancel = useCallback(() => setPending(null), []);
+  const api = useMemo(() => ({ ask, cancel }), [ask, cancel]);
+  return (
+    <ContinueContext.Provider value={api}>
+      <View style={styles.continueHost}>
+        <View style={styles.continueGame}>{children}</View>
+        {pending && (
+          <Animated.View entering={motion ? FadeInDown.duration(180) : undefined} style={styles.continueBar}>
+            <TelButton
+              label={pending.label}
+              variant="cream"
+              iconRight="arrowRight"
+              onPress={() => {
+                setPending(null);
+                pending.action();
+              }}
+            />
+          </Animated.View>
+        )}
+      </View>
+    </ContinueContext.Provider>
+  );
+}
+
+// Envuelve un juego de estación con el botón "Continuar" compartido por sus etapas.
+export function withContinue<P extends object>(Game: ComponentType<P>): ComponentType<P> {
+  function WithContinue(props: P) {
+    return (
+      <ContinueHost>
+        <Game {...props} />
+      </ContinueHost>
+    );
+  }
+  WithContinue.displayName = `WithContinue(${Game.displayName ?? Game.name ?? 'Game'})`;
+  return WithContinue;
+}
+
 interface BannerProps {
   index: number;
   title: string;
@@ -89,19 +148,24 @@ interface BannerProps {
   icon: IconName;
   accent?: string;
   onDone: () => void;
-  durationMs?: number;
 }
 
-// Presentación breve de cada etapa; se cierra sola o al tocarla.
-export function StageBanner({ index, title, body, icon, accent = colors.accent, onDone, durationMs = 2600 }: BannerProps) {
+// Presentación de cada etapa: queda en pantalla hasta que el jugador la toca (se lee con calma).
+export function StageBanner({ index, title, body, icon, accent = colors.accent, onDone }: BannerProps) {
+  const motion = useMotionEnabled();
+  const shownAt = useRef(0);
   useEffect(() => {
-    const timer = setTimeout(onDone, durationMs);
-    return () => clearTimeout(timer);
-  }, [durationMs, onDone]);
+    shownAt.current = clockNow();
+  }, []);
+  // Evita que el mismo toque que cerró la pantalla anterior salte esta presentación.
+  function start() {
+    if (clockNow() - shownAt.current < 350) return;
+    onDone();
+  }
   return (
-    <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(160)} style={styles.bannerWrap}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${title}. Toca para empezar`} onPress={onDone} style={styles.banner}>
-        <Animated.View entering={ZoomIn.springify().damping(12)} style={[styles.bannerIcon, { backgroundColor: accent }]}>
+    <Animated.View entering={motion ? FadeIn.duration(200) : undefined} exiting={motion ? FadeOut.duration(160) : undefined} style={styles.bannerWrap}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Etapa ${index}: ${title}. ${body} Toca para empezar`} onPress={start} style={styles.banner}>
+        <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={[styles.bannerIcon, { backgroundColor: accent }]}>
           <TelIcon name={icon} size={40} color={colors.primary} />
         </Animated.View>
         <TelText variant="overline" color="accent" align="center">
@@ -113,9 +177,12 @@ export function StageBanner({ index, title, body, icon, accent = colors.accent, 
         <TelText variant="body" color="accentSoft" align="center" style={styles.bannerBody}>
           {body}
         </TelText>
-        <TelText variant="small" color="slate" align="center">
-          Toca para empezar
-        </TelText>
+        <View style={[styles.bannerCta, { borderColor: accent }]}>
+          <TelIcon name="tap" size={18} color={colors.cream} />
+          <TelText variant="label" color="cream">
+            Toca cuando estés listo
+          </TelText>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -140,6 +207,11 @@ interface ResultProps {
 }
 
 export function StationSummary({ title, message, rows, total, learned, accent = colors.accent, submitLabel = 'Enviar mi puntaje', onSubmit }: ResultProps) {
+  // Si el tiempo cerró el juego con un "Continuar" pendiente, ya no corresponde mostrarlo.
+  const { cancel } = useContext(ContinueContext);
+  useEffect(() => {
+    cancel();
+  }, [cancel]);
   return (
     <Animated.View entering={FadeIn.duration(260)} style={styles.summary}>
       <View style={styles.summaryHead}>
@@ -253,6 +325,26 @@ const styles = StyleSheet.create({
   },
   bannerBody: {
     maxWidth: 320,
+  },
+  bannerCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+  },
+  continueHost: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  continueGame: {
+    flex: 1,
+  },
+  continueBar: {
+    paddingBottom: spacing.xs,
   },
   summary: {
     gap: spacing.md,

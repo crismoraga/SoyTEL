@@ -11,6 +11,7 @@ import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { FeedbackPanel, OptionButton, type OptionState } from '@/components/Quiz';
 import { Screen, ScreenFooter } from '@/components/Screen';
+import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
@@ -183,6 +184,7 @@ export default function MillionaireScreen() {
           <Rule icon="flag" text="Plántate cuando quieras para asegurar tus puntos." />
         </View>
         <TelButton label="Comenzar el concurso" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
+        <AccountGate />
       </Screen>
     );
   }

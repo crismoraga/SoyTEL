@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 import { seededRandom, star4Path } from '@/graphics/shapes';
-import { useMotionEnabled } from '@/lib/motion';
+import { particleBudget, useMotionLevel } from '@/lib/motion';
 import { colors } from '@/theme';
 
 interface Particle {
@@ -41,8 +41,9 @@ interface CelebrationProps {
 }
 
 // Explosión de estrellas y confeti en colores de marca; se dibuja encima sin bloquear toques.
-export const Celebration = memo(function Celebration({ burstKey, count = 28 }: CelebrationProps) {
-  const enabled = useMotionEnabled();
+export const Celebration = memo(function Celebration({ burstKey, count: requested = 28 }: CelebrationProps) {
+  const count = particleBudget(useMotionLevel(), requested);
+  const enabled = count > 0;
   const seed = typeof burstKey === 'number' ? burstKey : String(burstKey ?? '').length + 3;
   const particles = useMemo(() => buildParticles(count, seed * 7919 + 17), [count, seed]);
   const progress = useSharedValue(0);

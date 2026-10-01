@@ -21,3 +21,8 @@ ios/
 
 .vercel
 .env*
+
+# Herramientas locales de agentes (instaladas por la CLI de Vercel/Neon)
+.agents/
+.claude/
+skills-lock.json

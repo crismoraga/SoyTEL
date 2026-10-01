@@ -60,6 +60,8 @@ export interface Achievement {
 
 export interface UserProfile {
   alias: string;
+  // Índice del avatar elegido (ver data/avatars).
+  avatar: number;
   createdAt: string;
   xp: number;
   level: number;
@@ -67,6 +69,8 @@ export interface UserProfile {
   lastPlayedAt: string | null;
   mascotMood: number;
   unlockedAchievements: string[];
+  // Partidas completadas en total (el historial guarda solo las últimas 200).
+  gamesPlayed: number;
 }
 
 export interface GameResult {

@@ -34,8 +34,8 @@ export const achievements: Achievement[] = [
   {
     id: 'career-explorer',
     title: 'Descubridor TEL',
-    description: 'Explora las seis áreas de la carrera.',
-    hint: 'Abre cada área en la pestaña Carrera.',
+    description: 'Domina las seis áreas de la carrera con al menos 3 de 5 correctas en su práctica.',
+    hint: 'En Carrera, elige un área y toca su práctica (Innovación se practica con la historia de Rutix).',
     area: 'general',
     tier: 'bronce',
     threshold: 6,
@@ -44,7 +44,7 @@ export const achievements: Achievement[] = [
   {
     id: 'route-complete',
     title: 'Ruta Telemática',
-    description: 'Completa la ruta: stand, sala B215, sala B213 y la trivia del pasillo.',
+    description: 'Completa la ruta hasta el final de la trivia del pasillo: stand, B215, B213 y pasillo.',
     hint: 'Pide el código en el stand de Telemática o juega la ruta sin grupo.',
     area: 'general',
     tier: 'plata',

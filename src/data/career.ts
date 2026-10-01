@@ -84,3 +84,4 @@ export function getCareerArea(id: string): CareerArea | undefined {
 
 export const ADMISSION_URL = 'https://admision.usm.cl';
 export const USM_URL = 'https://www.usm.cl';
+export const CAREER_URL = 'https://usm.cl/admision/carreras/ingenieria-civil-telematica/';

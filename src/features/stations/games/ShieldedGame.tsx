@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring, withTiming, ZoomIn } from 'react-native-reanimated';
 import { PressableScale } from '@/components/PressableScale';
+import { TelButton } from '@/components/TelButton';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { now as clockNow } from '@/lib/clock';
@@ -59,19 +60,21 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
       });
       if (ok) void feedbackSuccess();
       else void feedbackWarning();
-      setTimeout(() => {
-        busy.current = false;
-        setFeedback(null);
-        if (index + 1 >= cards.length) {
-          setFinished(true);
-        } else {
-          setIndex(index + 1);
-          setCardStartedAt(clockNow());
-        }
-      }, 1700);
     },
-    [card, cards.length, finished, index],
+    [card, finished],
   );
+
+  // La explicación queda visible hasta que el jugador pasa al siguiente mensaje.
+  const advance = useCallback(() => {
+    busy.current = false;
+    setFeedback(null);
+    if (index + 1 >= cards.length) {
+      setFinished(true);
+    } else {
+      setIndex(index + 1);
+      setCardStartedAt(clockNow());
+    }
+  }, [cards.length, index]);
 
   const beginCards = useCallback(() => {
     setStarted(true);
@@ -126,7 +129,7 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
         <SwipeCard key={card.id} card={card} found={found[card.id] ?? []} disabled={Boolean(feedback)} onSpot={spot} onDecide={decide} />
       )}
       {feedback ? (
-        <Animated.View entering={ZoomIn.duration(180)} exiting={FadeOut.duration(150)} style={[styles.feedback, { backgroundColor: feedback.ok ? '#1F5E43' : '#6E2A2A' }]}>
+        <Animated.View entering={ZoomIn.duration(180)} exiting={FadeOut.duration(150)} style={[styles.feedback, { backgroundColor: feedback.ok ? '#1F5E43' : '#6E2A2A' }]} accessibilityLiveRegion="polite">
           <TelIcon name={feedback.ok ? 'shieldCheck' : 'alert'} size={26} color={colors.white} />
           <View style={styles.flex}>
             <TelText variant="subtitle" color="white">
@@ -142,6 +145,9 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
       ) : (
         <Hint>Toca las partes sospechosas del mensaje (+{FLAG_POINTS}) y luego decide. También puedes deslizar la tarjeta.</Hint>
       )}
+      {feedback ? (
+        <TelButton label={index + 1 >= cards.length ? 'Ver resultado' : 'Siguiente mensaje'} variant="cream" iconRight="arrowRight" onPress={advance} />
+      ) : (
       <View style={styles.actions}>
         <PressableScale accessibilityRole="button" accessibilityLabel="Bloquear" disabled={Boolean(feedback) || !started} onPress={() => decide(true)} scaleTo={0.93} style={[styles.action, styles.block]}>
           <TelIcon name="shieldLock" size={26} color={colors.white} />
@@ -156,6 +162,7 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
           </TelText>
         </PressableScale>
       </View>
+      )}
       {!started && (
         <StageBanner
           index={1}

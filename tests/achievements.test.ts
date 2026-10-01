@@ -51,7 +51,7 @@ describe('achievement evaluation', () => {
       result({}),
       result({ gameId: 'millionaire', metadata: { correctAnswers: 6 } }),
       result({ gameId: 'millionaire', metadata: { correctAnswers: 4 } }),
-      result({ gameId: 'route', metadata: { rank: 1, players: 1, pillars: 5, solo: true } }),
+      result({ gameId: 'route', metadata: { rank: 1, players: 1, pillars: 5, solo: true, completed: true } }),
     ];
     const unlocked = evaluateAchievements(context({ results }));
     expect(unlocked).toEqual(expect.arrayContaining(['burst-starter', 'quiz-bronze', 'route-complete', 'temple-restored']));
@@ -60,9 +60,15 @@ describe('achievement evaluation', () => {
   });
 
   it('rewards the podium only in live routes with a group', () => {
-    const live = [result({ gameId: 'route', metadata: { rank: 1, players: 4, pillars: 3, solo: false } })];
+    const live = [result({ gameId: 'route', metadata: { rank: 1, players: 4, pillars: 3, solo: false, completed: true } })];
     expect(evaluateAchievements(context({ results: live }))).toEqual(expect.arrayContaining(['route-podium', 'route-champion']));
-    const third = [result({ gameId: 'route', metadata: { rank: 3, players: 5, pillars: 5, solo: false } })];
+    // Una ruta cerrada antes del final no entrega logros de ruta.
+    const early = [result({ gameId: 'route', metadata: { rank: 1, players: 4, pillars: 5, solo: false, completed: false } })];
+    const earlyUnlocked = evaluateAchievements(context({ results: early }));
+    expect(earlyUnlocked).not.toContain('route-complete');
+    expect(earlyUnlocked).not.toContain('route-champion');
+    expect(earlyUnlocked).not.toContain('temple-restored');
+    const third = [result({ gameId: 'route', metadata: { rank: 3, players: 5, pillars: 5, solo: false, completed: true } })];
     expect(evaluateAchievements(context({ results: third }))).toContain('route-podium');
     expect(evaluateAchievements(context({ results: third }))).not.toContain('route-champion');
   });

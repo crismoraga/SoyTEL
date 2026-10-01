@@ -143,27 +143,6 @@ export const stationTitles: Record<StationGameId, string> = {
   hardware: 'Placas maker',
 };
 
-export interface AvatarInfo {
-  icon: IconName;
-  color: string;
-  label: string;
-}
-
-export const avatars: AvatarInfo[] = [
-  { icon: 'router', color: '#6FB3D9', label: 'Router' },
-  { icon: 'antenna', color: '#4FB38A', label: 'Antena' },
-  { icon: 'cpu', color: '#9B8AE6', label: 'Chip' },
-  { icon: 'robot', color: '#E58A5A', label: 'Robot' },
-  { icon: 'rocket', color: '#E0B84A', label: 'Cohete' },
-  { icon: 'globe', color: '#A7D4ED', label: 'Globo' },
-  { icon: 'laser', color: '#F4ECD7', label: 'Láser' },
-  { icon: 'signal', color: '#E7A3C8', label: 'Señal' },
-];
-
-export function avatarInfo(index: number): AvatarInfo {
-  return avatars[((index % avatars.length) + avatars.length) % avatars.length];
-}
-
 // Colores y formas de las alternativas de la trivia (estilo Kahoot, distinguibles sin color).
 export const answerStyles = [
   { color: '#E0605A', shape: 'triangle' as const, label: 'Triángulo' },

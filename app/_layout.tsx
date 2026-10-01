@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initAccount } from '@/account/store';
 import { ToastHost } from '@/components/feedback/ToastHost';
 import { useRouteForeground } from '@/route/hooks';
 import { routeMember } from '@/route/member';
@@ -25,6 +26,7 @@ export default function RootLayout() {
     void SystemUI.setBackgroundColorAsync(colors.primary);
     void initSettings();
     void loadInbox();
+    void initAccount();
     // Si la app se cerró en medio de una ruta, retoma la conexión con el stand.
     void routeMember.restore();
   }, []);
@@ -66,6 +68,11 @@ export default function RootLayout() {
           <Stack.Screen name="story" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="mascot" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="profile" />
+          <Stack.Screen name="ranking" />
+          <Stack.Screen name="malla" />
+          <Stack.Screen name="privacidad" />
+          <Stack.Screen name="cuenta/index" />
+          <Stack.Screen name="cuenta/recuperar" />
         </Stack>
         <ToastHost />
       </SafeAreaProvider>

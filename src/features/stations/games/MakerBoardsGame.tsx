@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
 import {
   boardInfo,
   CHOOSE_MAX,
@@ -158,13 +158,14 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<BoardId | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
   const current = cases[index];
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    onFinish();
-  }, [onFinish]);
+    askContinue(onFinish);
+  }, [askContinue, onFinish]);
   useStageTimeout(endsAt, timeout);
 
   function choose(board: BoardId) {
@@ -176,16 +177,18 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
     } else {
       void feedbackWarning();
     }
-    setTimeout(() => {
+    // La explicación de la placa queda en pantalla hasta que el jugador sigue.
+    const last = index + 1 >= cases.length;
+    askContinue(() => {
       if (done.current) return;
-      if (index + 1 >= cases.length) {
+      if (last) {
         done.current = true;
         onFinish();
       } else {
         setIndex(index + 1);
         setPicked(null);
       }
-    }, 1500);
+    }, last ? 'Continuar' : 'Siguiente proyecto');
   }
 
   return (
@@ -235,14 +238,15 @@ function WireStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
   const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' }>({ text: 'Toca un pin de la placa y luego una pata del circuito.', tone: 'info' });
   const [spark, setSpark] = useState(false);
   const done = useRef(false);
+  const askContinue = useAskContinue();
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
     const correct = Object.keys(wires).length;
     onPoints(correct === 2 ? wireScore(mistakes) : correct * 60);
-    onFinish();
-  }, [mistakes, onFinish, onPoints, wires]);
+    askContinue(onFinish);
+  }, [askContinue, mistakes, onFinish, onPoints, wires]);
   useStageTimeout(endsAt, timeout);
 
   function connect(terminal: Terminal) {
@@ -260,7 +264,7 @@ function WireStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
         done.current = true;
         onPoints(wireScore(mistakes));
         setHint({ text: '¡Circuito cerrado! Corriente: pin 13 → resistencia → LED → GND.', tone: 'good' });
-        setTimeout(onFinish, 1600);
+        askContinue(onFinish);
       } else {
         setHint({ text: `¡Bien! ${TERMINAL_LABEL[terminal]} conectada a ${selectedPin}.`, tone: 'good' });
       }
@@ -358,13 +362,14 @@ function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<ReturnType<typeof simulate> | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
     onPoints(attempt > 0 ? codeScore(attempt, false) : 0);
-    onFinish();
-  }, [attempt, onFinish, onPoints]);
+    askContinue(onFinish, 'Ver resultado');
+  }, [askContinue, attempt, onFinish, onPoints]);
   useStageTimeout(endsAt, timeout);
 
   function upload() {
@@ -377,13 +382,13 @@ function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
       done.current = true;
       onPoints(codeScore(nextAttempt, true));
       void feedbackSuccess();
-      setTimeout(onFinish, 2600);
+      askContinue(onFinish, 'Ver resultado');
     } else {
       void feedbackWarning();
       if (nextAttempt >= 2) {
         done.current = true;
         onPoints(codeScore(nextAttempt, false));
-        setTimeout(onFinish, 2400);
+        askContinue(onFinish, 'Ver resultado');
       }
     }
   }

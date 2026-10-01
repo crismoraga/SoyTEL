@@ -102,12 +102,41 @@ export function verifySealed(sealed: Sealed, signature: string, signPublicKey: s
   }
 }
 
-// Identificador público de la sala MQTT: no revela el código de la ruta.
+// Secretos de la sala derivados del código con un hash lento (SHA-512 encadenado): el id público
+// de la sala no revela el código y el saludo del stand va sellado con una llave que exige conocerlo.
+export const ROUTE_KDF_ROUNDS = 1024;
+
+export interface RouteSecrets {
+  roomId: string;
+  helloKey: string;
+}
+
+const secretsCache = new Map<string, RouteSecrets>();
+
+export function deriveRouteSecrets(code: string, rounds = ROUTE_KDF_ROUNDS): RouteSecrets {
+  const cacheKey = `${rounds}:${code}`;
+  const cached = secretsCache.get(cacheKey);
+  if (cached) return cached;
+  let digest = nacl.hash(utf8Encode(`soytel-ruta:v2:${code.toUpperCase()}`));
+  for (let round = 0; round < rounds; round += 1) digest = nacl.hash(digest);
+  const secrets: RouteSecrets = {
+    roomId: toHex(nacl.hash(concatBytes(digest, utf8Encode('room')))).slice(0, 24),
+    helloKey: toBase64(nacl.hash(concatBytes(digest, utf8Encode('hello'))).subarray(0, nacl.secretbox.keyLength)),
+  };
+  secretsCache.set(cacheKey, secrets);
+  return secrets;
+}
+
 export function roomIdFor(code: string): string {
-  return toHex(nacl.hash(utf8Encode(`soytel-ruta:v1:${code}`))).slice(0, 24);
+  return deriveRouteSecrets(code).roomId;
 }
 
 // Huella corta de la llave de firma del anfitrión (va en el QR para verificar el saludo).
 export function keyFingerprint(publicKey: string): string {
   return toHex(nacl.hash(fromBase64(publicKey))).slice(0, 12);
+}
+
+// Código de verificación de 4 caracteres que muestran el stand y el teléfono (deben coincidir).
+export function verificationCode(publicKey: string): string {
+  return keyFingerprint(publicKey).slice(0, 4).toUpperCase();
 }

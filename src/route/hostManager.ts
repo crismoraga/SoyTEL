@@ -1,5 +1,5 @@
 import { HostController } from './host';
-import { listHostCodes, loadHost, removeHost } from './storage';
+import { listHostSummaries, loadHost, removeHost, type HostSummary } from './storage';
 import type { RouteSettings } from './types';
 
 // Rutas conducidas desde este dispositivo (modo stand). Pueden convivir varias, una por grupo.
@@ -35,14 +35,20 @@ class HostManager {
     return this.controllers.get(code);
   }
 
-  async list(): Promise<string[]> {
-    return listHostCodes();
+  async list(): Promise<HostSummary[]> {
+    return listHostSummaries();
   }
 
   async close(code: string): Promise<void> {
     this.controllers.get(code)?.stop();
     this.controllers.delete(code);
     await removeHost(code);
+  }
+
+  // Detiene todas las rutas sin guardarlas (antes de borrar los datos del dispositivo).
+  stopAll(): void {
+    this.controllers.forEach((controller) => controller.stop(false));
+    this.controllers.clear();
   }
 
   nudgeAll(): void {

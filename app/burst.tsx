@@ -10,6 +10,7 @@ import { Medallion } from '@/components/graphics/Medallion';
 import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
+import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
@@ -27,7 +28,7 @@ import type { GameOutcome, MicroGameId } from '@/types/game';
 const ROUNDS = 6;
 const FOCUS_ROUNDS = 3;
 const LIVES = 3;
-const READY_MS = 1300;
+const READY_GUARD_MS = 350;
 const FEEDBACK_MS = 1150;
 
 type Phase = 'intro' | 'ready' | 'playing' | 'feedback' | 'finished';
@@ -116,14 +117,18 @@ export default function BurstScreen() {
     void feedbackHeavy();
   }, [focusGame]);
 
+  // Cada ronda parte cuando el jugador toca la pantalla: así alcanza a leer la instrucción.
+  const readyAt = useRef(0);
   useEffect(() => {
-    if (state.phase !== 'ready') return;
-    const timeout = setTimeout(() => {
-      setSecondsLeft(duration);
-      dispatch({ type: 'play' });
-    }, READY_MS);
-    return () => clearTimeout(timeout);
-  }, [duration, state.phase, state.round]);
+    if (state.phase === 'ready') readyAt.current = now();
+  }, [state.phase, state.round]);
+
+  const play = useCallback(() => {
+    // Ignora el mismo toque que cerró la ronda anterior.
+    if (now() - readyAt.current < READY_GUARD_MS) return;
+    setSecondsLeft(duration);
+    dispatch({ type: 'play' });
+  }, [duration]);
 
   useEffect(() => {
     if (state.phase !== 'playing') return;
@@ -204,6 +209,7 @@ export default function BurstScreen() {
           </TelText>
         )}
         <TelButton label="¡Empezar!" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
+        <AccountGate />
       </Screen>
     );
   }
@@ -285,6 +291,7 @@ export default function BurstScreen() {
     return (
       <Screen tone="dark" backdrop="signal" scroll={false} contentStyle={styles.readyContent}>
         <Lives lives={state.lives} />
+        <PressableScale accessibilityRole="button" accessibilityLabel={`${current.title}. ${current.instruction}. Toca para jugar`} onPress={play} scaleTo={0.98} style={styles.readyTap}>
         <Animated.View key={`ready-${state.round}`} entering={motionEnabled ? ZoomIn.springify().damping(12) : undefined} style={styles.ready}>
           <TelText variant="overline" color="accent" align="center">
             Ronda {state.round + 1} de {state.games.length}
@@ -300,9 +307,13 @@ export default function BurstScreen() {
           </TelText>
           {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
         </Animated.View>
-        <TelText variant="caption" color="accentSoft" align="center">
-          {duration} segundos · prepárate…
-        </TelText>
+        </PressableScale>
+        <PressableScale accessibilityRole="button" accessibilityLabel="Jugar" haptic onPress={play} style={styles.readyCta}>
+          <TelIcon name="tap" size={20} color={colors.primary} />
+          <TelText variant="label" color="primary">
+            Toca para jugar · {duration} s
+          </TelText>
+        </PressableScale>
       </Screen>
     );
   }
@@ -426,6 +437,21 @@ const styles = StyleSheet.create({
   },
   fasterTag: {
     alignSelf: 'center',
+  },
+  readyTap: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  readyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    gap: spacing.xs,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    backgroundColor: colors.cream,
   },
   playContent: {
     gap: spacing.sm,

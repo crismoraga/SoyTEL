@@ -11,7 +11,7 @@ import { useMotionEnabled } from '@/lib/motion';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
 import {
   deviceLabels,
   initialChannels,
@@ -190,6 +190,7 @@ function TopologyStage({ endsAt, onPoints, onAccuracy, onFinish }: StageProps) {
   const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' }>({ text: 'Arrastra (o toca y luego elige el lugar) cada equipo.', tone: 'info' });
   const [flash, setFlash] = useState<SlotId | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
   const now = useNow(true, 300);
 
   const slots: Record<SlotId, { x: number; y: number }> = {
@@ -213,9 +214,9 @@ function TopologyStage({ endsAt, onPoints, onAccuracy, onFinish }: StageProps) {
       done.current = true;
       const clean = (Object.keys(slotNeeds) as SlotId[]).filter((slot) => current[slot] && errors[slot] === 0).length;
       onAccuracy(clean / 3);
-      setTimeout(onFinish, 1300);
+      askContinue(onFinish);
     },
-    [onAccuracy, onFinish],
+    [askContinue, onAccuracy, onFinish],
   );
 
   useEffect(() => {
@@ -428,6 +429,7 @@ function RoutingStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StagePro
   const [stats, setStats] = useState({ points: 0, correct: 0, total: 0, streak: 0 });
   const [last, setLast] = useState<{ ok: boolean; text: string; id: number } | null>(null);
   const done = useRef(false);
+  const askContinue = useAskContinue();
   const now = useNow(true, 100);
   const ttl = packetTtlMs(stats.total);
   const remaining = clamp(1 - (now - spawnedAt) / ttl, 0, 1);
@@ -466,11 +468,11 @@ function RoutingStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StagePro
     if (now >= endsAt) {
       done.current = true;
       onAccuracy(stats.total ? stats.correct / stats.total : 0);
-      onFinish();
+      askContinue(onFinish);
     } else if (remaining <= 0) {
       resolve(null);
     }
-  }, [endsAt, now, onAccuracy, onFinish, remaining, resolve, stats]);
+  }, [askContinue, endsAt, now, onAccuracy, onFinish, remaining, resolve, stats]);
 
   return (
     <View style={styles.stageGap}>
@@ -564,6 +566,7 @@ function WifiStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StageProps)
   const [solvedAt, setSolvedAt] = useState<number | null>(null);
   const [startedAt] = useState(() => Date.now());
   const done = useRef(false);
+  const askContinue = useAskContinue();
   const now = useNow(true, 250);
   const level = interference(channels);
   const solved = level === 0;
@@ -575,9 +578,9 @@ function WifiStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StageProps)
       const ratio = (endsAt - at) / (endsAt - startedAt);
       onPoints(wifiScore(success, ratio, level));
       onAccuracy(success ? 1 : clamp(1 - level / MAX_INTERFERENCE, 0, 1) * 0.5);
-      setTimeout(onFinish, success ? 1400 : 200);
+      askContinue(onFinish, 'Ver resultado');
     },
-    [endsAt, level, onAccuracy, onFinish, onPoints, startedAt],
+    [askContinue, endsAt, level, onAccuracy, onFinish, onPoints, startedAt],
   );
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { Rutix } from '@/components/graphics/Rutix';
 import { Screen } from '@/components/Screen';
+import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getStationGame } from '@/features/stations/registry';
@@ -90,6 +91,7 @@ export default function StationPracticeScreen() {
           }).then((outcome) => setResult({ score: value.score, outcome }));
         }}
       />
+      <AccountGate />
     </Screen>
   );
 }

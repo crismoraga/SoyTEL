@@ -24,7 +24,8 @@ const { illustrationDrawing, illustrationNames } = src('graphics/illustrations')
 const { patternPreviews } = src('graphics/patterns');
 const { campusMapDrawing } = src('graphics/campusMap');
 const { templeDrawing } = src('graphics/temple');
-const { pillars, avatars, answerStyles, routeStops } = src('route/content');
+const { pillars, answerStyles, routeStops } = src('route/content');
+const avatars = src('data/avatars').avatarCatalog.filter((item) => item.icon !== 'rutix');
 const { create: createQr } = require('qrcode');
 
 const project = path.join(outDir, 'project');

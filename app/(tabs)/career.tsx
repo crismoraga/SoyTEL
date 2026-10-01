@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, Linking, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
@@ -14,30 +14,32 @@ import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { ADMISSION_URL, careerAreas, USM_URL, type CareerArea } from '@/data/career';
+import { careerAreas, type CareerArea } from '@/data/career';
 import { tipForDate } from '@/data/tips';
+import { TipSheet } from '@/features/tips/TipSheet';
+import { LINKS, openLink } from '@/lib/links';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
-import { loadViewedAreas, markAreaViewed } from '@/storage/career';
-import { syncAchievements } from '@/storage/profile';
+import { AREA_MASTERY, isAreaMastered, loadCareerProgress, masteredAreas, type AreaProgress } from '@/storage/career';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-// Pantalla "Conoce la carrera" de Claude Design, con contenido real de cada área.
+function progressLine(area: CareerArea, progress: AreaProgress | undefined): string {
+  if (!progress) return area.id === 'innovacion' ? 'Aún no completas un capítulo de la historia.' : 'Aún no practicas esta área.';
+  const sessions = progress.sessions === 1 ? '1 práctica' : `${progress.sessions} prácticas`;
+  const best = `mejor resultado ${Math.round(progress.best * 100)} %`;
+  return progress.best >= AREA_MASTERY ? `${sessions} · ${best} · ¡dominada!` : `${sessions} · ${best} · logra 60 % para dominarla`;
+}
+
+// Pantalla "Conoce la carrera": el avance de cada área se marca al practicarla, no al leerla.
 export default function CareerScreen() {
   const entering = useEntering();
   const [selectedId, setSelectedId] = useState<CareerArea['id']>('redes');
-  const { data: viewed, setData: setViewed } = useFocusData(loadViewedAreas);
+  const [tipOpen, setTipOpen] = useState(false);
+  const { data: progress } = useFocusData(loadCareerProgress);
   const selected = careerAreas.find((area) => area.id === selectedId) ?? careerAreas[0];
+  const selectedProgress = progress?.[selected.id];
   const tip = tipForDate(new Date());
-
-  async function select(area: CareerArea) {
-    setSelectedId(area.id);
-    const updated = await markAreaViewed(area.id);
-    setViewed(updated);
-    if (updated.length >= careerAreas.length) {
-      await syncAchievements();
-    }
-  }
+  const mastered = masteredAreas(progress).filter((id) => careerAreas.some((area) => area.id === id)).length;
 
   function practice(area: CareerArea) {
     if (area.id === 'innovacion') {
@@ -46,8 +48,6 @@ export default function CareerScreen() {
     }
     router.push({ pathname: '/practice', params: { area: area.id } });
   }
-
-  const viewedCount = viewed?.length ?? 0;
 
   return (
     <Screen
@@ -65,36 +65,42 @@ export default function CareerScreen() {
       }
     >
       <View style={styles.section}>
-        <SectionHeader title="Áreas de la carrera" subtitle={`${viewedCount}/${careerAreas.length} exploradas`} />
+        <SectionHeader title="Áreas de la carrera" subtitle={`${mastered}/${careerAreas.length} dominadas`} />
         <View style={styles.grid}>
           {careerAreas.map((area, index) => {
             const active = area.id === selected.id;
-            const seen = viewed?.includes(area.id) ?? false;
+            const done = isAreaMastered(progress, area.id);
+            const tried = Boolean(progress?.[area.id]);
             return (
               <Animated.View key={area.id} entering={entering.pop(index)} style={styles.cell}>
                 <PressableScale
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${area.name}${seen ? ', explorada' : ''}`}
+                  accessibilityLabel={`${area.name}${done ? ', dominada' : tried ? ', en práctica' : ''}`}
                   haptic
-                  onPress={() => void select(area)}
+                  onPress={() => setSelectedId(area.id)}
                   style={[styles.areaButton, active && styles.areaActive]}
                 >
                   <Medallion glyph={area.glyph} size={60} />
                   <TelText variant="small" color="primary" align="center">
                     {area.short}
                   </TelText>
-                  {seen && !active && (
-                    <View style={styles.seenBadge}>
+                  {done ? (
+                    <View style={[styles.badge, styles.badgeDone]}>
                       <TelIcon name="check" size={11} color={colors.white} strokeWidth={3.4} />
                     </View>
-                  )}
+                  ) : tried ? (
+                    <View style={[styles.badge, styles.badgeTried]} />
+                  ) : null}
                 </PressableScale>
               </Animated.View>
             );
           })}
         </View>
-        <ProgressBar progress={viewedCount / careerAreas.length} accessibilityLabel="Áreas exploradas" />
+        <ProgressBar progress={mastered / careerAreas.length} accessibilityLabel="Áreas dominadas" />
+        <TelText variant="caption" color="muted">
+          Un área queda dominada cuando logras 3 de 5 correctas en su práctica.
+        </TelText>
       </View>
 
       <Animated.View key={selected.id} entering={entering.fadeUp()}>
@@ -128,13 +134,22 @@ export default function CareerScreen() {
               </View>
             ))}
           </View>
-          <TelButton label={selected.practiceLabel} variant="subtle" icon={selected.id === 'innovacion' ? 'book' : 'target'} iconRight="chevronRight" onPress={() => practice(selected)} />
+          <View style={styles.progressRow}>
+            <TelIcon name={isAreaMastered(progress, selected.id) ? 'checkCircle' : 'target'} size={18} color={isAreaMastered(progress, selected.id) ? colors.success : colors.secondary} />
+            <TelText variant="caption" color={isAreaMastered(progress, selected.id) ? 'successInk' : 'secondary'} style={styles.flex}>
+              {progressLine(selected, selectedProgress)}
+            </TelText>
+          </View>
+          <TelButton label={selected.practiceLabel} icon={selected.id === 'innovacion' ? 'book' : 'target'} iconRight="chevronRight" onPress={() => practice(selected)} />
         </TelCard>
       </Animated.View>
 
-      <TelCard tone="navy" style={styles.tip}>
-        <Tag tone="glass" icon="lightbulb" label="DATO DEL DÍA" />
-        <TelText variant="bodyStrong" color="cream">
+      <TelCard tone="navy" style={styles.tip} onPress={() => setTipOpen(true)} accessibilityLabel={`Dato del día: ${tip.text}. Toca para leerlo completo`}>
+        <View style={styles.tipHead}>
+          <Tag tone="glass" icon="lightbulb" label="DATO DEL DÍA" />
+          <TelIcon name="arrowRight" size={18} color={colors.accentSoft} />
+        </View>
+        <TelText variant="bodyStrong" color="cream" numberOfLines={3}>
           {tip.text}
         </TelText>
       </TelCard>
@@ -142,20 +157,29 @@ export default function CareerScreen() {
       <View style={styles.section}>
         <SectionHeader title="¿Te interesa postular?" />
         <ListRow
-          icon="school"
-          title="Admisión USM"
-          body="Tu futuro comienza aquí: fechas, requisitos y vías de ingreso."
-          trailing={<TelIcon name="external" size={18} color={colors.primary} />}
-          onPress={() => void Linking.openURL(ADMISSION_URL)}
+          icon="grid"
+          title="Malla interactiva"
+          body="Los 10 semestres ramo por ramo: toca cada uno para ver qué aprenderás."
+          trailing={<TelIcon name="chevronRight" size={18} color={colors.primary} />}
+          onPress={() => router.push('/malla')}
         />
         <ListRow
-          icon="globe"
-          title="Universidad Técnica Federico Santa María"
-          body="Becas, beneficios y vida universitaria."
+          icon="school"
+          title="La carrera en usm.cl"
+          body="Malla oficial, perfil de egreso, campus y requisitos de Telemática."
           trailing={<TelIcon name="external" size={18} color={colors.primary} />}
-          onPress={() => void Linking.openURL(USM_URL)}
+          onPress={() => void openLink(LINKS.career)}
+        />
+        <ListRow
+          icon="flag"
+          title="Admisión USM"
+          body="Fechas, vías de ingreso, becas y beneficios."
+          trailing={<TelIcon name="external" size={18} color={colors.primary} />}
+          onPress={() => void openLink(LINKS.admission)}
         />
       </View>
+
+      <TipSheet tip={tip} visible={tipOpen} onClose={() => setTipOpen(false)} />
     </Screen>
   );
 }
@@ -193,16 +217,25 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.secondary,
   },
-  seenBadge: {
+  badge: {
     position: 'absolute',
     top: 8,
     right: 8,
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badgeDone: {
+    backgroundColor: colors.success,
+  },
+  badgeTried: {
+    width: 12,
+    height: 12,
+    top: 10,
+    right: 10,
+    backgroundColor: colors.warning,
   },
   detail: {
     borderWidth: 1.5,
@@ -241,7 +274,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   tip: {
     gap: spacing.xs,
+  },
+  tipHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });

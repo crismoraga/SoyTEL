@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAppEvent, type AppEvent } from '@/lib/events';
-import { markAreaViewed } from '@/storage/career';
+import { loadCareerProgress, masteredAreas, recordAreaPractice } from '@/storage/career';
 import { ensureDailyInbox, getInboxSnapshot, loadInbox, markAllInboxRead, pushInbox } from '@/storage/inbox';
 import { applyMascotDecay, defaultProfile, loadProfile, loadResults, recordGameResult, syncAchievements, updateAlias } from '@/storage/profile';
 import { resetAllData } from '@/storage/reset';
@@ -42,12 +42,26 @@ describe('game results', () => {
     expect(second.newAchievements).not.toContain('first-signal');
   });
 
-  it('syncs achievements earned outside games', async () => {
+  it('counts career areas only when they are practiced well, not when viewed', async () => {
+    const at = new Date().toISOString();
+    await recordAreaPractice('redes', 0.4, at);
+    expect(masteredAreas(await loadCareerProgress())).toEqual([]);
     for (const area of ['redes', 'teleco', 'software', 'seguridad', 'hardware', 'innovacion']) {
-      await markAreaViewed(area);
+      await recordAreaPractice(area, 0.6, at);
     }
+    const progress = await loadCareerProgress();
+    expect(progress.redes?.sessions).toBe(2);
+    expect(masteredAreas(progress)).toHaveLength(6);
     expect(await syncAchievements()).toContain('career-explorer');
     expect((await loadProfile()).unlockedAchievements).toContain('career-explorer');
+  });
+
+  it('records area practice from practice results and the story', async () => {
+    const completedAt = new Date().toISOString();
+    await recordGameResult({ gameId: 'practice', score: 480, accuracy: 0.8, durationSeconds: 60, completedAt, metadata: { area: 'teleco', correct: 4 } });
+    await recordGameResult({ gameId: 'story', score: 200, accuracy: 1, durationSeconds: 60, completedAt, metadata: { chapter: 1 } });
+    expect(masteredAreas(await loadCareerProgress()).sort()).toEqual(['innovacion', 'teleco']);
+    expect((await loadProfile()).gamesPlayed).toBe(2);
   });
 
   it('counts distinct Rutix care days', async () => {
