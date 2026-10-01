@@ -1,3 +1,4 @@
+import { AVATAR_COUNT } from '@/account/rules';
 import { pillarIds } from './content';
 import { getRouteQuestion, routeQuestions, type RouteQuestion } from './quizBank';
 import { mulberry32, seededShuffle } from './random';
@@ -27,12 +28,16 @@ export const DEFAULT_SETTINGS: RouteSettings = {
   projectsSeconds: 15 * 60,
   quizQuestions: 10,
   questionSeconds: 20,
-  revealSeconds: 8,
+  revealSeconds: 10,
   offlineAfterSeconds: 45,
 };
 
 export const MAX_PLAYERS = 60;
 export const MAX_GAME_SCORE = 1000;
+// Tiempo mínimo para terminar un juego de verdad. Un envío antes de eso se ignora (el teléfono lo
+// reintenta y se acepta cuando el tiempo ya es posible); si llega en menos de la mitad, se marca.
+export const MIN_B215_MS = 20_000;
+export const MIN_PROJECT_MS = 10_000;
 // Bonos para los tres primeros en responder bien cada pregunta.
 export const QUIZ_FIRST_BONUS = [200, 120, 60];
 const QUIZ_BASE = 500;
@@ -56,6 +61,8 @@ export function createRoute(code: string, now: number, seed: number, settings: R
     quiz: null,
     settings,
     finishedAt: null,
+    projectsAt: null,
+    completed: false,
   };
 }
 
@@ -117,7 +124,7 @@ export function addPlayer(state: RouteState, incoming: NewPlayer, now: number): 
   const player: PlayerRecord = {
     id: incoming.id,
     alias,
-    avatar: Math.max(0, Math.floor(incoming.avatar) || 0),
+    avatar: Math.min(AVATAR_COUNT - 1, Math.max(0, Math.floor(incoming.avatar) || 0)),
     boxKey: incoming.boxKey,
     token: incoming.token,
     joinedAt: now,
@@ -150,7 +157,7 @@ function toResults(state: RouteState, now: number): RouteState {
 }
 
 function toProjects(state: RouteState, now: number): RouteState {
-  return bump(state, { phase: 'projects', stop: 'b213', phaseAt: now, startsAt: null, deadline: now + state.settings.projectsSeconds * 1000 });
+  return bump(state, { phase: 'projects', stop: 'b213', phaseAt: now, startsAt: null, deadline: now + state.settings.projectsSeconds * 1000, projectsAt: now });
 }
 
 export function pickQuizQuestions(seed: number, count: number, bank: RouteQuestion[] = routeQuestions): string[] {
@@ -188,8 +195,8 @@ function toQuiz(state: RouteState, now: number): RouteState {
   });
 }
 
-function toPodium(state: RouteState, now: number): RouteState {
-  return bump(state, { phase: 'podium', stop: 'hall', phaseAt: now, startsAt: null, deadline: null, finishedAt: now });
+function toPodium(state: RouteState, now: number, completed: boolean): RouteState {
+  return bump(state, { phase: 'podium', stop: 'hall', phaseAt: now, startsAt: null, deadline: null, finishedAt: now, completed });
 }
 
 export function quizPoints(elapsedMs: number, totalMs: number, rank: number): number {
@@ -226,7 +233,7 @@ function revealQuestion(state: RouteState, now: number): RouteState {
 function nextQuestion(state: RouteState, now: number): RouteState {
   const quiz = state.quiz;
   if (!quiz) return state;
-  if (quiz.index + 1 >= quiz.questionIds.length) return toPodium(state, now);
+  if (quiz.index + 1 >= quiz.questionIds.length) return toPodium(state, now, true);
   const startsAt = now + NEXT_QUESTION_DELAY;
   return bump(state, {
     quiz: { ...quiz, index: quiz.index + 1, step: 'question', startsAt, endsAt: startsAt + state.settings.questionSeconds * 1000, revealUntil: 0 },
@@ -280,6 +287,15 @@ function acceptsScore(state: RouteState, game: StationGameId): boolean {
   return PROJECT_PHASES.has(state.phase) || (state.phase === 'checkin' && state.stop === 'hall');
 }
 
+// Desde cuándo cuenta el tiempo de un juego: B215 parte con la cuenta regresiva común; cada proyecto
+// de B213 parte al abrir la sala o al terminar el proyecto anterior (no se juegan dos a la vez).
+export function scoreEarliest(state: RouteState, player: PlayerRecord, game: StationGameId): number | null {
+  if (game === 'red-b215') return state.startsAt === null ? null : state.startsAt + MIN_B215_MS;
+  const previous = pillarIds.reduce((latest, id) => Math.max(latest, player.games[id]?.at ?? 0), 0);
+  const start = Math.max(state.projectsAt ?? 0, previous);
+  return start > 0 ? start + MIN_PROJECT_MS : null;
+}
+
 export function applyPlayerAction(state: RouteState, id: string, action: PlayerAction, now: number): RouteState {
   const player = state.players[id];
   if (!player || player.kicked) return state;
@@ -295,6 +311,15 @@ export function applyPlayerAction(state: RouteState, id: string, action: PlayerA
     }
     case 'score': {
       if (!acceptsScore(state, action.game) || player.games[action.game]) return advanceIfReady(touched, now);
+      const earliest = scoreEarliest(state, player, action.game);
+      if (earliest !== null && now < earliest) {
+        const minimum = action.game === 'red-b215' ? MIN_B215_MS : MIN_PROJECT_MS;
+        if (now < earliest - minimum / 2 && !player.suspect?.[action.game]) {
+          const suspect = { ...player.suspect, [action.game]: now };
+          return advanceIfReady(bump(withPlayer(touched, { ...touched.players[id], suspect }), {}), now);
+        }
+        return advanceIfReady(touched, now);
+      }
       const score = Math.round(Math.min(MAX_GAME_SCORE, Math.max(0, Number(action.score) || 0)));
       const accuracy = Math.min(1, Math.max(0, Number(action.accuracy) || 0));
       const games = { ...player.games, [action.game]: { score, accuracy, at: now } };
@@ -339,7 +364,8 @@ export function applyHostAction(state: RouteState, action: HostAction, now: numb
       return advanceIfReady(bump(withPlayer(state, { ...player, kicked: true }), {}), now);
     }
     case 'finish':
-      return state.phase === 'lobby' || state.phase === 'podium' ? state : toPodium(state, now);
+      // Cerrar antes de tiempo no cuenta como ruta completada (no entrega logros de ruta).
+      return state.phase === 'lobby' || state.phase === 'podium' ? state : toPodium(state, now, false);
     case 'advance':
       switch (state.phase) {
         case 'lobby':
@@ -379,6 +405,8 @@ export function snapshot(state: RouteState, now: number): RouteSnapshot {
     quizPoints: player.quizPoints,
     quizCorrect: player.quizCorrect,
     answered: quiz ? Boolean(player.answers[quiz.index]) : false,
+    answeredCount: Object.keys(player.answers).length,
+    flagged: Object.keys(player.suspect ?? {}).length > 0,
     total: playerTotal(player),
     rank: index + 1,
   }));
@@ -429,6 +457,7 @@ export function snapshot(state: RouteState, now: number): RouteSnapshot {
     quiz: publicQuiz,
     settings: state.settings,
     finishedAt: state.finishedAt,
+    completed: state.phase === 'podium' && state.completed === true,
     kicked: state.order.filter((id) => state.players[id]?.kicked),
   };
 }

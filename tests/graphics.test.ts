@@ -4,7 +4,7 @@ import { illustrationDrawing, illustrationNames } from '@/graphics/illustrations
 import { medallionDrawing, medallionGlyphs, type MedallionGlyph } from '@/graphics/medallions';
 import { networkMesh, patternPreviews, starField } from '@/graphics/patterns';
 import { arcPath, seededRandom, star4Path, star5Path, type Shape } from '@/graphics/shapes';
-import { expressionForMood, signalForMood, telixDrawing, telixExpressions } from '@/graphics/telix';
+import { expressionForMood, signalForMood, rutixDrawing, rutixExpressions } from '@/graphics/rutix';
 
 function countShapes(shapes: Shape[]): number {
   return shapes.reduce((total, shape) => total + (shape.t === 'g' ? countShapes(shape.children) : 1), 0);
@@ -73,10 +73,10 @@ describe('medallions', () => {
   });
 });
 
-describe('Telix', () => {
+describe('Rutix', () => {
   it('draws every expression', () => {
-    telixExpressions.forEach((expression) => {
-      const drawing = telixDrawing({ expression });
+    rutixExpressions.forEach((expression) => {
+      const drawing = rutixDrawing({ expression });
       expect(allFinite(drawing.shapes)).toBe(true);
       expect(countShapes(drawing.shapes)).toBeGreaterThan(20);
     });

@@ -16,9 +16,14 @@ export function wonMicroGames(results: GameResult[]): MicroGameId[] {
     .flatMap((result) => String(result.metadata?.won).split(',').filter(Boolean)) as MicroGameId[];
 }
 
+// Rutas jugadas hasta el final de la trivia (cerrar la ruta antes de tiempo no cuenta).
+function completedRoutes(results: GameResult[]): GameResult[] {
+  return results.filter((result) => result.gameId === 'route' && result.metadata?.completed === true);
+}
+
 // Rutas en vivo con grupo (el modo individual no cuenta para el podio).
 function liveRoutes(results: GameResult[]): GameResult[] {
-  return results.filter((result) => result.gameId === 'route' && result.metadata?.solo !== true && Number(result.metadata?.players ?? 0) >= 3);
+  return completedRoutes(results).filter((result) => result.metadata?.solo !== true && Number(result.metadata?.players ?? 0) >= 3);
 }
 
 export function playedStations(results: GameResult[]): string[] {
@@ -48,9 +53,9 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
     case 'career-explorer':
       return careerAreas;
     case 'route-complete':
-      return results.filter((result) => result.gameId === 'route').length;
+      return completedRoutes(results).length;
     case 'temple-restored':
-      return results.some((result) => result.gameId === 'route' && Number(result.metadata?.pillars ?? 0) >= 5) ? 1 : 0;
+      return completedRoutes(results).some((result) => Number(result.metadata?.pillars ?? 0) >= 5) ? 1 : 0;
     case 'route-podium':
       return liveRoutes(results).some((result) => Number(result.metadata?.rank ?? 99) <= 3) ? 1 : 0;
     case 'route-champion':
@@ -72,7 +77,7 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
         .reduce((max, result) => Math.max(max, Number(result.metadata?.chapter ?? 0)), 0);
     case 'burst-collector':
       return new Set(wonMicroGames(results)).size;
-    case 'telix-friend':
+    case 'rutix-friend':
       return mascotDays;
     case 'quiz-master':
       return results.some((result) => result.gameId === 'millionaire' && Number(result.metadata?.correctAnswers ?? 0) >= 10) ? 1 : 0;

@@ -11,7 +11,7 @@ import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
 import {
   acceptanceAngle,
   ANGLE_MAX,
@@ -147,14 +147,15 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
     coreBottom: CENTER_Y + CORE_HALF,
   };
 
+  const askContinue = useAskContinue();
   useEffect(() => {
     if (done.current) return;
     const timer = setTimeout(() => {
       done.current = true;
-      onFinish();
+      askContinue(onFinish);
     }, Math.max(0, endsAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [endsAt, onFinish]);
+  }, [askContinue, endsAt, onFinish]);
 
   // Dibuja el rayo por tramos para que se vea viajar.
   useEffect(() => {
@@ -182,17 +183,18 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
       void feedbackSuccess();
       const ratio = (endsAt - clockNow()) / (endsAt - startedAt);
       onLevel(levelScore(failed, ratio), true);
+      if (level + 1 >= fiberLevels.length) {
+        done.current = true;
+        askContinue(onFinish);
+        return;
+      }
       setTimeout(() => {
-        if (level + 1 >= fiberLevels.length) {
-          done.current = true;
-          onFinish();
-        } else {
-          setLevel(level + 1);
-          setFailed(0);
-          setShot(null);
-          setAngle(level % 2 === 0 ? -26 : 22);
-          setStartedAt(clockNow());
-        }
+        if (done.current) return;
+        setLevel(level + 1);
+        setFailed(0);
+        setShot(null);
+        setAngle(level % 2 === 0 ? -26 : 22);
+        setStartedAt(clockNow());
       }, 1500);
     } else {
       void feedbackWarning();
@@ -320,15 +322,16 @@ function PulsesStage({
     onProgress({ points: Math.round((correct / bits.length) * PULSES_MAX), correct, total: evaluated });
   }, [bits.length, correct, evaluated, onProgress]);
 
+  const askContinue = useAskContinue();
   useEffect(() => {
     if (done.current) return;
     const finishAt = Math.min(endsAt, startAt + (bits.length + 1) * BIT_MS + 900);
     const timer = setTimeout(() => {
       done.current = true;
-      onFinish();
+      askContinue(onFinish, 'Ver resultado');
     }, Math.max(0, finishAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [bits.length, endsAt, onFinish, startAt]);
+  }, [askContinue, bits.length, endsAt, onFinish, startAt]);
 
   const trackStyle = useAnimatedStyle(() => ({ transform: [{ translateX: HIT_X - progress.value * CELL }] }));
 

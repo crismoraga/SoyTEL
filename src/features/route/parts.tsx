@@ -3,18 +3,16 @@ import { Pressable, StyleSheet, TextInput, View, type StyleProp, type ViewStyle 
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
+import { UserAvatar } from '@/components/UserAvatar';
 import { sanitizeJourneyCode } from '@/lib/progression';
-import { avatarInfo, routeStops } from '@/route/content';
+import { routeStops } from '@/route/content';
 import type { PublicPlayer, RouteStop } from '@/route/types';
 import { colors, font, radius, spacing } from '@/theme';
 
 export function PlayerAvatar({ avatar, size = 44, online = true, style }: { avatar: number; size?: number; online?: boolean; style?: StyleProp<ViewStyle> }) {
-  const info = avatarInfo(avatar);
   return (
     <View style={[{ width: size, height: size }, style]}>
-      <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: info.color }, !online && styles.offline]}>
-        <TelIcon name={info.icon} size={size * 0.52} color={colors.primary} />
-      </View>
+      <UserAvatar avatar={avatar} size={size} dimmed={!online} />
       {!online && <View style={[styles.offlineDot, { right: -1, bottom: -1 }]} />}
     </View>
   );
@@ -35,17 +33,23 @@ export function PlayerChip({ player, me, trailing, dark = true }: { player: Publ
 
 const STOP_ORDER: RouteStop[] = ['stand', 'b215', 'b213', 'hall'];
 
-// Mapa lineal de la ruta: stand → B215 → B213 → pasillo.
+// Mapa lineal de la ruta: stand → B215 → B213 → pasillo. Los tramos se dibujan en una capa propia,
+// detrás de los íconos y separados de ellos, para que la línea nunca los tape.
 export function RouteProgress({ stop, finished = false }: { stop: RouteStop; finished?: boolean }) {
   const current = STOP_ORDER.indexOf(stop);
+  const half = `${50 / routeStops.length}%` as const;
   return (
     <View style={styles.route} accessibilityLabel={`Parada actual: ${routeStops[current]?.place}`}>
+      <View pointerEvents="none" style={[styles.routeTrack, { left: half, right: half }]}>
+        {routeStops.slice(1).map((item, index) => (
+          <View key={item.id} style={[styles.routeSegment, (finished || index + 1 <= current) && styles.routeLineDone]} />
+        ))}
+      </View>
       {routeStops.map((item, index) => {
         const done = finished || index < current;
         const active = !finished && index === current;
         return (
           <View key={item.id} style={styles.routeStep}>
-            {index > 0 && <View style={[styles.routeLine, (done || active) && styles.routeLineDone]} />}
             <View style={[styles.routeDot, done && styles.routeDotDone, active && styles.routeDotActive]}>
               <TelIcon name={done ? 'check' : item.icon} size={16} color={active || done ? colors.primary : colors.slate} />
             </View>
@@ -118,15 +122,6 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  avatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.cream,
-  },
-  offline: {
-    opacity: 0.45,
-  },
   offlineDot: {
     position: 'absolute',
     width: 12,
@@ -164,12 +159,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  routeLine: {
+  routeTrack: {
     position: 'absolute',
-    top: 15,
-    right: '50%',
-    width: '100%',
+    top: 14.5,
+    flexDirection: 'row',
+  },
+  routeSegment: {
+    flex: 1,
     height: 3,
+    marginHorizontal: 22,
+    borderRadius: 2,
     backgroundColor: colors.primarySoft,
   },
   routeLineDone: {

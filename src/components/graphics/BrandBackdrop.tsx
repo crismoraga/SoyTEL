@@ -4,7 +4,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import Svg from 'react-native-svg';
 import { networkMesh, orbitRings, signalRings, starField } from '@/graphics/patterns';
 import { ShapeLayer } from '@/graphics/ShapeLayer';
-import { useMotionEnabled } from '@/lib/motion';
+import { useAmbientMotion } from '@/lib/motion';
 
 export type BackdropVariant = 'stars' | 'network' | 'signal' | 'orbits' | 'none';
 
@@ -14,10 +14,11 @@ interface BrandBackdropProps {
   opacity?: number;
 }
 
-// Fondo decorativo de las pantallas oscuras: patrón estático + capa de estrellas que titilan.
+// Fondo decorativo de las pantallas oscuras: patrón estático + capa de estrellas que titilan
+// (el titileo solo corre con animaciones completas; la capa se rasteriza una vez en la GPU).
 export const BrandBackdrop = memo(function BrandBackdrop({ variant = 'stars', seed = 7, opacity = 1 }: BrandBackdropProps) {
   const { width, height } = useWindowDimensions();
-  const motionEnabled = useMotionEnabled();
+  const motionEnabled = useAmbientMotion();
   const twinkle = useSharedValue(0.3);
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export const BrandBackdrop = memo(function BrandBackdrop({ variant = 'stars', se
       <Svg width={width} height={height}>
         <ShapeLayer shapes={base} />
       </Svg>
-      <Animated.View style={[StyleSheet.absoluteFill, twinkleStyle]}>
+      <Animated.View style={[StyleSheet.absoluteFill, twinkleStyle]} renderToHardwareTextureAndroid shouldRasterizeIOS>
         <Svg width={width} height={height}>
           <ShapeLayer shapes={sparkles} />
         </Svg>

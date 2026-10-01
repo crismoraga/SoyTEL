@@ -1,12 +1,13 @@
 import { isValidJourneyCode } from '@/lib/progression';
-import { randomBytes, type Sealed } from '@/realtime/crypto';
+import { openShared, randomBytes, sealShared, signSealed, verifySealed, type Sealed } from '@/realtime/crypto';
 import type { PlayerAction, RouteSnapshot } from './types';
 
 // Mensajes y temas MQTT de la ruta. Todo lo sensible viaja sellado (ver realtime/crypto).
 
 export const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-export const PROTOCOL_VERSION = 1;
-const ROOT = 'soytel/r1';
+// v2: saludo sellado y firmado, sala derivada con hash lento (incompatible con la v1).
+export const PROTOCOL_VERSION = 2;
+const ROOT = 'soytel/r2';
 
 export function routeTopics(room: string) {
   const base = `${ROOT}/${room}`;
@@ -46,12 +47,19 @@ export function generateRouteCode(brokerIndex: number, brokerCount: number): str
   }
 }
 
+// Saludo del stand: va sellado con la llave derivada del código y firmado con la llave del stand.
 export interface HelloMessage {
   v: number;
   kind: 'soytel-route';
   box: string;
   sign: string;
   at: number;
+}
+
+export interface HelloEnvelope {
+  v: number;
+  sealed: Sealed;
+  sig: string;
 }
 
 // Participante → anfitrión: sellado con box hacia la llave del anfitrión.
@@ -87,6 +95,20 @@ export interface StateEnvelope {
 }
 
 export type SnapshotMessage = RouteSnapshot;
+
+export function sealHello(hello: HelloMessage, helloKey: string, signSecretKey: string): HelloEnvelope {
+  const sealed = sealShared(JSON.stringify(hello), helloKey);
+  return { v: PROTOCOL_VERSION, sealed, sig: signSealed(sealed, signSecretKey) };
+}
+
+// Abre y verifica un saludo; devuelve null si no es de esta sala, está alterado o es de otra versión.
+export function openHello(text: string, helloKey: string): HelloMessage | null {
+  const envelope = parseJson<HelloEnvelope>(text);
+  if (!envelope || envelope.v !== PROTOCOL_VERSION || !envelope.sealed || typeof envelope.sig !== 'string') return null;
+  const hello = parseJson<HelloMessage>(openShared(envelope.sealed, helloKey));
+  if (!hello || hello.kind !== 'soytel-route' || typeof hello.box !== 'string' || typeof hello.sign !== 'string') return null;
+  return verifySealed(envelope.sealed, envelope.sig, hello.sign) ? hello : null;
+}
 
 export function parseJson<T>(text: string | null): T | null {
   if (!text) return null;

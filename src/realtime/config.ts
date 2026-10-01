@@ -26,5 +26,8 @@ export const brokerAuth = {
 // Dirección pública de la versión web: la usa el QR del stand para unirse sin instalar nada.
 export const webAppUrl = (process.env.EXPO_PUBLIC_WEB_URL || 'https://soytel.vercel.app').replace(/\/+$/, '');
 
+// API de cuentas y ranking (funciones de Vercel junto a la versión web).
+export const apiBaseUrl = (process.env.EXPO_PUBLIC_API_URL || `${webAppUrl}/api/v1`).replace(/\/+$/, '');
+
 // Enlace de descarga de la app Android (APK de producción).
 export const androidDownloadUrl = process.env.EXPO_PUBLIC_ANDROID_URL || 'https://github.com/crismoraga/SoyTEL/releases/latest';

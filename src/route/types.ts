@@ -50,6 +50,8 @@ export interface PlayerRecord {
   quizPoints: number;
   quizCorrect: number;
   answers: Record<number, QuizAnswer>;
+  // Juegos cuyo puntaje llegó en un tiempo imposible (se marca para el equipo del stand).
+  suspect?: Partial<Record<StationGameId, number>>;
 }
 
 export interface QuizState {
@@ -77,6 +79,10 @@ export interface RouteState {
   quiz: QuizState | null;
   settings: RouteSettings;
   finishedAt: number | null;
+  // Inicio de la fase de proyectos (B213), para validar los tiempos de cada juego.
+  projectsAt?: number | null;
+  // true solo si la trivia terminó completa; false si el anfitrión cerró la ruta antes.
+  completed?: boolean;
 }
 
 export interface PublicPlayer {
@@ -89,6 +95,8 @@ export interface PublicPlayer {
   quizPoints: number;
   quizCorrect: number;
   answered: boolean;
+  answeredCount: number;
+  flagged: boolean;
   total: number;
   rank: number;
 }
@@ -140,6 +148,7 @@ export interface RouteSnapshot {
   quiz: PublicQuiz | null;
   settings: RouteSettings;
   finishedAt: number | null;
+  completed: boolean;
   kicked: string[];
 }
 

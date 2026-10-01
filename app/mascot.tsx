@@ -5,14 +5,14 @@ import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { Celebration } from '@/components/feedback/Celebration';
 import { ProgressRing } from '@/components/feedback/Progress';
-import { Telix, type TelixExpression, type TelixPose } from '@/components/graphics/Telix';
+import { Rutix, type RutixExpression, type RutixPose } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { randomTip } from '@/data/tips';
-import { expressionForMood, signalForMood } from '@/graphics/telix';
+import { expressionForMood, signalForMood } from '@/graphics/rutix';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
@@ -37,11 +37,11 @@ function moodLabel(value: number): string {
   return 'con poca señal';
 }
 
-// Tamagotchi de Telix: su señal (ánimo) sube con partidas y cuidados, y baja si lo olvidas.
+// Tamagotchi de Rutix: su señal (ánimo) sube con partidas y cuidados, y baja si lo olvidas.
 export default function MascotScreen() {
   const entering = useEntering();
-  const [message, setMessage] = useState('¡Hola! Soy Telix. Mantengo la señal del campus y aprendo contigo.');
-  const [reaction, setReaction] = useState<{ expression: TelixExpression; pose: TelixPose } | null>(null);
+  const [message, setMessage] = useState('¡Hola! Soy Rutix. Mantengo la señal del campus y aprendo contigo.');
+  const [reaction, setReaction] = useState<{ expression: RutixExpression; pose: RutixPose } | null>(null);
   const [reactKey, setReactKey] = useState(0);
   const [burst, setBurst] = useState<number | null>(null);
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,7 +54,7 @@ export default function MascotScreen() {
     if (reactionTimer.current) clearTimeout(reactionTimer.current);
   }, []);
 
-  function react(expression: TelixExpression, pose: TelixPose = 'idle', duration = 2200) {
+  function react(expression: RutixExpression, pose: RutixPose = 'idle', duration = 2200) {
     setReaction({ expression, pose });
     setReactKey((value) => value + 1);
     if (reactionTimer.current) clearTimeout(reactionTimer.current);
@@ -113,12 +113,12 @@ export default function MascotScreen() {
     <Screen
       tone="dark"
       backdrop="stars"
-      header={<AppHeader transparent onBack={() => router.back()} kicker="Tu compañero" title="Telix" compact />}
+      header={<AppHeader transparent onBack={() => router.back()} kicker="Tu compañero" title="Rutix" compact />}
     >
       <Celebration burstKey={burst} />
       <View style={styles.stage}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Acariciar a Telix" onPress={() => void pet()}>
-          <Telix size={230} expression={expression} pose={pose} signal={signalForMood(mood)} reactKey={reactKey} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Acariciar a Rutix" onPress={() => void pet()}>
+          <Rutix size={230} expression={expression} pose={pose} signal={signalForMood(mood)} reactKey={reactKey} />
         </Pressable>
         <Animated.View key={message} entering={entering.fadeUp()} style={styles.bubble} accessibilityLiveRegion="polite">
           <View style={styles.bubbleTail} />
@@ -130,7 +130,7 @@ export default function MascotScreen() {
 
       <View style={styles.statusRow}>
         <View style={styles.statusCard}>
-          <ProgressRing progress={mood / 100} size={64} color={colors.accent} trackColor={colors.primary} accessibilityLabel="Señal de Telix">
+          <ProgressRing progress={mood / 100} size={64} color={colors.accent} trackColor={colors.primary} accessibilityLabel="Señal de Rutix">
             <TelText variant="label" color="cream" tabular>
               {mood}%
             </TelText>
@@ -155,7 +155,7 @@ export default function MascotScreen() {
               ))}
             </View>
             <TelText variant="caption" color="accentSoft">
-              {Math.min(data?.days ?? 0, 7)}/7 para «Aliado de Telix»
+              {Math.min(data?.days ?? 0, 7)}/7 para «Aliado de Rutix»
             </TelText>
           </View>
         </View>

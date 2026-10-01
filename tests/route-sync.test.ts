@@ -1,4 +1,6 @@
+import { newBoxKeys, newSessionKey, newSignKeys } from '@/realtime/crypto';
 import { pillarIds } from '@/route/content';
+import { createRoute, DEFAULT_SETTINGS, MIN_B215_MS, MIN_PROJECT_MS } from '@/route/engine';
 import { HostController } from '@/route/host';
 import { LocalBus, LocalRouteLink } from '@/route/link';
 import { MemberController } from '@/route/member';
@@ -21,10 +23,12 @@ describe('route sync over the local bus', () => {
     const ana = new MemberController();
     const beto = new MemberController();
     await ana.join({ code: host.code, alias: 'Ana', avatar: 1, link: new LocalRouteLink(bus) });
-    await beto.join({ code: host.code, alias: 'Beto', avatar: 2, link: new LocalRouteLink(bus) });
-    await jest.advanceTimersByTimeAsync(1500);
+    await beto.join({ code: host.code, alias: 'Beto', avatar: 2, link: new LocalRouteLink(bus), fingerprint: host.fingerprint });
+    // Con el código escrito se escuchan los saludos ~2 s antes de unirse; con el QR (huella) es inmediato.
+    await jest.advanceTimersByTimeAsync(3000);
 
     expect(ana.getView().status).toBe('joined');
+    expect(ana.getView().verification).toBe(host.getView().verification);
     expect(beto.getView().status).toBe('joined');
     expect(host.getView().snapshot.players.map((player) => player.alias).sort()).toEqual(['Ana', 'Beto']);
 
@@ -40,9 +44,10 @@ describe('route sync over the local bus', () => {
     await jest.advanceTimersByTimeAsync(600);
     expect(beto.getView().snapshot?.phase).toBe('play');
 
+    // Un puntaje enviado antes de lo posible se reintenta hasta que el anfitrión lo acepta.
     ana.submitScore('red-b215', 800, 0.8);
     beto.submitScore('red-b215', 650, 0.7);
-    await jest.advanceTimersByTimeAsync(600);
+    await jest.advanceTimersByTimeAsync(DEFAULT_SETTINGS.countdownSeconds * 1000 + MIN_B215_MS + 3000);
     expect(ana.getView().snapshot?.phase).toBe('results');
     expect(ana.getView().me?.games['red-b215']).toBe(800);
     expect(ana.getView().pending).toEqual([]);
@@ -54,10 +59,11 @@ describe('route sync over the local bus', () => {
     await jest.advanceTimersByTimeAsync(600);
     expect(ana.getView().snapshot?.phase).toBe('projects');
 
-    pillarIds.forEach((game) => {
+    for (const game of pillarIds) {
+      await jest.advanceTimersByTimeAsync(MIN_PROJECT_MS + 500);
       ana.submitScore(game, 700, 0.8);
       beto.submitScore(game, 600, 0.6);
-    });
+    }
     await jest.advanceTimersByTimeAsync(600);
     expect(beto.getView().snapshot?.stop).toBe('hall');
     ana.checkin('hall');
@@ -78,10 +84,11 @@ describe('route sync over the local bus', () => {
       const reveal = ana.getView().snapshot!.quiz!.reveal!;
       expect(reveal.correct).toBe(answer);
       expect(reveal.gains[beto.getView().me!.id].rank).toBe(1);
-      await jest.advanceTimersByTimeAsync(9000);
+      await jest.advanceTimersByTimeAsync(11_000);
     }
 
     expect(ana.getView().snapshot?.phase).toBe('podium');
+    expect(ana.getView().snapshot?.completed).toBe(true);
     const podium = ana.getView().snapshot!.players;
     expect(podium[0].alias).toBe('Ana');
     expect(podium[0].total).toBeGreaterThan(podium[1].total);
@@ -108,17 +115,64 @@ describe('route sync over the local bus', () => {
     const host = HostController.createWithLink(new LocalRouteLink(bus), {}, { solo: true });
     await host.start();
     const first = new MemberController();
-    await first.join({ code: host.code, alias: 'Ana', avatar: 1, link: new LocalRouteLink(bus) });
+    await first.join({ code: host.code, alias: 'Ana', avatar: 1, link: new LocalRouteLink(bus), fingerprint: host.fingerprint });
     await jest.advanceTimersByTimeAsync(1000);
     host.dispatch({ type: 'start' });
     host.dispatch({ type: 'finish' });
+    await jest.advanceTimersByTimeAsync(600);
+    expect(first.getView().snapshot?.completed).toBe(false);
     const late = new MemberController();
     await late.join({ code: host.code, alias: 'Tarde', avatar: 2, link: new LocalRouteLink(bus) });
-    await jest.advanceTimersByTimeAsync(1500);
+    await jest.advanceTimersByTimeAsync(3000);
     expect(late.getView().status).toBe('rejected');
     expect(late.getView().rejection).toBe('finished');
     await first.leave(false);
     await late.leave(false);
+    host.stop();
+  });
+
+  it('does not join a typed code when two stands answer with it (impersonation)', async () => {
+    const bus = new LocalBus();
+    const host = HostController.createWithLink(new LocalRouteLink(bus), {}, { solo: true });
+    await host.start();
+    // Un impostor con el mismo código pero llaves propias.
+    const now = Date.now();
+    const impostor = new HostController(
+      {
+        code: host.code,
+        clientId: 'impostor1',
+        brokerIndex: 0,
+        boxKeys: newBoxKeys(),
+        signKeys: newSignKeys(),
+        sessionKey: newSessionKey(),
+        state: createRoute(host.code, now, 7),
+        seqs: {},
+        savedAt: now,
+      },
+      new LocalRouteLink(bus),
+      { solo: true },
+    );
+    await impostor.start();
+    await jest.advanceTimersByTimeAsync(300);
+    expect(host.getView().impostor).toBe(true);
+
+    const typed = new MemberController();
+    await typed.join({ code: host.code, alias: 'Ana', avatar: 1, link: new LocalRouteLink(bus) });
+    await jest.advanceTimersByTimeAsync(3000);
+    expect(typed.getView().status).toBe('conflict');
+    expect(host.getView().snapshot.players).toHaveLength(0);
+
+    // Con el QR (huella del stand verdadero) se une al correcto y avisa del impostor.
+    const scanned = new MemberController();
+    await scanned.join({ code: host.code, alias: 'Beto', avatar: 2, link: new LocalRouteLink(bus), fingerprint: host.fingerprint });
+    await jest.advanceTimersByTimeAsync(3000);
+    expect(scanned.getView().status).toBe('joined');
+    expect(host.getView().snapshot.players.map((player) => player.alias)).toEqual(['Beto']);
+    expect(impostor.getView().snapshot.players).toHaveLength(0);
+
+    await typed.leave(false);
+    await scanned.leave(false);
+    impostor.stop();
     host.stop();
   });
 });

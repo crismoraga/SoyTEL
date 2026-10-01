@@ -74,7 +74,7 @@ export const careerAreas: CareerArea[] = [
     glyph: 'bulb',
     description: 'Usas datos y tecnología para crear soluciones nuevas: análisis de información, ciudades inteligentes, investigación y emprendimiento.',
     examples: ['Analizar datos para mejorar un servicio', 'Participar en proyectos de investigación', 'Emprender con una solución tecnológica'],
-    practiceLabel: 'Vivir la historia de Telix',
+    practiceLabel: 'Vivir la historia de Rutix',
   },
 ];
 
@@ -84,3 +84,4 @@ export function getCareerArea(id: string): CareerArea | undefined {
 
 export const ADMISSION_URL = 'https://admision.usm.cl';
 export const USM_URL = 'https://www.usm.cl';
+export const CAREER_URL = 'https://usm.cl/admision/carreras/ingenieria-civil-telematica/';

@@ -103,7 +103,7 @@ function optionalRequire(file) {
 function main() {
   const { icons } = require(path.join(root, 'src', 'graphics', 'icons'));
   const medallions = optionalRequire('medallions');
-  const telix = optionalRequire('telix');
+  const rutix = optionalRequire('rutix');
   const illustrations = optionalRequire('illustrations');
   const patterns = optionalRequire('patterns');
 
@@ -138,15 +138,15 @@ function main() {
     sections.push(`<h2>Medallas (${cells.length})</h2><div class="grid">${cells.join('')}</div><h2>Rarezas y estados</h2><div class="grid">${variants.join('')}</div>`);
   }
 
-  if (telix) {
-    const cells = telix.telixExpressions.map((expression) => {
+  if (rutix) {
+    const cells = rutix.rutixExpressions.map((expression) => {
       const poses = { celebrate: 'celebrate', happy: 'wave', think: 'think' };
       const signals = { sad: 1, sleepy: 2, sleep: 1, celebrate: 4, happy: 4, love: 4 };
-      const drawing = telix.telixDrawing({ expression, pose: poses[expression] || 'idle', signal: signals[expression] ?? 3 });
-      write(path.join(outDir, 'telix', `telix-${expression}.svg`), drawingToSvg(drawing, { width: 400 }));
-      return `<figure class="cell telix">${drawingToSvg(drawing, { width: 150 })}<figcaption>${expression}</figcaption></figure>`;
+      const drawing = rutix.rutixDrawing({ expression, pose: poses[expression] || 'idle', signal: signals[expression] ?? 3 });
+      write(path.join(outDir, 'rutix', `rutix-${expression}.svg`), drawingToSvg(drawing, { width: 400 }));
+      return `<figure class="cell rutix">${drawingToSvg(drawing, { width: 150 })}<figcaption>${expression}</figcaption></figure>`;
     });
-    sections.push(`<h2>Telix</h2><div class="grid dark">${cells.join('')}</div>`);
+    sections.push(`<h2>Rutix</h2><div class="grid dark">${cells.join('')}</div>`);
   }
 
   if (illustrations) {
@@ -174,7 +174,7 @@ h2{font-size:15px;margin:24px 0 10px}
 .cell{margin:0;padding:10px 6px;background:#fff;border:1px solid #D6E2EC;border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .dark .cell{background:#123D5C;border-color:#1E5B7F;color:#F4ECD7}
 .cell.illu,.cell.pattern{grid-column:span 2}
-.cell.telix{grid-column:span 2}
+.cell.rutix{grid-column:span 2}
 figcaption{font-size:11px;color:#5E6F7E;text-align:center}
 .dark figcaption{color:#A7D4ED}
 </style></head><body>${sections.join('')}</body></html>`;

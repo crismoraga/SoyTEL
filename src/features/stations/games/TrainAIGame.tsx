@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
 import {
   bestEpoch,
   EPOCHS,
@@ -105,8 +105,13 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
     setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
   }, [stageIndex]);
 
+  const askContinue = useAskContinue();
+  // Mientras el jugador lee la explicación de la etapa, su reloj no la cierra.
+  const [waiting, setWaiting] = useState(false);
+
   const nextStage = useCallback(() => {
     stageToken.current += 1;
+    setWaiting(false);
     setEndsAt(null);
     if (stageIndex < STAGES.length - 1) {
       setStageIndex(stageIndex + 1);
@@ -116,35 +121,33 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
     }
   }, [stageIndex]);
 
-  // Avanza tras una pausa, salvo que la etapa ya haya cambiado por tiempo.
-  const advanceLater = useCallback(
-    (ms: number) => {
-      const token = stageToken.current;
-      setTimeout(() => {
-        if (stageToken.current === token) nextStage();
-      }, ms);
-    },
-    [nextStage],
-  );
+  // Avanza cuando el jugador toca "Continuar", salvo que la etapa ya haya cambiado.
+  const advanceWhenReady = useCallback(() => {
+    const token = stageToken.current;
+    setWaiting(true);
+    askContinue(() => {
+      if (stageToken.current === token) nextStage();
+    });
+  }, [askContinue, nextStage]);
 
   const handleStop = useCallback(
     (epoch: number) => {
       setStopEpoch(epoch);
-      advanceLater(1600);
+      advanceWhenReady();
     },
-    [advanceLater],
+    [advanceWhenReady],
   );
   const handleTestDone = useCallback(() => setFinished(true), []);
 
   // Al agotarse el tiempo de la etapa se toma lo que haya.
   useEffect(() => {
-    if (endsAt === null) return;
+    if (endsAt === null || waiting) return;
     const timer = setTimeout(() => {
       if (stage.key === 'train' && stopEpoch === null) setStopEpoch(EPOCHS);
       nextStage();
     }, Math.max(0, endsAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [endsAt, nextStage, stage.key, stopEpoch]);
+  }, [endsAt, nextStage, stage.key, stopEpoch, waiting]);
 
   if (finished) {
     const accuracy = modelAccuracy(quality);
@@ -169,7 +172,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
     return <TestStage images={testSet} accuracy={modelAccuracy(quality)} filter={chosenFilter} onDone={handleTestDone} />;
   }
 
-  const secondsLeft = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
+  const secondsLeft = endsAt && !waiting ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
 
   return (
     <View style={styles.container}>
@@ -193,7 +196,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
           onChoose={(kind) => {
             setFilter(kind);
             void feedbackSuccess();
-            advanceLater(1800);
+            advanceWhenReady();
           }}
         />
       )}
@@ -390,14 +393,15 @@ function TestStage({ images, accuracy, filter, onDone }: { images: PixelImage[];
   // El modelo falla en las últimas imágenes que evalúa, según su precisión.
   const wrong = new Set(images.slice(images.length - wrongCount).map((image) => image.id));
 
+  const askContinue = useAskContinue();
   useEffect(() => {
     if (revealed >= images.length) {
-      const timer = setTimeout(onDone, 1600);
-      return () => clearTimeout(timer);
+      askContinue(onDone, 'Ver resultado');
+      return;
     }
     const timer = setTimeout(() => setRevealed((value) => value + 1), 420);
     return () => clearTimeout(timer);
-  }, [images.length, onDone, revealed]);
+  }, [askContinue, images.length, onDone, revealed]);
 
   return (
     <View style={styles.container}>

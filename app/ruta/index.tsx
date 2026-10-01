@@ -4,19 +4,21 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { Tag } from '@/components/Chips';
-import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { CodeBoxes, PlayerAvatar, RouteProgress } from '@/features/route/parts';
+import { aliasProblem, cleanAlias } from '@/account/rules';
+import { AccountGate } from '@/features/account/AccountGate';
+import { AvatarPicker } from '@/features/account/AvatarPicker';
+import { CodeBoxes, RouteProgress } from '@/features/route/parts';
 import { useEntering } from '@/lib/motion';
 import { isValidJourneyCode, sanitizeJourneyCode } from '@/lib/progression';
-import { avatars, routeStops } from '@/route/content';
+import { routeStops } from '@/route/content';
 import { useMemberView } from '@/route/hooks';
 import { routeMember } from '@/route/member';
-import { loadProfile } from '@/storage/profile';
+import { DEFAULT_ALIAS, loadProfile, updateIdentity } from '@/storage/profile';
 import { colors, font, radius, spacing } from '@/theme';
 
 // Punto de entrada de la Ruta Telemática: código del stand, alias y avatar.
@@ -26,13 +28,18 @@ export default function RouteLandingScreen() {
   const view = useMemberView();
   const [code, setCode] = useState(() => sanitizeJourneyCode(params.codigo ?? ''));
   const [alias, setAlias] = useState('');
-  const [avatar, setAvatar] = useState(() => Math.floor(Math.random() * avatars.length));
+  const [avatar, setAvatar] = useState(0);
+  const [unlocks, setUnlocks] = useState<{ level: number; achievements: string[] }>({ level: 1, achievements: [] });
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const active = view.status !== 'idle' && view.code;
 
   useEffect(() => {
-    void loadProfile().then((profile) => setAlias((value) => value || (profile.alias === 'Explorador TEL' ? '' : profile.alias)));
+    void loadProfile().then((profile) => {
+      setAlias((value) => value || (profile.alias === DEFAULT_ALIAS ? '' : profile.alias));
+      setAvatar(profile.avatar);
+      setUnlocks({ level: profile.level, achievements: profile.unlockedAchievements });
+    });
   }, []);
 
   async function join() {
@@ -40,14 +47,18 @@ export default function RouteLandingScreen() {
       setError('El código tiene 6 caracteres (sin 0, 1, I ni O). Míralo en la pantalla del stand.');
       return;
     }
-    if (alias.trim().length < 2) {
-      setError('Escribe un alias de al menos 2 letras para el ranking.');
+    const problem = aliasProblem(alias);
+    if (problem) {
+      setError(problem);
       return;
     }
     setError(null);
     setJoining(true);
+    const clean = cleanAlias(alias);
+    // El alias y el avatar elegidos aquí quedan también en el perfil.
+    await updateIdentity({ alias: clean, avatar });
     const fingerprint = params.codigo && sanitizeJourneyCode(params.codigo) === code ? (params.k ?? null) : null;
-    await routeMember.join({ code, alias: alias.trim(), avatar, fingerprint });
+    await routeMember.join({ code, alias: clean, avatar, fingerprint });
     setJoining(false);
     router.push('/ruta/juego');
   }
@@ -119,21 +130,7 @@ export default function RouteLandingScreen() {
           <TelText variant="label" color="primary" style={styles.fieldLabel}>
             Elige tu avatar
           </TelText>
-          <View style={styles.avatars}>
-            {avatars.map((item, index) => (
-              <PressableScale
-                key={item.label}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: avatar === index }}
-                accessibilityLabel={`Avatar ${item.label}`}
-                onPress={() => setAvatar(index)}
-                haptic
-                style={[styles.avatarOption, avatar === index && styles.avatarSelected]}
-              >
-                <PlayerAvatar avatar={index} size={42} />
-              </PressableScale>
-            ))}
-          </View>
+          <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} />
 
           {error && (
             <TelText variant="caption" color="danger" accessibilityLiveRegion="polite">
@@ -166,6 +163,7 @@ export default function RouteLandingScreen() {
         <TelButton label="Jugar la ruta sin grupo" variant="subtle" icon="user" onPress={playSolo} />
         <TelButton label="Soy del equipo del stand" variant="ghost" icon="flag" size="sm" onPress={() => router.push('/ruta/stand')} />
       </Animated.View>
+      {!active && <AccountGate />}
     </Screen>
   );
 }
@@ -193,20 +191,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     fontSize: 17,
     color: colors.primary,
-  },
-  avatars: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  avatarOption: {
-    padding: 3,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  avatarSelected: {
-    borderColor: colors.secondary,
   },
   stops: {
     gap: spacing.sm,

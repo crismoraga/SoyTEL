@@ -4,8 +4,9 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { AppHeader } from '@/components/AppHeader';
 import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { Screen } from '@/components/Screen';
+import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getStationGame } from '@/features/stations/registry';
@@ -31,7 +32,7 @@ export default function StationPracticeScreen() {
       <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact onBack={() => router.back()} />}>
         <Celebration burstKey={great ? run.key + 1 : null} count={36} />
         <View style={styles.hero}>
-          <Telix size={150} expression={great ? 'celebrate' : 'happy'} pose={great ? 'celebrate' : 'wave'} />
+          <Rutix size={150} expression={great ? 'celebrate' : 'happy'} pose={great ? 'celebrate' : 'wave'} />
           <TelText variant="overline" color="accent" align="center">
             {info.title}
           </TelText>
@@ -90,6 +91,7 @@ export default function StationPracticeScreen() {
           }).then((outcome) => setResult({ score: value.score, outcome }));
         }}
       />
+      <AccountGate />
     </Screen>
   );
 }

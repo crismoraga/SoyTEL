@@ -13,23 +13,23 @@ import Animated, {
 import Svg from 'react-native-svg';
 import { GradientDefs, ShapeLayer } from '@/graphics/ShapeLayer';
 import {
-  telixBody,
-  telixExtras,
-  telixFace,
-  telixGradients,
-  telixSignalArcs,
-  type TelixExpression,
-  type TelixPose,
-} from '@/graphics/telix';
-import { useMotionEnabled } from '@/lib/motion';
+  rutixBody,
+  rutixExtras,
+  rutixFace,
+  rutixGradients,
+  rutixSignalArcs,
+  type RutixExpression,
+  type RutixPose,
+} from '@/graphics/rutix';
+import { useMotionLevel } from '@/lib/motion';
 import { motion } from '@/theme';
 
-export type { TelixExpression, TelixPose } from '@/graphics/telix';
+export type { RutixExpression, RutixPose } from '@/graphics/rutix';
 
-interface TelixProps {
+interface RutixProps {
   size?: number;
-  expression?: TelixExpression;
-  pose?: TelixPose;
+  expression?: RutixExpression;
+  pose?: RutixPose;
   signal?: number;
   animated?: boolean;
   // Cambiar este valor dispara un rebote de reacción (p. ej. tras una interacción).
@@ -38,10 +38,10 @@ interface TelixProps {
   accessibilityLabel?: string;
 }
 
-const BLINKING: TelixExpression[] = ['neutral', 'sad', 'alert', 'think'];
+const BLINKING: RutixExpression[] = ['neutral', 'sad', 'alert', 'think'];
 const VIEWBOX = '0 0 200 200';
 
-export function Telix({
+export function Rutix({
   size = 160,
   expression = 'neutral',
   pose = 'idle',
@@ -49,9 +49,12 @@ export function Telix({
   animated = true,
   reactKey,
   style,
-  accessibilityLabel = 'Telix, la mascota de SoyTEL',
-}: TelixProps) {
-  const motionEnabled = useMotionEnabled() && animated;
+  accessibilityLabel = 'Rutix, la mascota de SoyTEL',
+}: RutixProps) {
+  const level = useMotionLevel();
+  const motionEnabled = level !== 'minimal' && animated;
+  // Las ondas de señal laten solo con animaciones completas; flotar y parpadear es barato.
+  const pulseEnabled = level === 'full' && animated;
   const [blink, setBlink] = useState(false);
   const float = useSharedValue(0);
   const pulse = useSharedValue(0);
@@ -71,12 +74,17 @@ export function Telix({
       withSequence(withTiming(1, { duration: floatDuration, easing: ease }), withTiming(0, { duration: floatDuration, easing: ease })),
       -1,
     );
-    pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 900 })), -1);
+    if (pulseEnabled) {
+      pulse.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0, { duration: 900 })), -1);
+    } else {
+      cancelAnimation(pulse);
+      pulse.value = 0.6;
+    }
     return () => {
       cancelAnimation(float);
       cancelAnimation(pulse);
     };
-  }, [expression, float, motionEnabled, pulse]);
+  }, [expression, float, motionEnabled, pulse, pulseEnabled]);
 
   const canBlink = motionEnabled && BLINKING.includes(expression);
 
@@ -117,11 +125,11 @@ export function Telix({
   }));
   const signalStyle = useAnimatedStyle(() => ({ opacity: 0.35 + 0.65 * pulse.value }));
 
-  const body = useMemo(() => telixBody(pose, signal), [pose, signal]);
+  const body = useMemo(() => rutixBody(pose, signal), [pose, signal]);
   const eyesClosed = canBlink && blink;
-  const face = useMemo(() => telixFace(expression, eyesClosed), [eyesClosed, expression]);
-  const extras = useMemo(() => telixExtras(expression), [expression]);
-  const arcs = useMemo(() => telixSignalArcs(), []);
+  const face = useMemo(() => rutixFace(expression, eyesClosed), [eyesClosed, expression]);
+  const extras = useMemo(() => rutixExtras(expression), [expression]);
+  const arcs = useMemo(() => rutixSignalArcs(), []);
 
   return (
     <View
@@ -138,16 +146,16 @@ export function Telix({
           shadowStyle,
         ]}
       />
-      <Animated.View style={[StyleSheet.absoluteFill, bodyStyle]} pointerEvents="none">
+      <Animated.View style={[StyleSheet.absoluteFill, bodyStyle]} pointerEvents="none" renderToHardwareTextureAndroid={motionEnabled} shouldRasterizeIOS={motionEnabled}>
         {signal > 0 && (
-          <Animated.View style={[StyleSheet.absoluteFill, signalStyle]}>
+          <Animated.View style={[StyleSheet.absoluteFill, signalStyle]} renderToHardwareTextureAndroid={pulseEnabled}>
             <Svg width={size} height={size} viewBox={VIEWBOX}>
               <ShapeLayer shapes={arcs} />
             </Svg>
           </Animated.View>
         )}
         <Svg width={size} height={size} viewBox={VIEWBOX} style={StyleSheet.absoluteFill}>
-          <GradientDefs gradients={telixGradients} />
+          <GradientDefs gradients={rutixGradients} />
           <ShapeLayer shapes={body} />
           <ShapeLayer shapes={face} />
           <ShapeLayer shapes={extras} />

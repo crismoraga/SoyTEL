@@ -2,7 +2,9 @@
 export type AppEvent =
   | { type: 'achievement'; id: string }
   | { type: 'levelUp'; level: number }
-  | { type: 'toast'; title: string; body?: string };
+  | { type: 'toast'; title: string; body?: string }
+  // El progreso local cambió (partida, logro): la cuenta lo sincroniza en segundo plano.
+  | { type: 'progress' };
 
 type Listener = (event: AppEvent) => void;
 

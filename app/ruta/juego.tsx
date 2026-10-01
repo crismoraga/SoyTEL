@@ -8,7 +8,7 @@ import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { SignalSpinner } from '@/components/feedback/Loaders';
 import { ProgressBar } from '@/components/feedback/Progress';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
@@ -22,6 +22,7 @@ import { QuizQuestion, QuizReveal } from '@/features/route/QuizViews';
 import { Temple } from '@/features/route/Temple';
 import { getStationGame, stationGames } from '@/features/stations/registry';
 import type { StationGameResult } from '@/features/stations/kit';
+import { now as clockNow } from '@/lib/clock';
 import { feedbackHeavy } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
@@ -33,14 +34,26 @@ import type { CheckinStop, PillarId, PublicPlayer, RouteSnapshot, StationGameId 
 import { recordGameResult } from '@/storage/profile';
 import { colors, radius, spacing } from '@/theme';
 
-// Reloj del anfitrión (hora del stand) actualizado varias veces por segundo.
+// Reloj del anfitrión (hora del stand). Solo lo usan las vistas con cuenta regresiva, para que los
+// juegos no se vuelvan a dibujar en cada tic (importante en teléfonos de gama baja).
 function useHostClock(offset: number, intervalMs = 250): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => clockNow());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(timer);
   }, [intervalMs]);
   return now + offset;
+}
+
+// true desde el instante local indicado (un solo cambio, sin reloj que corra).
+function useTimeReached(target: number | null): boolean {
+  const [reached, setReached] = useState(() => target === null || clockNow() >= target);
+  useEffect(() => {
+    if (target === null) return;
+    const timer = setTimeout(() => setReached(true), Math.max(0, target - Date.now()));
+    return () => clearTimeout(timer);
+  }, [target]);
+  return reached;
 }
 
 export default function RouteGameScreen() {
@@ -49,7 +62,7 @@ export default function RouteGameScreen() {
   const view = useMemberView();
 
   if (view.status === 'idle') return <Redirect href="/ruta" />;
-  if (view.status === 'not-found' || view.status === 'rejected' || view.status === 'kicked') return <ProblemView view={view} />;
+  if (view.status === 'not-found' || view.status === 'rejected' || view.status === 'kicked' || view.status === 'conflict') return <ProblemView view={view} />;
   if (!view.snapshot || !view.me) return <ConnectingView view={view} />;
   return <LiveRoute view={view} snapshot={view.snapshot} me={view.me} />;
 }
@@ -78,7 +91,12 @@ function ConnectingView({ view }: { view: MemberView }) {
 
 function ProblemView({ view }: { view: MemberView }) {
   const copy =
-    view.status === 'not-found'
+    view.status === 'conflict'
+      ? {
+          title: 'Hay dos stands con ese código',
+          body: 'Por seguridad no te unimos a ninguno. Escanea el QR de la pantalla del stand (así verificamos que sea el correcto) o pide un código nuevo.',
+        }
+      : view.status === 'not-found'
       ? { title: 'No encontramos esa ruta', body: `Revisa el código ${view.code} en la pantalla del stand. Si el stand acaba de crearla, reintenta en unos segundos.` }
       : view.status === 'kicked'
         ? { title: 'Saliste de la ruta', body: 'El equipo del stand te quitó de esta ruta. Si fue un error, pídeles que te ayuden a entrar de nuevo.' }
@@ -90,14 +108,14 @@ function ProblemView({ view }: { view: MemberView }) {
   return (
     <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
-        <Telix size={150} expression="sad" />
+        <Rutix size={150} expression="sad" />
         <TelText variant="title" color="cream" align="center">
           {copy.title}
         </TelText>
         <TelText variant="body" color="accentSoft" align="center">
           {copy.body}
         </TelText>
-        {view.status === 'not-found' && <TelButton label="Reintentar" variant="cream" icon="refresh" onPress={() => routeMember.retryJoin()} />}
+        {(view.status === 'not-found' || view.status === 'conflict') && <TelButton label="Reintentar" variant="cream" icon="refresh" onPress={() => routeMember.retryJoin()} />}
         <TelButton
           label="Usar otro código"
           variant="outlineLight"
@@ -112,13 +130,11 @@ function ProblemView({ view }: { view: MemberView }) {
 }
 
 function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSnapshot; me: PublicPlayer }) {
-  const hostNow = useHostClock(view.offset);
   const [confirmLeave, setConfirmLeave] = useState(false);
   // Juegos en curso que deben sobrevivir al cambio de fase (si el stand avanza, se envía lo logrado).
   const [b215Started, setB215Started] = useState(false);
   const [activeProject, setActiveProject] = useState<PillarId | null>(null);
   const b215Pending = b215Started && me.games['red-b215'] === undefined;
-  const toLocal = (hostTime: number) => hostTime - view.offset;
 
   const header = (
     <AppHeader
@@ -140,7 +156,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
     return (
       <Screen tone="dark" backdrop="stars" header={header}>
         <View style={styles.center}>
-          <Telix size={130} expression="think" />
+          <Rutix size={130} expression="think" />
           <TelText variant="title" color="cream" align="center">
             ¿Salir de la ruta?
           </TelText>
@@ -159,18 +175,17 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
       header={header}
       snapshot={snapshot}
       me={me}
-      hostNow={hostNow}
-      toLocal={toLocal}
+      offset={view.offset}
       pending={view.pending}
       forceFinish={snapshot.phase !== 'play'}
       onStarted={() => setB215Started(true)}
     />
   );
-  const projects = <ProjectsView header={header} snapshot={snapshot} me={me} hostNow={hostNow} pending={view.pending} active={activeProject} onActive={setActiveProject} />;
+  const projects = <ProjectsView header={header} snapshot={snapshot} me={me} offset={view.offset} pending={view.pending} active={activeProject} onActive={setActiveProject} />;
 
   switch (snapshot.phase) {
     case 'lobby':
-      return <LobbyView header={header} snapshot={snapshot} me={me} solo={view.solo} />;
+      return <LobbyView header={header} snapshot={snapshot} me={me} solo={view.solo} verification={view.verification} warning={view.warning} />;
     case 'checkin':
       // Si alguien sigue en un proyecto de B213 cuando el grupo sale al pasillo, termina y envía su puntaje.
       if (activeProject && snapshot.stop === 'hall') return projects;
@@ -179,11 +194,11 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
       return b215;
     case 'results':
       if (b215Pending) return b215;
-      return <ResultsView header={header} snapshot={snapshot} me={me} hostNow={hostNow} />;
+      return <ResultsView header={header} snapshot={snapshot} me={me} offset={view.offset} />;
     case 'projects':
       return projects;
     case 'quiz':
-      return <QuizView header={header} snapshot={snapshot} me={me} hostNow={hostNow} />;
+      return <QuizView header={header} snapshot={snapshot} me={me} offset={view.offset} />;
     case 'podium':
       return <PodiumView header={header} snapshot={snapshot} me={me} solo={view.solo} />;
     default:
@@ -197,7 +212,7 @@ interface PhaseProps {
   me: PublicPlayer;
 }
 
-function LobbyView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean }) {
+function LobbyView({ header, snapshot, me, solo, verification, warning }: PhaseProps & { solo: boolean; verification: string | null; warning: MemberView['warning'] }) {
   const entering = useEntering();
   return (
     <Screen tone="dark" backdrop="signal" header={header}>
@@ -213,6 +228,25 @@ function LobbyView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean 
           Espera a que el equipo del stand inicie la ruta. Mantén esta pantalla abierta.
         </TelText>
       </Animated.View>
+      {warning === 'impostor' && (
+        <TelCard tone="danger" style={styles.verifyCard}>
+          <TelIcon name="alert" size={22} color={colors.dangerInk} />
+          <TelText variant="caption" color="dangerInk" style={styles.flex}>
+            Apareció otro dispositivo usando este código. Revisa que el código de verificación coincida con el del stand; si no, sal y escanea su QR.
+          </TelText>
+        </TelCard>
+      )}
+      {verification && (
+        <View style={styles.verifyRow} accessible accessibilityLabel={`Código de verificación del stand: ${verification.split('').join(' ')}`}>
+          <TelIcon name="shieldCheck" size={18} color={colors.accent} />
+          <TelText variant="caption" color="accentSoft" style={styles.flex}>
+            Verificación del stand
+          </TelText>
+          <TelText variant="heading" color="cream" style={styles.verifyCode}>
+            {verification}
+          </TelText>
+        </View>
+      )}
       <TelCard tone="dark" style={styles.gap}>
         <TelText variant="label" color="cream">
           Grupo · {snapshot.players.length} {snapshot.players.length === 1 ? 'participante' : 'participantes'}
@@ -316,21 +350,37 @@ function seedFor(code: string, playerId: string, game: string): number {
   return hash >>> 0;
 }
 
+function B215Countdown({ header, startsAt, offset }: { header: React.ReactNode; startsAt: number; offset: number }) {
+  const hostNow = useHostClock(offset, 250);
+  return (
+    <Screen tone="dark" backdrop="signal" header={header}>
+      <BigCountdown seconds={Math.ceil((startsAt - hostNow) / 1000)} label="Operación Red B215 comienza en" />
+        <TelCard tone="dark" style={styles.gap}>
+          <TelText variant="subtitle" color="cream">
+            Mira los equipos de la sala
+          </TelText>
+          <TelText variant="body" color="accentSoft">
+            Routers, switches y access points: en 2 minutos tendrás que armar la red, enrutar paquetes y ordenar los canales Wi-Fi.
+          </TelText>
+        </TelCard>
+    </Screen>
+  );
+}
+
 function B215View({
   header,
   snapshot,
   me,
-  hostNow,
-  toLocal,
+  offset,
   pending,
   forceFinish,
   onStarted,
-}: PhaseProps & { hostNow: number; toLocal: (time: number) => number; pending: string[]; forceFinish: boolean; onStarted: () => void }) {
+}: PhaseProps & { offset: number; pending: string[]; forceFinish: boolean; onStarted: () => void }) {
   const [done, setDone] = useState(false);
   const submitted = me.games['red-b215'] !== undefined;
-  const startsAt = snapshot.startsAt ?? hostNow;
-  const deadline = snapshot.deadline ?? hostNow;
-  const playing = !submitted && !done && hostNow >= startsAt;
+  const startsAt = snapshot.startsAt;
+  const started = useTimeReached(startsAt === null ? null : startsAt - offset);
+  const playing = !submitted && !done && started;
 
   useEffect(() => {
     if (playing) onStarted();
@@ -340,28 +390,14 @@ function B215View({
     return <WaitingView header={header} snapshot={snapshot} me={me} game="red-b215" sending={pending.includes('score:red-b215')} />;
   }
 
-  if (hostNow < startsAt) {
-    return (
-      <Screen tone="dark" backdrop="signal" header={header}>
-        <BigCountdown seconds={Math.ceil((startsAt - hostNow) / 1000)} label="Operación Red B215 comienza en" />
-        <TelCard tone="dark" style={styles.gap}>
-          <TelText variant="subtitle" color="cream">
-            Mira los equipos de la sala
-          </TelText>
-          <TelText variant="body" color="accentSoft">
-            Routers, switches y access points: en 2 minutos tendrás que armar la red, enrutar paquetes y ordenar los canales Wi-Fi.
-          </TelText>
-        </TelCard>
-      </Screen>
-    );
-  }
+  if (!started && startsAt !== null) return <B215Countdown header={header} startsAt={startsAt} offset={offset} />;
 
   return (
     <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
       <StationGameHost
         game="red-b215"
         seed={seedFor(snapshot.code, me.id, 'red-b215')}
-        deadline={forceFinish ? 1 : toLocal(deadline) - 2500}
+        deadline={forceFinish || snapshot.deadline === null ? 1 : snapshot.deadline - offset - 2500}
         onDone={(result) => {
           setDone(true);
           routeMember.submitScore('red-b215', result.score, result.accuracy);
@@ -377,7 +413,7 @@ function WaitingView({ header, snapshot, me, game, sending }: PhaseProps & { gam
   return (
     <Screen tone="dark" backdrop="orbits" header={header}>
       <View style={styles.hero}>
-        <Telix size={120} expression="happy" pose="wave" />
+        <Rutix size={120} expression="happy" pose="wave" />
         <TelText variant="title" color="cream" align="center">
           {sending ? 'Enviando tu puntaje…' : `¡${formatNumber(score ?? 0)} puntos!`}
         </TelText>
@@ -408,7 +444,8 @@ function WaitingView({ header, snapshot, me, game, sending }: PhaseProps & { gam
   );
 }
 
-function ResultsView({ header, snapshot, me, hostNow }: PhaseProps & { hostNow: number }) {
+function ResultsView({ header, snapshot, me, offset }: PhaseProps & { offset: number }) {
+  const hostNow = useHostClock(offset, 500);
   const ranking = [...snapshot.players].sort((a, b) => (b.games['red-b215'] ?? 0) - (a.games['red-b215'] ?? 0));
   const seconds = snapshot.deadline ? Math.max(0, Math.ceil((snapshot.deadline - hostNow) / 1000)) : 0;
   return (
@@ -443,20 +480,25 @@ function ResultsView({ header, snapshot, me, hostNow }: PhaseProps & { hostNow: 
   );
 }
 
+function MinutesLeft({ deadline, offset }: { deadline: number; offset: number }) {
+  const hostNow = useHostClock(offset, 10_000);
+  const minutes = Math.max(0, Math.ceil((deadline - hostNow) / 60000));
+  return <>{` Quedan ~${minutes} min.`}</>;
+}
+
 function ProjectsView({
   header,
   snapshot,
   me,
-  hostNow,
+  offset,
   pending,
   active,
   onActive,
-}: PhaseProps & { hostNow: number; pending: string[]; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
+}: PhaseProps & { offset: number; pending: string[]; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
   const [localDone, setLocalDone] = useState<Partial<Record<PillarId, boolean>>>({});
   const lit = Object.fromEntries(pillarIds.map((id) => [id, me.games[id] !== undefined || Boolean(localDone[id])])) as Record<PillarId, boolean>;
   const doneCount = pillarIds.filter((id) => lit[id]).length;
   const groupDone = snapshot.players.filter((player) => pillarIds.every((id) => player.games[id] !== undefined)).length;
-  const minutes = snapshot.deadline ? Math.max(0, Math.ceil((snapshot.deadline - hostNow) / 60000)) : null;
 
   if (active) {
     return (
@@ -487,7 +529,7 @@ function ProjectsView({
           {doneCount === 5
             ? `Esperando al grupo: ${groupDone} de ${snapshot.players.length} listos.`
             : 'Cada proyecto de la sala tiene su juego. Acércate al proyecto y juega en el orden que quieras.'}
-          {minutes !== null && doneCount < 5 ? ` Quedan ~${minutes} min.` : ''}
+          {snapshot.deadline !== null && doneCount < 5 ? <MinutesLeft deadline={snapshot.deadline} offset={offset} /> : null}
         </TelText>
       </View>
       <Temple lit={lit} />
@@ -539,7 +581,8 @@ function ProjectsView({
   );
 }
 
-function QuizView({ header, snapshot, me, hostNow }: PhaseProps & { hostNow: number }) {
+function QuizView({ header, snapshot, me, offset }: PhaseProps & { offset: number }) {
+  const hostNow = useHostClock(offset, 200);
   const quiz = snapshot.quiz;
   const [chosen, setChosen] = useState<{ index: number; option: number } | null>(null);
   if (!quiz) return null;
@@ -570,6 +613,8 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
   const [xp, setXp] = useState<number | null>(null);
   const recording = useRef(false);
   const top = me.rank <= 3 && snapshot.players.length > 1;
+  // La ruta solo cuenta como completada si la trivia terminó y respondiste en ella.
+  const completed = snapshot.completed && me.answeredCount > 0;
 
   useEffect(() => {
     if (recording.current) return;
@@ -584,11 +629,11 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
         accuracy: snapshot.quiz?.total ? me.quizCorrect / snapshot.quiz.total : me.quizCorrect / 10,
         durationSeconds: 1200,
         completedAt: new Date().toISOString(),
-        metadata: { rank: me.rank, players: snapshot.players.length, pillars: pillarsDone, solo, code: snapshot.code },
+        metadata: { rank: me.rank, players: snapshot.players.length, pillars: pillarsDone, solo, code: snapshot.code, completed },
       });
       setXp(outcome.xpGained);
     })();
-  }, [me, snapshot, solo]);
+  }, [completed, me, snapshot, solo]);
 
   const winners = snapshot.players.slice(0, 3).map((player) => player.alias);
 
@@ -618,6 +663,14 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
           </TelText>
         </View>
       </TelCard>
+      {!completed && (
+        <TelCard tone="dark" style={styles.verifyCard}>
+          <TelIcon name="info" size={20} color={colors.accentSoft} />
+          <TelText variant="caption" color="accentSoft" style={styles.flex}>
+            El stand cerró la ruta antes de terminar la trivia: tus puntos suman XP, pero no cuenta como ruta completada para los logros.
+          </TelText>
+        </TelCard>
+      )}
       {snapshot.players.length > 1 && <Leaderboard players={snapshot.players} meId={me.id} />}
       <View style={styles.gap}>
         <TelButton
@@ -728,5 +781,22 @@ const styles = StyleSheet.create({
   },
   footerSpace: {
     paddingBottom: spacing.md,
+  },
+  verifyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  verifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  verifyCode: {
+    letterSpacing: 4,
   },
 });

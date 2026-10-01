@@ -1,19 +1,22 @@
 import { brokerUrls } from '@/realtime/config';
 import {
+  deriveRouteSecrets,
   keyFingerprint,
   newBoxKeys,
   openFrom,
   openShared,
   randomHex,
-  roomIdFor,
   sealShared,
   sealTo,
+  verificationCode,
   verifySealed,
+  type RouteSecrets,
 } from '@/realtime/crypto';
 import { HostController } from './host';
 import { LocalBus, LocalRouteLink, MqttRouteLink, type LinkStatus, type RouteLink } from './link';
 import {
   brokerIndexForCode,
+  openHello,
   parseJson,
   routeTopics,
   type ActionPayload,
@@ -26,7 +29,7 @@ import {
 import { clearMember, loadMember, saveMember, type MemberCredentials } from './storage';
 import type { CheckinStop, PlayerAction, PublicPlayer, RouteSettings, RouteSnapshot, StationGameId } from './types';
 
-export type MemberStatus = 'idle' | 'connecting' | 'joining' | 'joined' | 'rejected' | 'not-found' | 'kicked';
+export type MemberStatus = 'idle' | 'connecting' | 'joining' | 'joined' | 'rejected' | 'not-found' | 'kicked' | 'conflict';
 
 export type RejectReason = 'full' | 'finished' | 'taken' | 'kicked';
 
@@ -42,10 +45,17 @@ export interface MemberView {
   rejection: RejectReason | null;
   solo: boolean;
   pending: string[];
+  // Código de 4 caracteres del stand al que se unió (debe coincidir con el de la pantalla del stand).
+  verification: string | null;
+  // Apareció otro "stand" con el mismo código después de unirse.
+  warning: 'impostor' | null;
 }
 
 const JOIN_RETRY_MS = 3000;
 const HELLO_WAIT_MS = 9000;
+// Al unirse con el código escrito (sin QR) se escuchan los saludos un momento antes de confiar en uno:
+// si aparecen dos stands distintos con el mismo código, no se elige ninguno.
+const HELLO_SETTLE_MS = 2000;
 const STALE_MS = 30_000;
 const HEARTBEAT_MS = 10_000;
 const RETRY_MS = 2500;
@@ -94,7 +104,11 @@ function isResolved(action: PlayerAction, snap: RouteSnapshot, me: PublicPlayer 
 export class MemberController {
   private credentials: MemberCredentials | null = null;
   private link: RouteLink | null = null;
+  private secrets: RouteSecrets | null = null;
   private topics: RouteTopics | null = null;
+  private candidates = new Map<string, HelloMessage>();
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
+  private warning: MemberView['warning'] = null;
   private listeners = new Set<() => void>();
   private view: MemberView = MemberController.emptyView();
   private status: MemberStatus = 'idle';
@@ -113,7 +127,21 @@ export class MemberController {
   private restored = false;
 
   static emptyView(): MemberView {
-    return { status: 'idle', code: null, alias: '', avatar: 0, snapshot: null, me: null, offset: 0, link: 'idle', rejection: null, solo: false, pending: [] };
+    return {
+      status: 'idle',
+      code: null,
+      alias: '',
+      avatar: 0,
+      snapshot: null,
+      me: null,
+      offset: 0,
+      link: 'idle',
+      rejection: null,
+      solo: false,
+      pending: [],
+      verification: null,
+      warning: null,
+    };
   }
 
   subscribe(listener: () => void): () => void {
@@ -159,6 +187,7 @@ export class MemberController {
       solo: false,
     };
     this.rejection = null;
+    this.warning = null;
     this.status = 'joining';
     await saveMember(this.credentials);
     this.connect(options.link);
@@ -176,7 +205,8 @@ export class MemberController {
       boxKeys: newBoxKeys(),
       alias: options.alias,
       avatar: options.avatar,
-      fingerprint: null,
+      // La ruta individual vive en este mismo teléfono: se confía directamente en su llave.
+      fingerprint: host.fingerprint,
       brokerIndex: 0,
       hostBox: null,
       hostSign: null,
@@ -201,7 +231,23 @@ export class MemberController {
     this.pending.clear();
     this.status = 'idle';
     this.rejection = null;
+    this.warning = null;
     if (!wasSolo) await clearMember();
+    this.refresh();
+  }
+
+  // Detiene todo sin avisar al anfitrión ni tocar el almacenamiento (borrado de datos del dispositivo).
+  reset(): void {
+    this.disconnect();
+    this.soloHost?.stop();
+    this.soloHost = null;
+    this.credentials = null;
+    this.snapshot = null;
+    this.pending.clear();
+    this.status = 'idle';
+    this.rejection = null;
+    this.warning = null;
+    this.restored = false;
     this.refresh();
   }
 
@@ -225,6 +271,7 @@ export class MemberController {
     if (!this.credentials) return;
     this.brokerAttempts = 0;
     this.status = 'joining';
+    this.rejection = null;
     this.disconnect();
     this.connect();
   }
@@ -232,7 +279,8 @@ export class MemberController {
   private connect(localLink?: RouteLink) {
     const credentials = this.credentials;
     if (!credentials) return;
-    this.topics = routeTopics(roomIdFor(credentials.code));
+    this.secrets = deriveRouteSecrets(credentials.code);
+    this.topics = routeTopics(this.secrets.roomId);
     this.link = localLink ?? new MqttRouteLink(credentials.clientId, credentials.brokerIndex, false);
     const link = this.link;
     const topics = this.topics;
@@ -261,6 +309,9 @@ export class MemberController {
   private disconnect() {
     this.timers.forEach((timer) => clearInterval(timer));
     this.timers = [];
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.candidates.clear();
     this.cleanups.forEach((cleanup) => cleanup());
     this.cleanups = [];
     this.link?.stop();
@@ -274,7 +325,7 @@ export class MemberController {
     const now = Date.now();
     const joined = Boolean(credentials.sessionKey);
 
-    if (!joined && this.status !== 'rejected' && this.status !== 'not-found') {
+    if (!joined && this.status !== 'rejected' && this.status !== 'not-found' && this.status !== 'conflict') {
       // Sin saludo del anfitrión: probar otro broker; tras dar la vuelta completa, no existe la ruta.
       if (!credentials.hostBox && now - this.helloWaitStartedAt > HELLO_WAIT_MS) {
         this.brokerAttempts += 1;
@@ -318,17 +369,60 @@ export class MemberController {
 
   private onHello(text: string) {
     const credentials = this.credentials;
-    const hello = parseJson<HelloMessage>(text);
-    if (!credentials || !hello || hello.kind !== 'soytel-route' || !hello.box || !hello.sign) return;
-    if (credentials.fingerprint && keyFingerprint(hello.sign) !== credentials.fingerprint) return;
-    // Las llaves del anfitrión quedan fijadas desde el primer saludo válido.
-    if (credentials.hostSign && credentials.hostSign !== hello.sign) return;
-    const first = !credentials.hostBox;
+    const secrets = this.secrets;
+    if (!credentials || !secrets) return;
+    const hello = openHello(text, secrets.helloKey);
+    if (!hello) return;
+    // Con el QR se conoce la huella del stand: solo vale ese saludo.
+    if (credentials.fingerprint && keyFingerprint(hello.sign) !== credentials.fingerprint) {
+      if (credentials.hostSign) this.flagImpostor();
+      return;
+    }
+    // Las llaves del anfitrión quedan fijadas desde el primer saludo aceptado.
+    if (credentials.hostSign) {
+      if (credentials.hostSign !== hello.sign) this.flagImpostor();
+      else if (!credentials.sessionKey) this.sendJoin();
+      return;
+    }
+    if (credentials.fingerprint) {
+      this.pin(hello);
+      return;
+    }
+    this.candidates.set(hello.sign, hello);
+    if (!this.settleTimer) this.settleTimer = setTimeout(() => this.settle(), HELLO_SETTLE_MS);
+  }
+
+  private settle() {
+    this.settleTimer = null;
+    const credentials = this.credentials;
+    if (!credentials || credentials.hostSign) return;
+    const options = [...this.candidates.values()];
+    this.candidates.clear();
+    if (options.length === 1) {
+      this.pin(options[0]);
+      return;
+    }
+    if (options.length > 1) {
+      this.status = 'conflict';
+      this.refresh();
+    }
+  }
+
+  private pin(hello: HelloMessage) {
+    const credentials = this.credentials;
+    if (!credentials) return;
     credentials.hostBox = hello.box;
     credentials.hostSign = hello.sign;
     this.brokerAttempts = 0;
-    if (first) void this.persist();
+    void this.persist();
     if (!credentials.sessionKey) this.sendJoin();
+    this.refresh();
+  }
+
+  private flagImpostor() {
+    if (this.warning === 'impostor') return;
+    this.warning = 'impostor';
+    this.refresh();
   }
 
   private sendJoin() {
@@ -427,6 +521,8 @@ export class MemberController {
       rejection: this.rejection,
       solo: Boolean(credentials?.solo),
       pending: [...this.pending.keys()],
+      verification: credentials?.hostSign && !credentials.solo ? verificationCode(credentials.hostSign) : null,
+      warning: this.warning,
     };
     this.listeners.forEach((listener) => listener());
   }

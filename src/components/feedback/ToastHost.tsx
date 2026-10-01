@@ -40,7 +40,10 @@ function toToast(event: AppEvent): Toast | null {
   if (event.type === 'levelUp') {
     return { id: sequence, kicker: `Nivel ${event.level}`, title: '¡Subiste de nivel!', body: `Ahora eres ${levelTitle(event.level)}.`, glyph: 'rocket' };
   }
-  return { id: sequence, kicker: 'SoyTEL', title: event.title, body: event.body, glyph: 'sparkle' };
+  if (event.type === 'toast') {
+    return { id: sequence, kicker: 'SoyTEL', title: event.title, body: event.body, glyph: 'sparkle' };
+  }
+  return null;
 }
 
 // Avisos flotantes (logros y subidas de nivel) que aparecen desde arriba sobre cualquier pantalla.

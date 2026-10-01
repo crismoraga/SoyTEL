@@ -1,5 +1,6 @@
 import { brokerAuth, brokerUrls, webAppUrl } from '@/realtime/config';
 import {
+  deriveRouteSecrets,
   keyFingerprint,
   newBoxKeys,
   newSessionKey,
@@ -7,19 +8,22 @@ import {
   openFrom,
   openShared,
   randomHex,
-  roomIdFor,
   sealShared,
   sealTo,
   signSealed,
+  verificationCode,
+  type RouteSecrets,
 } from '@/realtime/crypto';
 import { MqttClient } from '@/realtime/mqttClient';
 import { addPlayer, applyHostAction, applyPlayerAction, createRoute, DEFAULT_SETTINGS, snapshot, tick } from './engine';
 import { LocalRouteLink, MqttRouteLink, type LinkStatus, type LocalBus, type RouteLink } from './link';
 import {
   generateRouteCode,
+  openHello,
   parseJson,
   PROTOCOL_VERSION,
   routeTopics,
+  sealHello,
   topicTail,
   type ActionEnvelope,
   type ActionPayload,
@@ -30,7 +34,7 @@ import {
   type RouteTopics,
   type StateEnvelope,
 } from './protocol';
-import { readLease, saveHost, writeLease, type HostRecord } from './storage';
+import { acquireHostLock, saveHost, type HostLock, type HostRecord } from './storage';
 import type { HostAction, RouteSettings, RouteSnapshot, RouteState } from './types';
 
 export interface HostView {
@@ -41,14 +45,21 @@ export interface HostView {
   joinUrl: string;
   readOnly: boolean;
   solo: boolean;
+  // Código corto que el teléfono del participante muestra para confirmar que se unió a este stand.
+  verification: string;
+  // Otro dispositivo publicó un saludo con este código hace poco (posible suplantación).
+  impostor: boolean;
 }
 
 const TICK_MS = 500;
 const HEARTBEAT_MS = 5000;
-const HELLO_MS = 30_000;
-const LEASE_MS = 5000;
-const LEASE_STALE_MS = 16_000;
+const HELLO_MS = 15_000;
 const FAILOVER_MS = 25_000;
+const IMPOSTOR_WINDOW_MS = 120_000;
+const REASSERT_MS = 2000;
+// Mientras haya un impostor activo, el saludo propio se repite seguido: así quien se une con el código
+// escrito ve ambos saludos dentro de su ventana de espera y no se une a ninguno.
+const IMPOSTOR_HELLO_MS = 1500;
 
 // Identificador de esta pestaña/proceso para la concesión de la ruta.
 const OWNER = randomHex(6);
@@ -87,7 +98,11 @@ export class HostController {
   readonly solo: boolean;
   private record: HostRecord;
   private link: RouteLink;
+  private secrets: RouteSecrets;
   private topics: RouteTopics;
+  private lock: HostLock | null = null;
+  private impostorAt = 0;
+  private lastReassertAt = 0;
   private listeners = new Set<() => void>();
   private view: HostView;
   private timers: ReturnType<typeof setInterval>[] = [];
@@ -107,7 +122,8 @@ export class HostController {
     this.link = link;
     this.solo = Boolean(options.solo);
     this.autoStart = Boolean(options.autoStart);
-    this.topics = routeTopics(roomIdFor(record.code));
+    this.secrets = deriveRouteSecrets(record.code);
+    this.topics = routeTopics(this.secrets.roomId);
     this.view = this.buildView();
   }
 
@@ -157,21 +173,27 @@ export class HostController {
     return HostController.createWithLink(new LocalRouteLink(bus), settings, { solo: true, autoStart: true });
   }
 
+  // Huella de la llave de firma (va en el QR; el participante solo acepta el saludo que calza).
+  get fingerprint(): string {
+    return keyFingerprint(this.record.signKeys.publicKey);
+  }
+
   get joinUrl(): string {
-    return `${webAppUrl}/ruta?codigo=${this.code}&k=${keyFingerprint(this.record.signKeys.publicKey)}`;
+    return `${webAppUrl}/ruta?codigo=${this.code}&k=${this.fingerprint}`;
   }
 
   async start(force = false): Promise<void> {
     if (this.running) return;
     if (!this.solo) {
-      const lease = await readLease(this.code);
-      if (!force && lease && lease.owner !== OWNER && Date.now() - lease.at < LEASE_STALE_MS) {
+      // Candado exclusivo: si otra pestaña conduce la ruta, esta queda en solo lectura.
+      const lock = await acquireHostLock(this.code, OWNER, { steal: force, onLost: () => this.loseControl() });
+      if (!lock) {
         this.readOnly = true;
         this.refresh();
         return;
       }
+      this.lock = lock;
       this.readOnly = false;
-      await writeLease(this.code, OWNER, Date.now());
     }
     this.running = true;
     this.cleanups.push(
@@ -185,21 +207,23 @@ export class HostController {
     );
     this.link.subscribe(this.topics.joinAll);
     this.link.subscribe(this.topics.upAll);
+    this.link.subscribe(this.topics.hello);
     this.link.start();
     this.timers.push(
       setInterval(() => {
         this.checkFailover();
+        if (this.impostorActive() && Date.now() - this.lastHelloAt > IMPOSTOR_HELLO_MS) this.publishHello();
         this.setState(tick(this.record.state, Date.now()));
       }, TICK_MS),
     );
     this.timers.push(setInterval(() => this.publishState(true), HEARTBEAT_MS));
-    if (!this.solo) this.timers.push(setInterval(() => void writeLease(this.code, OWNER, Date.now()), LEASE_MS));
     this.publishHello();
     this.publishState(true);
     this.refresh();
   }
 
-  stop(): void {
+  stop(save = true): void {
+    const wasRunning = this.running;
     this.running = false;
     this.timers.forEach((timer) => clearInterval(timer));
     this.timers = [];
@@ -209,8 +233,22 @@ export class HostController {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     this.publishTimer = null;
     this.persistTimer = null;
-    if (!this.solo) void saveHost({ ...this.record, savedAt: Date.now() });
+    if (save && wasRunning && !this.solo) void saveHost({ ...this.record, savedAt: Date.now() });
+    this.lock?.release();
+    this.lock = null;
     this.link.stop();
+  }
+
+  private impostorActive(): boolean {
+    return this.impostorAt > 0 && Date.now() - this.impostorAt < IMPOSTOR_WINDOW_MS;
+  }
+
+  // Otra pestaña tomó el control a la fuerza: esta deja de publicar y no pisa su estado.
+  private loseControl() {
+    this.lock = null;
+    this.stop(false);
+    this.readOnly = true;
+    this.refresh();
   }
 
   nudge(): void {
@@ -241,6 +279,8 @@ export class HostController {
       joinUrl: this.joinUrl,
       readOnly: this.readOnly,
       solo: this.solo,
+      verification: verificationCode(this.record.signKeys.publicKey),
+      impostor: this.impostorActive(),
     };
   }
 
@@ -292,7 +332,22 @@ export class HostController {
       at: Date.now(),
     };
     this.lastHelloAt = hello.at;
-    this.link.publish(this.topics.hello, JSON.stringify(hello), { retain: true });
+    const envelope = sealHello(hello, this.secrets.helloKey, this.record.signKeys.secretKey);
+    this.link.publish(this.topics.hello, JSON.stringify(envelope), { retain: true });
+  }
+
+  // Un saludo con otras llaves en esta sala: alguien intenta hacerse pasar por el stand.
+  // Se vuelve a publicar el saludo propio (queda como el retenido) y se avisa en pantalla.
+  private onForeignHello(text: string) {
+    const hello = openHello(text, this.secrets.helloKey);
+    if (!hello || hello.sign === this.record.signKeys.publicKey) return;
+    const now = Date.now();
+    this.impostorAt = now;
+    if (now - this.lastReassertAt > REASSERT_MS) {
+      this.lastReassertAt = now;
+      this.publishHello();
+    }
+    this.refresh();
   }
 
   private schedulePublish() {
@@ -324,6 +379,10 @@ export class HostController {
   }
 
   private onMessage(topic: string, text: string) {
+    if (topic === this.topics.hello) {
+      this.onForeignHello(text);
+      return;
+    }
     const clientId = topicTail(topic);
     if (!/^[a-z0-9-]{4,40}$/i.test(clientId)) return;
     if (topic.startsWith(this.topics.joinAll.slice(0, -1))) this.onJoin(clientId, text);

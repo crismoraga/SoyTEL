@@ -21,7 +21,7 @@ type Filter = 'all' | InboxKind;
 const kindStyle: Record<InboxKind, { label: string; icon: IconName; tint: [string, string] }> = {
   logro: { label: 'LOGRO', icon: 'trophy', tint: [colors.successSoft, colors.successInk] },
   progreso: { label: 'PROGRESO', icon: 'rocket', tint: [colors.highlight, colors.secondary] },
-  telix: { label: 'TELIX', icon: 'robot', tint: [colors.cream, colors.warningInk] },
+  rutix: { label: 'RUTIX', icon: 'robot', tint: [colors.cream, colors.warningInk] },
   dato: { label: 'DATO', icon: 'lightbulb', tint: [colors.primary, colors.cream] },
   aviso: { label: 'AVISO', icon: 'megaphone', tint: [colors.primary, colors.cream] },
 };
@@ -74,7 +74,7 @@ export default function InboxScreen() {
               { id: 'all', label: 'Todas' },
               { id: 'logro', label: 'Logros' },
               { id: 'progreso', label: 'Progreso' },
-              { id: 'telix', label: 'Telix' },
+              { id: 'rutix', label: 'Rutix' },
               { id: 'dato', label: 'Datos' },
               { id: 'aviso', label: 'Avisos' },
             ]}
@@ -92,7 +92,7 @@ export default function InboxScreen() {
         <EmptyState
           illustration="inbox"
           title="Nada por aquí todavía"
-          body="Te avisaremos cuando ganes medallas, subas de nivel o Telix te necesite."
+          body="Te avisaremos cuando ganes medallas, subas de nivel o Rutix te necesite."
           actionLabel="Ir a jugar"
           onAction={() => router.navigate('/games')}
         />

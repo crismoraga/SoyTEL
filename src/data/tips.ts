@@ -6,7 +6,7 @@ export interface Tip {
   text: string;
 }
 
-// Datos curiosos breves para el aviso diario y para Telix.
+// Datos curiosos breves para el aviso diario y para Rutix.
 export const tips: Tip[] = [
   { id: 'fiber-light', area: 'teleco', text: 'La fibra óptica transmite datos con pulsos de luz que viajan por un hilo de vidrio más delgado que un cabello.' },
   { id: 'arpanet-lo', area: 'redes', text: 'El primer mensaje de ARPANET, en 1969, fue «LO»: el sistema se cayó antes de completar la palabra «LOGIN».' },

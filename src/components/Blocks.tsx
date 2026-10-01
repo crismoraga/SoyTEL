@@ -82,10 +82,10 @@ export function StatTile({ icon, value, label, tone = 'light', accent = 'seconda
       <View style={[styles.statIcon, { backgroundColor: dark ? colors.primary : colors.highlight }]}>
         <TelIcon name={icon} size={18} color={dark ? colors.accent : colors[accent]} />
       </View>
-      <TelText variant="heading" color={dark ? 'cream' : 'primary'} tabular>
+      <TelText variant={String(value).length >= 5 ? 'subtitle' : 'heading'} color={dark ? 'cream' : 'primary'} tabular numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </TelText>
-      <TelText variant="small" color={dark ? 'accentSoft' : 'muted'}>
+      <TelText variant="small" color={dark ? 'accentSoft' : 'muted'} numberOfLines={1}>
         {label}
       </TelText>
     </View>

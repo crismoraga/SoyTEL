@@ -19,12 +19,13 @@ const { spacing, radius } = src('theme/spacing');
 const { shadows, motion } = src('theme/effects');
 const { icons } = src('graphics/icons');
 const { medallionDrawing, medallionGlyphs } = src('graphics/medallions');
-const { telixDrawing, telixExpressions } = src('graphics/telix');
+const { rutixDrawing, rutixExpressions } = src('graphics/rutix');
 const { illustrationDrawing, illustrationNames } = src('graphics/illustrations');
 const { patternPreviews } = src('graphics/patterns');
 const { campusMapDrawing } = src('graphics/campusMap');
 const { templeDrawing } = src('graphics/temple');
-const { pillars, avatars, answerStyles, routeStops } = src('route/content');
+const { pillars, answerStyles, routeStops } = src('route/content');
+const avatars = src('data/avatars').avatarCatalog.filter((item) => item.icon !== 'rutix');
 const { create: createQr } = require('qrcode');
 
 const project = path.join(outDir, 'project');
@@ -58,9 +59,9 @@ const colorUsage = {
   accent: `Celeste de acento: arco de las medallas, ondas de señal, barras de tiempo, botón «Siguiente». Como texto solo sobre \`primary\` (${on('accent', 'primary')}).`,
   accentSoft: `Celeste claro: textos secundarios sobre \`primary\` (${on('accentSoft', 'primary')}) y botón secundario.`,
   highlight: 'Tinte celeste para píldora de pestaña activa, chips y fondos de íconos en tarjetas claras.',
-  cream: `Crema de la marca: texto principal sobre azul (${on('cream', 'primary')}), botón CTA en pantallas oscuras, anillo de medallas y cuerpo de Telix.`,
+  cream: `Crema de la marca: texto principal sobre azul (${on('cream', 'primary')}), botón CTA en pantallas oscuras, anillo de medallas y cuerpo de Rutix.`,
   creamSoft: 'Crema muy clara para zonas de lectura sobre crema.',
-  creamShade: 'Sombra del crema (extremidades de Telix, cara lateral de paquetes 3D).',
+  creamShade: 'Sombra del crema (extremidades de Rutix, cara lateral de paquetes 3D).',
   slate: 'Azul grisáceo de apoyo: estados deshabilitados, placeholders sobre fondo oscuro, alternativas atenuadas.',
   paper: 'Fondo de las pantallas claras (pestañas, perfil, prácticas).',
   surface: 'Tarjetas y listas sobre `paper`, siempre con borde `border`.',
@@ -74,14 +75,14 @@ const colorUsage = {
   successSoft: 'Fondo de paneles de acierto y etiquetas «Completada».',
   successInk: `Texto sobre \`successSoft\` (${on('successInk', 'successSoft')}).`,
   warning: 'Advertencia y monedas del concurso. No usar para texto sobre fondos claros.',
-  warningSoft: 'Fondo de etiquetas de advertencia o de Telix.',
+  warningSoft: 'Fondo de etiquetas de advertencia o de Rutix.',
   warningInk: `Texto sobre \`warningSoft\` y \`cream\` (${on('warningInk', 'cream')}).`,
   danger: 'Error, vida perdida, punto de aviso sin leer y acciones destructivas (con ícono).',
   dangerSoft: 'Fondo de paneles de error.',
   dangerInk: `Texto sobre \`dangerSoft\` (${on('dangerInk', 'dangerSoft')}).`,
   info: 'Información neutra (reservado; la app prefiere `secondary`).',
-  white: 'Blanco puro: texto sobre `danger` y `success`, brillos de Telix.',
-  black: 'Solo para sombras (proyección de Telix).',
+  white: 'Blanco puro: texto sobre `danger` y `success`, brillos de Rutix.',
+  black: 'Solo para sombras (proyección de Rutix).',
   overlay: 'Velo azul sobre imágenes para dar legibilidad al texto.',
 };
 
@@ -233,7 +234,7 @@ const tokens = {
       base: 'Transiciones de contenido.',
       slow: 'Entradas de tarjetas y textos.',
       slower: 'Revelaciones y celebraciones.',
-      ambient: 'Movimiento ambiental (flotar de Telix, titilar de estrellas).',
+      ambient: 'Movimiento ambiental (flotar de Rutix, titilar de estrellas).',
     }[name] })),
   },
 };
@@ -250,9 +251,9 @@ Object.keys(medallionGlyphs).forEach((glyph) => addAsset('Medallas', `${glyph}.s
 ['bronce', 'plata', 'oro', 'platino'].forEach((tier) => addAsset('Medallas', `rareza-${tier}.svg`, drawingToSvg(medallionDrawing({ glyph: 'star', tier, ribbon: true }), { width: 240, height: 292 })));
 addAsset('Medallas', 'estado-progreso.svg', drawingToSvg(medallionDrawing({ glyph: 'trophy', state: 'progress', progress: 0.6 }), { width: 240 }));
 addAsset('Medallas', 'estado-bloqueado.svg', drawingToSvg(medallionDrawing({ glyph: 'trophy', state: 'locked' }), { width: 240 }));
-const telixPoses = { celebrate: 'celebrate', happy: 'wave', think: 'think' };
-const telixSignal = { sad: 1, sleepy: 2, sleep: 1, celebrate: 4, happy: 4, love: 4 };
-telixExpressions.forEach((expression) => addAsset('Telix', `telix-${expression}.svg`, drawingToSvg(telixDrawing({ expression, pose: telixPoses[expression] || 'idle', signal: telixSignal[expression] ?? 3 }), { width: 400 })));
+const rutixPoses = { celebrate: 'celebrate', happy: 'wave', think: 'think' };
+const rutixSignal = { sad: 1, sleepy: 2, sleep: 1, celebrate: 4, happy: 4, love: 4 };
+rutixExpressions.forEach((expression) => addAsset('Rutix', `rutix-${expression}.svg`, drawingToSvg(rutixDrawing({ expression, pose: rutixPoses[expression] || 'idle', signal: rutixSignal[expression] ?? 3 }), { width: 400 })));
 illustrationNames.forEach((name) => {
   addAsset('Ilustraciones', `${name}.svg`, drawingToSvg(illustrationDrawing(name), { width: 480, height: 400 }));
   addAsset('Ilustraciones', `${name}-oscuro.svg`, drawingToSvg(illustrationDrawing(name, 'dark'), { width: 480, height: 400 }));
@@ -296,7 +297,7 @@ const groupReadmes = {
   Marca: '# Marca\n\nArte rasterizado de la identidad Telemática USM, extraído de las hojas de marca y del export de Claude Design.\n\n- `logo-app.png` — logo en formato ícono de app (cuadrado redondeado). Úsalo con esquinas de 24% y sombra `shadow-logo` sobre `primary`.\n- `badge.png` — insignia circular recortada (fondo transparente); es la imagen del splash nativo.\n- `fondo-bienvenida.jpg` — fondo de la pantalla de bienvenida, siempre con velo azul encima.\n- `arte-onboarding.jpg` — ilustración de la primera lámina del onboarding.\n- `banner.jpg` — pieza horizontal para comunicación.\n- `spot-*.jpg` — ilustraciones puntuales con fondo blanco para tarjetas de carrusel (recorte `cover`).\n',
   Iconos: '# Íconos\n\nGrilla de 24×24, trazo 2, extremos y uniones redondeadas (estilo de las pantallas de Claude Design). En la app se dibujan con `TelIcon` y `currentColor`; estos SVG exportados usan tinta `primary` (#0B2D45) porque `<img>` no hereda color. Tamaños: 16–18 en etiquetas, 20–24 en filas y botones, 26–34 en tarjetas de juego. `heartSolid` y `starSolid` son las únicas variantes rellenas.\n',
   Medallas: '# Medallas\n\nMedallones de la marca: anillo crema, disco azul noche, arco celeste, estrellas de cuatro puntas y un glifo sólido crema. `medallionDrawing({ glyph, tier, state, progress, ribbon })` genera todas las variantes: rareza por anillo (`bronce`, `plata`, `oro`, `platino`, o `crema` por defecto) y estado (`unlocked`, `progress` con arco parcial, `locked` en gris con candado). Úsalas para logros, áreas de la carrera, estaciones y accesos del Inicio. Tamaños: 44–64 en listas, 76 en grillas, 88–132 en detalle.\n',
-  Telix: '# Telix\n\nMascota de SoyTEL: robot-antena con pantalla por cara y barras de señal en el pecho que muestran su ánimo (0–4). Expresiones: `neutral`, `happy`, `celebrate`, `love`, `think`, `alert`, `sleepy`, `sad`, `sleep`; poses: `idle`, `wave`, `celebrate`, `think`. En la app flota, parpadea y su antena pulsa (componente `Telix`). Úsalo como guía y reacción emocional, nunca como decoración repetida en una misma pantalla.\n',
+  Rutix: '# Rutix\n\nMascota de SoyTEL: robot-antena con pantalla por cara y barras de señal en el pecho que muestran su ánimo (0–4). Expresiones: `neutral`, `happy`, `celebrate`, `love`, `think`, `alert`, `sleepy`, `sad`, `sleep`; poses: `idle`, `wave`, `celebrate`, `think`. En la app flota, parpadea y su antena pulsa (componente `Rutix`). Úsalo como guía y reacción emocional, nunca como decoración repetida en una misma pantalla.\n',
   Ilustraciones: '# Ilustraciones\n\nIlustraciones planas en el estilo de «Ilustraciones rápidas» de la marca, generadas desde una paleta: versión clara (fondo `highlight`) para pantallas claras y `-oscuro` para pantallas azules. `connect`, `burst`, `campus`, `globe`, `trophy`, `inbox` (estado vacío de avisos), `quiz`, `route`, `offline` (error), `career`. `mapa-campus.svg` es el mapa del modo historia.\n',
   Ruta: '# Ruta Telemática\n\nGráficos del modo en vivo (stand → B215 → B213 → pasillo). `templo-*`: el Templo de Telemática de Didactic-Tel; cada columna toma el color de su pilar cuando el participante completa el juego del proyecto (Datos, Software, Redes, Telecomunicaciones, Hardware) y con los cinco se enciende el frontón. `avatar-*`: los 8 avatares que elige cada participante (círculo de color con anillo crema e ícono en tinta primaria). `respuesta-*`: color y forma de las cuatro alternativas de la trivia final, estilo Kahoot (triángulo, rombo, círculo, cuadrado), para que se distingan también sin color.\n',
   Patrones: '# Patrones\n\nFondos decorativos de las pantallas oscuras (`BrandBackdrop`): `estrellas` (por defecto), `red` (nodos conectados), `senal` (ondas desde una esquina) y `orbitas` (anillos crema como la bienvenida). Siempre detrás del contenido, sin competir con el texto; una capa de estrellas titila si el movimiento está activado.\n',
@@ -392,7 +393,7 @@ write(path.join(project, 'components', 'bundle.css'), bundleCss);
 const svgIcon = (name, size = 20, color = 'currentColor', strokeWidth = 2) =>
   iconToSvg(icons[name], { size, color, strokeWidth }).replace(`style="color:${color}"`, color === 'currentColor' ? '' : `style="color:${color}"`);
 const medal = (options, size) => drawingToSvg(medallionDrawing(options), { width: size, height: options.ribbon ? Math.round((size * 146) / 120) : size });
-const telix = (options, size) => drawingToSvg(telixDrawing(options), { width: size });
+const rutix = (options, size) => drawingToSvg(rutixDrawing(options), { width: size });
 const illustration = (name, width, tone = 'light') => drawingToSvg(illustrationDrawing(name, tone), { width, height: Math.round((width * 200) / 240) });
 
 function preview(name, { group, height, subtitle }, body, extraStyle = '') {
@@ -460,12 +461,12 @@ Cabecera azul noche de las pantallas (kicker en \`overline\` celeste, título \`
 const tabs = [['home', 'Inicio', true], ['gamepad', 'Jugar'], ['school', 'Carrera'], ['trophy', 'Logros'], ['bell', 'Avisos', false, true]];
 preview('TabBar', { group: 'Navegación', height: 90 }, `<div class="tel-tabbar">${tabs.map(([icon, label, active, unread]) => `<div class="tel-tab${active ? ' active' : ''}"><span class="pill">${svgIcon(icon, 22)}${unread ? '<span class="unread"></span>' : ''}</span>${label}</div>`).join('')}</div>`);
 readme('TabBar', `
-Barra inferior de cinco pestañas: Inicio, Jugar, Carrera, Logros y Avisos. La pestaña activa pone el ícono en una píldora \`highlight\` y el texto en \`primary\` 800; las demás en \`muted\`. Avisos muestra un punto \`danger\` con borde blanco cuando hay no leídos. Juegos, historia, recorrido, Telix y perfil abren encima como pantallas completas.
+Barra inferior de cinco pestañas: Inicio, Jugar, Carrera, Logros y Avisos. La pestaña activa pone el ícono en una píldora \`highlight\` y el texto en \`primary\` 800; las demás en \`muted\`. Avisos muestra un punto \`danger\` con borde blanco cuando hay no leídos. Juegos, historia, recorrido, Rutix y perfil abren encima como pantallas completas.
 `);
 
 // Chip & Tag
 preview('Chip', { group: 'Selección', height: 150 }, `<div class="tel-stage tel-row"><span class="tel-chip active">Todos · 14</span><span class="tel-chip">Obtenidos · 4</span><span class="tel-chip">En progreso · 8</span></div>
-<div class="tel-stage dark tel-row"><span class="tel-chip dark active">Todas</span><span class="tel-chip dark">Logros</span><span class="tel-chip dark">Telix</span></div>`);
+<div class="tel-stage dark tel-row"><span class="tel-chip dark active">Todas</span><span class="tel-chip dark">Logros</span><span class="tel-chip dark">Rutix</span></div>`);
 readme('Chip', `
 Filtro en fila desplazable (\`ChipGroup\`). Una opción activa a la vez; puede mostrar conteo («Obtenidos · 4»). \`tone\`: \`light\` (activo \`primary\`) o \`dark\` sobre cabeceras (activo \`cream\`). Se anuncian como pestañas.
 `);
@@ -497,11 +498,11 @@ readme('Medallion', `
 Medalla SVG de la marca para logros, áreas, estaciones y accesos. Props: \`glyph\` (35 glifos: \`cap\`, \`shield\`, \`network\`, \`antenna\`, \`code\`, \`chip\`, \`bulb\`, \`trophy\`, \`robot\`…), \`tier\` (\`crema\` por defecto, \`bronce\`, \`plata\`, \`oro\`, \`platino\`; la rareza también suma estrellas abajo), \`state\` (\`unlocked\`, \`progress\` con arco celeste parcial según \`progress\`, \`locked\` gris con candado), \`size\` y \`ribbon\` (cintas, solo en detalle y celebraciones). No uses medallas bloqueadas como decoración.
 `);
 
-// Telix
-const telixRow = [['neutral', 'idle', 3], ['happy', 'wave', 4], ['celebrate', 'celebrate', 4], ['think', 'think', 3], ['alert', 'idle', 3], ['sad', 'idle', 1]];
-preview('Telix', { group: 'Gráficos', height: 190, subtitle: 'Expresiones y poses' }, `<div class="tel-stage dark tel-row tel-anim">${telixRow.map(([expression, pose, signal]) => `<div style="animation:tel-float 3s ease-in-out infinite">${telix({ expression, pose, signal }, 130)}</div>`).join('')}</div>`);
-readme('Telix', `
-Mascota animada (flota, parpadea, la antena pulsa). Props: \`expression\` (\`neutral\`, \`happy\`, \`celebrate\`, \`love\`, \`think\`, \`alert\`, \`sleepy\`, \`sad\`, \`sleep\`), \`pose\` (\`idle\`, \`wave\`, \`celebrate\`, \`think\`), \`signal\` (0–4 barras en el pecho = ánimo), \`size\`, \`reactKey\` (al cambiar, rebota). La expresión sale del ánimo con \`expressionForMood\`: ≥85 \`happy\`, ≥60 \`neutral\`, ≥35 \`sleepy\`, menos \`sad\`. Habla en primera persona, en frases cortas y cálidas, dentro de una burbuja crema. Máximo un Telix por pantalla.
+// Rutix
+const rutixRow = [['neutral', 'idle', 3], ['happy', 'wave', 4], ['celebrate', 'celebrate', 4], ['think', 'think', 3], ['alert', 'idle', 3], ['sad', 'idle', 1]];
+preview('Rutix', { group: 'Gráficos', height: 190, subtitle: 'Expresiones y poses' }, `<div class="tel-stage dark tel-row tel-anim">${rutixRow.map(([expression, pose, signal]) => `<div style="animation:tel-float 3s ease-in-out infinite">${rutix({ expression, pose, signal }, 130)}</div>`).join('')}</div>`);
+readme('Rutix', `
+Mascota animada (flota, parpadea, la antena pulsa). Props: \`expression\` (\`neutral\`, \`happy\`, \`celebrate\`, \`love\`, \`think\`, \`alert\`, \`sleepy\`, \`sad\`, \`sleep\`), \`pose\` (\`idle\`, \`wave\`, \`celebrate\`, \`think\`), \`signal\` (0–4 barras en el pecho = ánimo), \`size\`, \`reactKey\` (al cambiar, rebota). La expresión sale del ánimo con \`expressionForMood\`: ≥85 \`happy\`, ≥60 \`neutral\`, ≥35 \`sleepy\`, menos \`sad\`. Habla en primera persona, en frases cortas y cálidas, dentro de una burbuja crema. Máximo un Rutix por pantalla.
 `);
 
 // Icon
@@ -544,7 +545,7 @@ Bloques de carga con brillo que recorre la forma (\`Skeleton\`, \`SkeletonText\`
 preview('Progress', { group: 'Carga', height: 150 }, `<div class="tel-stage tel-row" style="gap:28px"><div class="tel-col" style="width:220px"><div class="tel-bar"><span style="width:62%"></span></div><div class="tel-seg" style="background:var(--primary);padding:10px;border-radius:12px"><span class="done"></span><span class="done"></span><span class="now"></span><span></span><span></span></div></div>
 <svg width="72" height="72"><circle cx="36" cy="36" r="31.5" stroke="var(--secondary)" stroke-width="7" fill="none"/><circle cx="36" cy="36" r="31.5" stroke="var(--primary)" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="${(2 * Math.PI * 31.5 * 0.36).toFixed(1)} 400" transform="rotate(-90 36 36)"/><text x="36" y="41" text-anchor="middle" font-family="Montserrat, sans-serif" font-weight="800" font-size="15" fill="var(--primary)">5/14</text></svg></div>`);
 readme('Progress', `
-\`ProgressBar\` (XP al siguiente nivel, logros en curso), \`SegmentedProgress\` (estaciones de la ruta y preguntas de práctica: completadas \`accent\`, actual \`cream\`, pendientes \`secondary\`) y \`ProgressRing\` (logros obtenidos, ánimo de Telix, nivel del perfil) con contenido centrado. Animan hacia su valor en \`duration-slower\`.
+\`ProgressBar\` (XP al siguiente nivel, logros en curso), \`SegmentedProgress\` (estaciones de la ruta y preguntas de práctica: completadas \`accent\`, actual \`cream\`, pendientes \`secondary\`) y \`ProgressRing\` (logros obtenidos, ánimo de Rutix, nivel del perfil) con contenido centrado. Animan hacia su valor en \`duration-slower\`.
 `);
 
 // Toast
@@ -566,11 +567,11 @@ const confetti = Array.from({ length: 22 }, (_, index) => {
 }).join('');
 preview('Celebration', { group: 'Retroalimentación', height: 200 }, `<div class="tel-stage dark"><svg width="360" height="180" viewBox="0 0 360 180">${confetti}</svg></div>`);
 readme('Celebration', `
-Explosión de confeti con estrellas de cuatro puntas y puntos en colores de marca (\`Celebration\`, \`burstKey\` la dispara). Úsala al completar un capítulo, ganar la ráfaga con más de la mitad de aciertos, terminar la ruta o desbloquear un logro desde Telix. No bloquea toques y se omite con movimiento reducido.
+Explosión de confeti con estrellas de cuatro puntas y puntos en colores de marca (\`Celebration\`, \`burstKey\` la dispara). Úsala al completar un capítulo, ganar la ráfaga con más de la mitad de aciertos, terminar la ruta o desbloquear un logro desde Rutix. No bloquea toques y se omite con movimiento reducido.
 `);
 
 // EmptyState + ListRow + StatTile
-preview('EmptyState', { group: 'Contenedores', height: 390 }, `<div class="tel-stage tel-col" style="width:360px;text-align:center">${illustration('inbox', 180)}<p class="tel-subtitle">Nada por aquí todavía</p><p class="tel-caption" style="font-size:16px;font-weight:400;line-height:24px">Te avisaremos cuando ganes medallas, subas de nivel o Telix te necesite.</p><span class="tel-btn primary">Ir a jugar</span></div>`);
+preview('EmptyState', { group: 'Contenedores', height: 390 }, `<div class="tel-stage tel-col" style="width:360px;text-align:center">${illustration('inbox', 180)}<p class="tel-subtitle">Nada por aquí todavía</p><p class="tel-caption" style="font-size:16px;font-weight:400;line-height:24px">Te avisaremos cuando ganes medallas, subas de nivel o Rutix te necesite.</p><span class="tel-btn primary">Ir a jugar</span></div>`);
 readme('EmptyState', `
 Estado vacío: ilustración, título corto, una frase que explica qué aparecerá aquí y cómo lograrlo, y una acción opcional. Nunca una pantalla en blanco.
 `);
@@ -709,7 +710,7 @@ write(path.join(project, 'README.md'), fs.readFileSync(path.join(__dirname, 'des
 // ---------- índice ----------
 if (idsFile) {
   const ids = JSON.parse(fs.readFileSync(idsFile, 'utf8'));
-  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Telix: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
+  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Rutix: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
   const types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg' };
   const assetGroups = {};
   Object.keys(tiles).filter((group) => assetFiles[group]).forEach((group) => {

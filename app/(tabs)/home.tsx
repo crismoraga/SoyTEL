@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, ScrollView, StyleSheet, View } from 'react-native';
 import { router, type Href } from 'expo-router';
 import Animated from 'react-native-reanimated';
@@ -9,7 +9,7 @@ import { Tag } from '@/components/Chips';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Skeleton, SkeletonText } from '@/components/feedback/Skeleton';
 import { Medallion, type MedallionGlyph } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
@@ -17,10 +17,14 @@ import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
+import { UserAvatar } from '@/components/UserAvatar';
+import { useAccount } from '@/account/store';
 import { tipForDate } from '@/data/tips';
+import { TelematicaSheet } from '@/features/brand/TelematicaSheet';
 import { RouteProgress } from '@/features/route/parts';
+import { TipSheet } from '@/features/tips/TipSheet';
 import { useMemberView } from '@/route/hooks';
-import { expressionForMood, signalForMood } from '@/graphics/telix';
+import { expressionForMood, signalForMood } from '@/graphics/rutix';
 import { formatNumber, greeting } from '@/lib/format';
 import { nextMission } from '@/lib/missions';
 import { useEntering } from '@/lib/motion';
@@ -42,9 +46,9 @@ const explore: ExploreItem[] = [
   { label: 'Telemático', glyph: 'question', route: '/millionaire' },
   { label: 'Historia', glyph: 'book', route: '/story' },
   { label: 'Ruta', glyph: 'route', route: '/ruta' },
-  { label: 'Telix', glyph: 'robot', route: '/mascot' },
-  { label: 'Práctica', glyph: 'target', route: '/career' },
-  { label: 'Carrera', glyph: 'cap', route: '/career' },
+  { label: 'Rutix', glyph: 'robot', route: '/mascot' },
+  { label: 'Ranking', glyph: 'trophy', route: '/ranking' },
+  { label: 'Malla', glyph: 'cap', route: '/malla' },
   { label: 'Perfil', glyph: 'rocket', route: '/profile' },
 ];
 
@@ -59,6 +63,9 @@ function moodLabel(value: number): string {
 export default function HomeScreen() {
   const entering = useEntering();
   const unread = useUnreadCount();
+  const account = useAccount();
+  const [tipOpen, setTipOpen] = useState(false);
+  const [brandOpen, setBrandOpen] = useState(false);
   const { data } = useFocusData(async () => {
     const [profile, results, story] = await Promise.all([loadProfile(), loadResults(), loadStoryProgress()]);
     return { profile, results, story };
@@ -80,11 +87,22 @@ export default function HomeScreen() {
       header={
         <AppHeader rounded overlap={64}>
           <View style={styles.brandRow}>
-            <AppLogo size={38} />
-            <Wordmark size={22} />
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Telemática USM: conoce la carrera"
+              accessibilityHint="Abre la información de Ingeniería Civil Telemática"
+              haptic
+              onPress={() => setBrandOpen(true)}
+              style={styles.brandButton}
+            >
+              <AppLogo size={38} />
+              <Wordmark size={22} />
+            </PressableScale>
             <View style={styles.headerActions}>
               <IconButton icon="bell" tone="dark" badge={unread} accessibilityLabel="Avisos" onPress={() => router.navigate('/inbox')} />
-              <IconButton icon="user" tone="dark" accessibilityLabel="Tu perfil" onPress={() => router.push('/profile')} />
+              <PressableScale accessibilityRole="button" accessibilityLabel="Tu perfil" haptic onPress={() => router.push('/profile')} style={styles.avatarButton}>
+                <UserAvatar avatar={profile?.avatar ?? 0} size={40} />
+              </PressableScale>
             </View>
           </View>
           {profile ? (
@@ -177,6 +195,32 @@ export default function HomeScreen() {
         </TelCard>
       </Animated.View>
 
+      <Animated.View entering={entering.fadeUp(1)}>
+        <TelCard onPress={() => router.push(account.status === 'guest' ? '/cuenta' : '/ranking')} accessibilityLabel="Ranking global" style={styles.rankCard}>
+          <View style={styles.rankIcon}>
+            <TelIcon name="trophy" size={24} color={colors.primary} />
+          </View>
+          <View style={styles.flex}>
+            <TelText variant="small" color="secondary" style={styles.kicker}>
+              RANKING GLOBAL
+            </TelText>
+            {account.status === 'registered' && account.rank ? (
+              <TelText variant="subtitle" color="primary">
+                Lugar #{formatNumber(account.rank.rank)} de {formatNumber(account.rank.total)}
+              </TelText>
+            ) : (
+              <TelText variant="subtitle" color="primary">
+                {account.status === 'expired' ? 'Vuelve a entrar a tu cuenta' : 'Crea tu cuenta y entra al ranking'}
+              </TelText>
+            )}
+            <TelText variant="caption" color="muted">
+              {account.status === 'registered' ? 'Compara tu XP con todos los que juegan SoyTEL.' : 'Solo un alias: tus puntajes quedan registrados.'}
+            </TelText>
+          </View>
+          <TelIcon name="chevronRight" size={20} color={colors.primary} />
+        </TelCard>
+      </Animated.View>
+
       <View style={styles.section}>
         <SectionHeader title="Explora" />
         <View style={styles.grid}>
@@ -201,19 +245,19 @@ export default function HomeScreen() {
 
       {profile && (
         <Animated.View entering={entering.fadeUp(2)}>
-          <TelCard tone="navy" onPress={() => router.push('/mascot')} accessibilityLabel={`Telix está ${moodLabel(profile.mascotMood)}. Visitar a Telix`} style={styles.telixCard}>
-            <Telix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
+          <TelCard tone="navy" onPress={() => router.push('/mascot')} accessibilityLabel={`Rutix está ${moodLabel(profile.mascotMood)}. Visitar a Rutix`} style={styles.rutixCard}>
+            <Rutix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
             <View style={styles.flex}>
               <TelText variant="small" color="accent" style={styles.kicker}>
                 TU COMPAÑERO
               </TelText>
               <TelText variant="subtitle" color="cream">
-                Telix está {moodLabel(profile.mascotMood)}
+                Rutix está {moodLabel(profile.mascotMood)}
               </TelText>
               <ProgressBar progress={profile.mascotMood / 100} color={colors.accent} trackColor={colors.secondary} height={6} style={styles.moodBar} />
               <View style={styles.inlineLink}>
                 <TelText variant="label" color="accentSoft">
-                  Visitar a Telix
+                  Visitar a Rutix
                 </TelText>
                 <TelIcon name="arrowRight" size={16} color={colors.accentSoft} />
               </View>
@@ -236,8 +280,8 @@ export default function HomeScreen() {
             image={brandImages.spotEvents}
             tag={<Tag tone="cream" label="¿SABÍAS QUE?" />}
             title={tip.text}
-            meta="Dato del día"
-            onPress={() => router.navigate('/career')}
+            meta="Dato del día · toca para leer"
+            onPress={() => setTipOpen(true)}
             compactTitle
           />
           <FeatureCard
@@ -249,6 +293,8 @@ export default function HomeScreen() {
           />
         </ScrollView>
       </View>
+      <TipSheet tip={tip} visible={tipOpen} onClose={() => setTipOpen(false)} />
+      <TelematicaSheet visible={brandOpen} onClose={() => setBrandOpen(false)} />
     </Screen>
   );
 }
@@ -291,6 +337,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  brandButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingRight: spacing.xs,
+  },
+  avatarButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  rankIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F2CE63',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerActions: {
     marginLeft: 'auto',
@@ -357,7 +429,7 @@ const styles = StyleSheet.create({
   routeHead: {
     flexDirection: 'row',
   },
-  telixCard: {
+  rutixCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

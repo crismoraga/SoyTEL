@@ -25,7 +25,7 @@ import { pillarIds, stopInfo } from '@/route/content';
 import type { HostController, HostView } from '@/route/host';
 import { hostManager } from '@/route/hostManager';
 import { useHostView, useRouteForeground } from '@/route/hooks';
-import { loadHost } from '@/route/storage';
+import type { HostSummary } from '@/route/storage';
 import type { PublicPlayer, RouteSnapshot } from '@/route/types';
 import { colors, font, radius, spacing } from '@/theme';
 
@@ -102,23 +102,16 @@ const PROJECT_OPTIONS = [
 ];
 
 function StandHome() {
-  const [codes, setCodes] = useState<{ code: string; phase: string; players: number }[]>([]);
+  const [codes, setCodes] = useState<HostSummary[]>([]);
   const [questions, setQuestions] = useState('10');
   const [minutes, setMinutes] = useState('15');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void (async () => {
-      const list = await hostManager.list();
-      const records = await Promise.all(list.map((item) => loadHost(item)));
-      if (!active) return;
-      setCodes(
-        records
-          .filter((record): record is NonNullable<typeof record> => Boolean(record))
-          .map((record) => ({ code: record.code, phase: record.state.phase, players: record.state.order.length })),
-      );
-    })();
+    void hostManager.list().then((list) => {
+      if (active) setCodes(list);
+    });
     return () => {
       active = false;
     };
@@ -162,7 +155,7 @@ function StandHome() {
                   {item.players} participantes
                 </TelText>
                 <TelText variant="caption" color="muted">
-                  {phaseLabel(item.phase)}
+                  {phaseLabel(item.phase, item.stop)}
                 </TelText>
               </View>
               <TelIcon name="chevronRight" size={20} color={colors.primary} />
@@ -198,7 +191,6 @@ function phaseLabel(phase: string, stop?: string): string {
 function StandLive({ controller, view }: { controller: HostController; view: HostView }) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
-  const now = useClock(250);
   const snapshot = view.snapshot;
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -222,6 +214,15 @@ function StandLive({ controller, view }: { controller: HostController; view: Hos
       <TelText variant="label" color="accentSoft" align="center">
         Escanea o entra a {joinHost}/ruta
       </TelText>
+      <View style={styles.verify} accessible accessibilityLabel={`Código de verificación: ${view.verification.split('').join(' ')}`}>
+        <TelIcon name="shieldCheck" size={16} color={colors.accent} />
+        <TelText variant="small" color="accentSoft">
+          Verificación en los teléfonos:
+        </TelText>
+        <TelText variant="label" color="cream" style={styles.verifyCode}>
+          {view.verification}
+        </TelText>
+      </View>
       <TelButton
         label={copied ? '¡Enlace copiado!' : 'Copiar enlace para unirse'}
         variant="outlineLight"
@@ -237,6 +238,16 @@ function StandLive({ controller, view }: { controller: HostController; view: Hos
 
   const controlPanel = (
     <View style={[styles.gap, wide && styles.flex]}>
+      {view.impostor && (
+        <TelCard tone="danger" style={styles.gap}>
+          <TelText variant="subtitle" color="dangerInk">
+            Otro dispositivo está usando el código {view.code}
+          </TelText>
+          <TelText variant="caption" color="dangerInk">
+            Pide que se unan escaneando el QR (verifica el stand automáticamente) y que revisen que su teléfono muestre la verificación {view.verification}. Si persiste, crea una ruta nueva.
+          </TelText>
+        </TelCard>
+      )}
       {view.readOnly && (
         <TelCard tone="danger" style={styles.gap}>
           <TelText variant="subtitle" color="dangerInk">
@@ -248,7 +259,7 @@ function StandLive({ controller, view }: { controller: HostController; view: Hos
           <TelButton label="Tomar el control" variant="danger" onPress={() => void hostManager.open(view.code, true).then(() => router.replace({ pathname: '/ruta/stand', params: { codigo: view.code } }))} />
         </TelCard>
       )}
-      <PhasePanel controller={controller} snapshot={snapshot} now={now} wide={wide} />
+      <PhasePanel controller={controller} snapshot={snapshot} wide={wide} />
       {snapshot.phase !== 'podium' && (
         <View style={styles.gap}>
           <TelText variant="heading" color="cream">
@@ -270,6 +281,9 @@ function StandLive({ controller, view }: { controller: HostController; view: Hos
             <TelCard tone="dark" style={styles.gap}>
               <TelText variant="subtitle" color="cream">
                 ¿Terminar la ruta ahora y mostrar el podio?
+              </TelText>
+              <TelText variant="caption" color="accentSoft">
+                Los puntajes se mantienen, pero una ruta cerrada antes del final de la trivia no cuenta como completada (no entrega los logros de ruta).
               </TelText>
               <TelButton label="Sí, mostrar podio" variant="danger" onPress={() => controller.dispatch({ type: 'finish' })} />
               <TelButton label="Cancelar" variant="outlineLight" onPress={() => setConfirmFinish(false)} />
@@ -324,6 +338,11 @@ function PlayerRow({ player, snapshot, onKick }: { player: PublicPlayer; snapsho
           {player.online ? status : 'Sin conexión'} · {formatNumber(player.total)} pts
         </TelText>
       </View>
+      {player.flagged && (
+        <View style={styles.flag} accessible accessibilityLabel="Envió un puntaje en un tiempo imposible">
+          <TelIcon name="alert" size={16} color={colors.warning} />
+        </View>
+      )}
       {confirm ? (
         <View style={styles.kickRow}>
           <TelButton label="Quitar" variant="danger" size="sm" fullWidth={false} onPress={onKick} />
@@ -336,7 +355,8 @@ function PlayerRow({ player, snapshot, onKick }: { player: PublicPlayer; snapsho
   );
 }
 
-function PhasePanel({ controller, snapshot, now, wide }: { controller: HostController; snapshot: RouteSnapshot; now: number; wide: boolean }) {
+function PhasePanel({ controller, snapshot, wide }: { controller: HostController; snapshot: RouteSnapshot; wide: boolean }) {
+  const now = useClock(snapshot.phase === 'quiz' ? 200 : 1000);
   const players = snapshot.players;
   const online = players.filter((player) => player.online);
   const seconds = snapshot.deadline ? Math.max(0, Math.ceil((snapshot.deadline - now) / 1000)) : null;
@@ -506,6 +526,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  verify: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  verifyCode: {
+    letterSpacing: 3,
+  },
+  flag: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(212, 160, 23, 0.18)',
   },
   phaseCard: {
     gap: spacing.sm,

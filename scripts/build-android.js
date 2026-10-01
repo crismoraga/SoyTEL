@@ -1,5 +1,5 @@
 // Compila el APK de producción firmado (release) para Android.
-// Requisitos: Android SDK + JDK 17 y la llave en ~/.gradle/gradle.properties (ver README).
+// Requisitos: Android SDK + JDK 17 y la llave en ~/.gradle/gradle.properties (ver docs/PRODUCCION.md).
 // Uso: npm run android:release   →   dist/android/SoyTEL-<versión>.apk
 const { execSync } = require('child_process');
 const crypto = require('crypto');
@@ -24,31 +24,13 @@ try {
   fs.writeFileSync(pkgFile, pkgBefore);
 }
 
-// 2. En Windows, una letra de unidad corta evita rutas de más de 260 caracteres en CMake/Ninja.
-let buildRoot = root;
-let drive = null;
-if (process.platform === 'win32') {
-  for (const letter of ['S', 'T', 'U', 'V', 'W']) {
-    try {
-      execSync(`subst ${letter}: "${root}"`, { stdio: 'ignore' });
-      drive = `${letter}:`;
-      buildRoot = `${drive}\\`;
-      break;
-    } catch {
-      // Letra ocupada: probar la siguiente.
-    }
-  }
-}
-
-try {
-  const gradlew = process.platform === 'win32' ? `"${path.join(buildRoot, 'android', 'gradlew.bat')}"` : './gradlew';
-  run(`${gradlew} assembleRelease -PreactNativeArchitectures=${architectures} --no-daemon`, path.join(buildRoot, 'android'));
-} finally {
-  if (drive) execSync(`subst ${drive} /D`, { stdio: 'ignore' });
-}
+// 2. APK de release (la firma viene del plugin withAndroidReleaseSigning).
+const androidDir = path.join(root, 'android');
+const gradlew = process.platform === 'win32' ? `"${path.join(androidDir, 'gradlew.bat')}"` : './gradlew';
+run(`${gradlew} assembleRelease -PreactNativeArchitectures=${architectures} --no-daemon`, androidDir);
 
 // 3. Copia y huella del APK.
-const apk = path.join(root, 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+const apk = path.join(androidDir, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
 const outDir = path.join(root, 'dist', 'android');
 fs.mkdirSync(outDir, { recursive: true });
 const target = path.join(outDir, `SoyTEL-${app.version}.apk`);

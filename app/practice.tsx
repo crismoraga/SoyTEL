@@ -9,6 +9,7 @@ import { SegmentedProgress } from '@/components/feedback/Progress';
 import { Medallion } from '@/components/graphics/Medallion';
 import { FeedbackPanel, OptionButton, type OptionState } from '@/components/Quiz';
 import { Screen, ScreenFooter } from '@/components/Screen';
+import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getCareerArea } from '@/data/career';
@@ -170,6 +171,7 @@ export default function PracticeScreen() {
         })}
       </View>
       {answered && <FeedbackPanel kind={isRight ? 'success' : 'error'} title={isRight ? '¡Correcto!' : 'No era esa'} body={question.explanation} />}
+      <AccountGate />
     </Screen>
   );
 }

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAppEvent, type AppEvent } from '@/lib/events';
-import { markAreaViewed } from '@/storage/career';
+import { loadCareerProgress, masteredAreas, recordAreaPractice } from '@/storage/career';
 import { ensureDailyInbox, getInboxSnapshot, loadInbox, markAllInboxRead, pushInbox } from '@/storage/inbox';
 import { applyMascotDecay, defaultProfile, loadProfile, loadResults, recordGameResult, syncAchievements, updateAlias } from '@/storage/profile';
 import { resetAllData } from '@/storage/reset';
@@ -42,15 +42,29 @@ describe('game results', () => {
     expect(second.newAchievements).not.toContain('first-signal');
   });
 
-  it('syncs achievements earned outside games', async () => {
+  it('counts career areas only when they are practiced well, not when viewed', async () => {
+    const at = new Date().toISOString();
+    await recordAreaPractice('redes', 0.4, at);
+    expect(masteredAreas(await loadCareerProgress())).toEqual([]);
     for (const area of ['redes', 'teleco', 'software', 'seguridad', 'hardware', 'innovacion']) {
-      await markAreaViewed(area);
+      await recordAreaPractice(area, 0.6, at);
     }
+    const progress = await loadCareerProgress();
+    expect(progress.redes?.sessions).toBe(2);
+    expect(masteredAreas(progress)).toHaveLength(6);
     expect(await syncAchievements()).toContain('career-explorer');
     expect((await loadProfile()).unlockedAchievements).toContain('career-explorer');
   });
 
-  it('counts distinct Telix care days', async () => {
+  it('records area practice from practice results and the story', async () => {
+    const completedAt = new Date().toISOString();
+    await recordGameResult({ gameId: 'practice', score: 480, accuracy: 0.8, durationSeconds: 60, completedAt, metadata: { area: 'teleco', correct: 4 } });
+    await recordGameResult({ gameId: 'story', score: 200, accuracy: 1, durationSeconds: 60, completedAt, metadata: { chapter: 1 } });
+    expect(masteredAreas(await loadCareerProgress()).sort()).toEqual(['innovacion', 'teleco']);
+    expect((await loadProfile()).gamesPlayed).toBe(2);
+  });
+
+  it('counts distinct Rutix care days', async () => {
     await logMascotDay('2026-09-01T10:00:00.000Z');
     const days = await logMascotDay('2026-09-01T18:00:00.000Z');
     expect(days).toHaveLength(1);
@@ -63,7 +77,7 @@ describe('profile', () => {
     expect((await updateAlias('')).alias).toBe(defaultProfile.alias);
   });
 
-  it('lowers Telix mood when days pass without playing', () => {
+  it('lowers Rutix mood when days pass without playing', () => {
     const profile = { ...defaultProfile, mascotMood: 80, lastPlayedAt: '2026-09-20T12:00:00.000Z' };
     const decayed = applyMascotDecay(profile, new Date('2026-09-23T12:00:00.000Z').getTime());
     expect(decayed.mascotMood).toBe(62);
@@ -78,12 +92,12 @@ describe('inbox', () => {
     expect(getInboxSnapshot().filter((item) => !item.read)).toHaveLength(0);
   });
 
-  it('adds one daily tip per day and warns when Telix is low', async () => {
+  it('adds one daily tip per day and warns when Rutix is low', async () => {
     const day = new Date('2026-09-28T09:00:00.000Z');
     await ensureDailyInbox(30, day);
     await ensureDailyInbox(30, day);
     const items = await loadInbox();
     expect(items.filter((item) => item.kind === 'dato')).toHaveLength(1);
-    expect(items.filter((item) => item.kind === 'telix')).toHaveLength(1);
+    expect(items.filter((item) => item.kind === 'rutix')).toHaveLength(1);
   });
 });

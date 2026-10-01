@@ -1,6 +1,6 @@
 import { getChapter, storyChapters } from '@/data/story';
 import { medallionGlyphs } from '@/graphics/medallions';
-import { telixExpressions } from '@/graphics/telix';
+import { rutixExpressions } from '@/graphics/rutix';
 
 describe('story mode data', () => {
   it('has five ordered chapters', () => {
@@ -8,12 +8,12 @@ describe('story mode data', () => {
     expect(storyChapters.map((chapter) => chapter.number)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('every chapter has Telix dialogue and a valid challenge', () => {
+  it('every chapter has Rutix dialogue and a valid challenge', () => {
     for (const chapter of storyChapters) {
       expect(chapter.title.length).toBeGreaterThan(3);
       expect(chapter.dialogue.length).toBeGreaterThanOrEqual(2);
       chapter.dialogue.forEach((line) => {
-        expect(telixExpressions).toContain(line.mood);
+        expect(rutixExpressions).toContain(line.mood);
         expect(line.text.length).toBeGreaterThan(10);
       });
       expect(chapter.challenge.options).toHaveLength(4);

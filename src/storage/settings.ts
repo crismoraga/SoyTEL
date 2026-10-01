@@ -3,14 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SETTINGS_KEY = '@soytel/settings';
 
+// "auto" elige según el equipo: los teléfonos de gama baja parten con animaciones mínimas.
+export type MotionPreference = 'auto' | 'full' | 'balanced' | 'minimal';
+
 export interface AppSettings {
   haptics: boolean;
-  reducedMotion: boolean;
+  motion: MotionPreference;
 }
 
 export const defaultSettings: AppSettings = {
   haptics: true,
-  reducedMotion: false,
+  motion: 'auto',
 };
 
 let cachedSettings: AppSettings = defaultSettings;
@@ -27,17 +30,26 @@ export function subscribeSettings(listener: () => void): () => void {
   };
 }
 
-export async function loadSettings(): Promise<AppSettings> {
-  const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-  if (!raw) {
-    return defaultSettings;
-  }
+const MOTION_VALUES: MotionPreference[] = ['auto', 'full', 'balanced', 'minimal'];
 
+// Acepta el formato anterior ({ reducedMotion: true }) y descarta valores desconocidos.
+export function parseSettings(raw: string | null): AppSettings {
+  if (!raw) return defaultSettings;
   try {
-    return { ...defaultSettings, ...JSON.parse(raw) as Partial<AppSettings> };
+    const parsed = JSON.parse(raw) as Partial<AppSettings> & { reducedMotion?: boolean };
+    const motion = MOTION_VALUES.includes(parsed.motion as MotionPreference)
+      ? (parsed.motion as MotionPreference)
+      : parsed.reducedMotion
+        ? 'minimal'
+        : 'auto';
+    return { haptics: parsed.haptics !== false, motion };
   } catch {
     return defaultSettings;
   }
+}
+
+export async function loadSettings(): Promise<AppSettings> {
+  return parseSettings(await AsyncStorage.getItem(SETTINGS_KEY));
 }
 
 export async function initSettings(): Promise<AppSettings> {
@@ -65,3 +77,5 @@ export function resetSettingsCache(): void {
 export function useSettings(): AppSettings {
   return useSyncExternalStore(subscribeSettings, getSettings, getSettings);
 }
+
+export const SETTINGS_KEYS = [SETTINGS_KEY];

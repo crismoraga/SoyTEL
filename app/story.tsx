@@ -8,7 +8,7 @@ import { Celebration } from '@/components/feedback/Celebration';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { Medallion } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { FeedbackPanel, OptionButton, type OptionState } from '@/components/Quiz';
 import { Screen, ScreenFooter } from '@/components/Screen';
@@ -144,7 +144,7 @@ export default function StoryScreen() {
         }
       >
         <View style={styles.challengeHead}>
-          <Telix size={88} expression={answered ? (correct ? 'celebrate' : 'sad') : 'think'} pose={answered && correct ? 'celebrate' : 'idle'} />
+          <Rutix size={88} expression={answered ? (correct ? 'celebrate' : 'sad') : 'think'} pose={answered && correct ? 'celebrate' : 'idle'} />
           <TelText variant="subtitle" color="cream" style={styles.flex}>
             {chapter.challenge.prompt}
           </TelText>
@@ -183,7 +183,7 @@ export default function StoryScreen() {
       <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
         <Celebration burstKey={chapter.number} count={finale ? 40 : 26} />
         <View style={styles.doneHero}>
-          <Telix size={200} expression="celebrate" pose="celebrate" signal={4} />
+          <Rutix size={200} expression="celebrate" pose="celebrate" signal={4} />
           <Animated.View entering={entering.pop(2)}>
             <Medallion glyph={chapter.glyph} tier={finale ? 'oro' : 'crema'} size={88} ribbon />
           </Animated.View>
@@ -226,7 +226,7 @@ export default function StoryScreen() {
       tone="dark"
       backdrop="stars"
       header={
-        <AppHeader transparent onBack={() => router.back()} kicker="Modo historia" title="La señal perdida" subtitle="Alguien dejó el campus sin conexión. Ayuda a Telix a restaurarla, capítulo a capítulo." />
+        <AppHeader transparent onBack={() => router.back()} kicker="Modo historia" title="La señal perdida" subtitle="Alguien dejó el campus sin conexión. Ayuda a Rutix a restaurarla, capítulo a capítulo." />
       }
     >
       <View style={styles.progressRow}>
@@ -334,11 +334,11 @@ function DialogueView({ chapter, line, onNext, onBack }: { chapter: StoryChapter
       contentStyle={styles.dialogue}
     >
       <View style={styles.dialogueStage}>
-        <Telix size={220} expression={current.mood} pose={current.mood === 'happy' ? 'wave' : current.mood === 'think' ? 'think' : 'idle'} />
+        <Rutix size={220} expression={current.mood} pose={current.mood === 'happy' ? 'wave' : current.mood === 'think' ? 'think' : 'idle'} />
       </View>
       <Animated.View key={line} entering={entering.fadeUp()} style={styles.speech}>
         <TelText variant="small" color="secondary" style={styles.kicker}>
-          TELIX
+          RUTIX
         </TelText>
         <TelText variant="bodyStrong" color="primary" style={styles.speechText} accessibilityLiveRegion="polite">
           {shown}
