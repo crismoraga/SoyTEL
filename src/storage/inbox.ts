@@ -6,7 +6,7 @@ const INBOX_KEY = '@soytel/inbox';
 const DAILY_KEY = '@soytel/inbox-daily';
 const MAX_ITEMS = 60;
 
-export type InboxKind = 'logro' | 'progreso' | 'telix' | 'dato' | 'aviso';
+export type InboxKind = 'logro' | 'progreso' | 'rutix' | 'dato' | 'aviso';
 
 export interface InboxItem {
   id: string;
@@ -45,7 +45,8 @@ async function persist(items: InboxItem[]): Promise<void> {
 export async function loadInbox(): Promise<InboxItem[]> {
   const raw = await AsyncStorage.getItem(INBOX_KEY);
   try {
-    const parsed = raw ? (JSON.parse(raw) as InboxItem[]) : [];
+    // Los avisos antiguos de la mascota usaban el tipo 'telix' (ahora Rutix).
+    const parsed = raw ? (JSON.parse(raw) as InboxItem[]).map((item) => ((item.kind as string) === 'telix' ? { ...item, kind: 'rutix' as const } : item)) : [];
     cache = Array.isArray(parsed) ? parsed : [];
   } catch {
     cache = [];
@@ -81,7 +82,7 @@ export async function markAllInboxRead(): Promise<void> {
   await persist(cache.map((item) => ({ ...item, read: true })));
 }
 
-// Un dato curioso al día y un recordatorio si Telix tiene poca señal.
+// Un dato curioso al día y un recordatorio si Rutix tiene poca señal.
 export async function ensureDailyInbox(mascotMood: number, today = new Date()): Promise<void> {
   const day = today.toISOString().slice(0, 10);
   const last = await AsyncStorage.getItem(DAILY_KEY);
@@ -90,7 +91,7 @@ export async function ensureDailyInbox(mascotMood: number, today = new Date()): 
   const tip = tipForDate(today);
   const items: NewInboxItem[] = [{ kind: 'dato', title: '¿Sabías que…?', body: tip.text, route: '/career' }];
   if (mascotMood < 45) {
-    items.push({ kind: 'telix', title: 'Telix tiene poca señal', body: 'Pasa a saludarlo o juega una ráfaga corta para subirle el ánimo.', route: '/mascot' });
+    items.push({ kind: 'rutix', title: 'Rutix tiene poca señal', body: 'Pasa a saludarlo o juega una ráfaga corta para subirle el ánimo.', route: '/mascot' });
   }
   await pushInbox(items);
 }

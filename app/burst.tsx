@@ -7,7 +7,7 @@ import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { Illustration } from '@/components/graphics/Illustration';
 import { Medallion } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
@@ -216,7 +216,7 @@ export default function BurstScreen() {
       <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
         <Celebration burstKey={correct >= Math.ceil(state.games.length / 2) ? runId : null} count={correct === state.games.length ? 44 : 28} />
         <View style={styles.finishHero}>
-          <Telix
+          <Rutix
             size={160}
             expression={state.lives <= 0 ? 'sad' : correct === state.games.length ? 'celebrate' : 'happy'}
             pose={state.lives <= 0 ? 'idle' : 'celebrate'}

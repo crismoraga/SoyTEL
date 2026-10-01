@@ -50,7 +50,7 @@ describe('game results', () => {
     expect((await loadProfile()).unlockedAchievements).toContain('career-explorer');
   });
 
-  it('counts distinct Telix care days', async () => {
+  it('counts distinct Rutix care days', async () => {
     await logMascotDay('2026-09-01T10:00:00.000Z');
     const days = await logMascotDay('2026-09-01T18:00:00.000Z');
     expect(days).toHaveLength(1);
@@ -63,7 +63,7 @@ describe('profile', () => {
     expect((await updateAlias('')).alias).toBe(defaultProfile.alias);
   });
 
-  it('lowers Telix mood when days pass without playing', () => {
+  it('lowers Rutix mood when days pass without playing', () => {
     const profile = { ...defaultProfile, mascotMood: 80, lastPlayedAt: '2026-09-20T12:00:00.000Z' };
     const decayed = applyMascotDecay(profile, new Date('2026-09-23T12:00:00.000Z').getTime());
     expect(decayed.mascotMood).toBe(62);
@@ -78,12 +78,12 @@ describe('inbox', () => {
     expect(getInboxSnapshot().filter((item) => !item.read)).toHaveLength(0);
   });
 
-  it('adds one daily tip per day and warns when Telix is low', async () => {
+  it('adds one daily tip per day and warns when Rutix is low', async () => {
     const day = new Date('2026-09-28T09:00:00.000Z');
     await ensureDailyInbox(30, day);
     await ensureDailyInbox(30, day);
     const items = await loadInbox();
     expect(items.filter((item) => item.kind === 'dato')).toHaveLength(1);
-    expect(items.filter((item) => item.kind === 'telix')).toHaveLength(1);
+    expect(items.filter((item) => item.kind === 'rutix')).toHaveLength(1);
   });
 });

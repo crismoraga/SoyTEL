@@ -8,7 +8,7 @@ import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { SignalSpinner } from '@/components/feedback/Loaders';
 import { ProgressBar } from '@/components/feedback/Progress';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
@@ -90,7 +90,7 @@ function ProblemView({ view }: { view: MemberView }) {
   return (
     <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
-        <Telix size={150} expression="sad" />
+        <Rutix size={150} expression="sad" />
         <TelText variant="title" color="cream" align="center">
           {copy.title}
         </TelText>
@@ -140,7 +140,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
     return (
       <Screen tone="dark" backdrop="stars" header={header}>
         <View style={styles.center}>
-          <Telix size={130} expression="think" />
+          <Rutix size={130} expression="think" />
           <TelText variant="title" color="cream" align="center">
             ¿Salir de la ruta?
           </TelText>
@@ -377,7 +377,7 @@ function WaitingView({ header, snapshot, me, game, sending }: PhaseProps & { gam
   return (
     <Screen tone="dark" backdrop="orbits" header={header}>
       <View style={styles.hero}>
-        <Telix size={120} expression="happy" pose="wave" />
+        <Rutix size={120} expression="happy" pose="wave" />
         <TelText variant="title" color="cream" align="center">
           {sending ? 'Enviando tu puntaje…' : `¡${formatNumber(score ?? 0)} puntos!`}
         </TelText>

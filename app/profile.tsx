@@ -183,7 +183,7 @@ export default function ProfileScreen() {
         />
         <SettingSwitch
           label="Reducir animaciones"
-          description="Desactiva el movimiento decorativo (Telix, estrellas, confeti)."
+          description="Desactiva el movimiento decorativo (Rutix, estrellas, confeti)."
           value={settings.reducedMotion}
           onChange={(value) => void updateSettings({ reducedMotion: value })}
         />

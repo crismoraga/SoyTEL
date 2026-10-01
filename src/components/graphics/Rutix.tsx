@@ -13,23 +13,23 @@ import Animated, {
 import Svg from 'react-native-svg';
 import { GradientDefs, ShapeLayer } from '@/graphics/ShapeLayer';
 import {
-  telixBody,
-  telixExtras,
-  telixFace,
-  telixGradients,
-  telixSignalArcs,
-  type TelixExpression,
-  type TelixPose,
-} from '@/graphics/telix';
+  rutixBody,
+  rutixExtras,
+  rutixFace,
+  rutixGradients,
+  rutixSignalArcs,
+  type RutixExpression,
+  type RutixPose,
+} from '@/graphics/rutix';
 import { useMotionEnabled } from '@/lib/motion';
 import { motion } from '@/theme';
 
-export type { TelixExpression, TelixPose } from '@/graphics/telix';
+export type { RutixExpression, RutixPose } from '@/graphics/rutix';
 
-interface TelixProps {
+interface RutixProps {
   size?: number;
-  expression?: TelixExpression;
-  pose?: TelixPose;
+  expression?: RutixExpression;
+  pose?: RutixPose;
   signal?: number;
   animated?: boolean;
   // Cambiar este valor dispara un rebote de reacción (p. ej. tras una interacción).
@@ -38,10 +38,10 @@ interface TelixProps {
   accessibilityLabel?: string;
 }
 
-const BLINKING: TelixExpression[] = ['neutral', 'sad', 'alert', 'think'];
+const BLINKING: RutixExpression[] = ['neutral', 'sad', 'alert', 'think'];
 const VIEWBOX = '0 0 200 200';
 
-export function Telix({
+export function Rutix({
   size = 160,
   expression = 'neutral',
   pose = 'idle',
@@ -49,8 +49,8 @@ export function Telix({
   animated = true,
   reactKey,
   style,
-  accessibilityLabel = 'Telix, la mascota de SoyTEL',
-}: TelixProps) {
+  accessibilityLabel = 'Rutix, la mascota de SoyTEL',
+}: RutixProps) {
   const motionEnabled = useMotionEnabled() && animated;
   const [blink, setBlink] = useState(false);
   const float = useSharedValue(0);
@@ -117,11 +117,11 @@ export function Telix({
   }));
   const signalStyle = useAnimatedStyle(() => ({ opacity: 0.35 + 0.65 * pulse.value }));
 
-  const body = useMemo(() => telixBody(pose, signal), [pose, signal]);
+  const body = useMemo(() => rutixBody(pose, signal), [pose, signal]);
   const eyesClosed = canBlink && blink;
-  const face = useMemo(() => telixFace(expression, eyesClosed), [eyesClosed, expression]);
-  const extras = useMemo(() => telixExtras(expression), [expression]);
-  const arcs = useMemo(() => telixSignalArcs(), []);
+  const face = useMemo(() => rutixFace(expression, eyesClosed), [eyesClosed, expression]);
+  const extras = useMemo(() => rutixExtras(expression), [expression]);
+  const arcs = useMemo(() => rutixSignalArcs(), []);
 
   return (
     <View
@@ -147,7 +147,7 @@ export function Telix({
           </Animated.View>
         )}
         <Svg width={size} height={size} viewBox={VIEWBOX} style={StyleSheet.absoluteFill}>
-          <GradientDefs gradients={telixGradients} />
+          <GradientDefs gradients={rutixGradients} />
           <ShapeLayer shapes={body} />
           <ShapeLayer shapes={face} />
           <ShapeLayer shapes={extras} />

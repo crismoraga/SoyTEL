@@ -9,7 +9,7 @@ import { Tag } from '@/components/Chips';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Skeleton, SkeletonText } from '@/components/feedback/Skeleton';
 import { Medallion, type MedallionGlyph } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
@@ -20,7 +20,7 @@ import { TelText } from '@/components/TelText';
 import { tipForDate } from '@/data/tips';
 import { RouteProgress } from '@/features/route/parts';
 import { useMemberView } from '@/route/hooks';
-import { expressionForMood, signalForMood } from '@/graphics/telix';
+import { expressionForMood, signalForMood } from '@/graphics/rutix';
 import { formatNumber, greeting } from '@/lib/format';
 import { nextMission } from '@/lib/missions';
 import { useEntering } from '@/lib/motion';
@@ -42,7 +42,7 @@ const explore: ExploreItem[] = [
   { label: 'Telemático', glyph: 'question', route: '/millionaire' },
   { label: 'Historia', glyph: 'book', route: '/story' },
   { label: 'Ruta', glyph: 'route', route: '/ruta' },
-  { label: 'Telix', glyph: 'robot', route: '/mascot' },
+  { label: 'Rutix', glyph: 'robot', route: '/mascot' },
   { label: 'Práctica', glyph: 'target', route: '/career' },
   { label: 'Carrera', glyph: 'cap', route: '/career' },
   { label: 'Perfil', glyph: 'rocket', route: '/profile' },
@@ -201,19 +201,19 @@ export default function HomeScreen() {
 
       {profile && (
         <Animated.View entering={entering.fadeUp(2)}>
-          <TelCard tone="navy" onPress={() => router.push('/mascot')} accessibilityLabel={`Telix está ${moodLabel(profile.mascotMood)}. Visitar a Telix`} style={styles.telixCard}>
-            <Telix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
+          <TelCard tone="navy" onPress={() => router.push('/mascot')} accessibilityLabel={`Rutix está ${moodLabel(profile.mascotMood)}. Visitar a Rutix`} style={styles.rutixCard}>
+            <Rutix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
             <View style={styles.flex}>
               <TelText variant="small" color="accent" style={styles.kicker}>
                 TU COMPAÑERO
               </TelText>
               <TelText variant="subtitle" color="cream">
-                Telix está {moodLabel(profile.mascotMood)}
+                Rutix está {moodLabel(profile.mascotMood)}
               </TelText>
               <ProgressBar progress={profile.mascotMood / 100} color={colors.accent} trackColor={colors.secondary} height={6} style={styles.moodBar} />
               <View style={styles.inlineLink}>
                 <TelText variant="label" color="accentSoft">
-                  Visitar a Telix
+                  Visitar a Rutix
                 </TelText>
                 <TelIcon name="arrowRight" size={16} color={colors.accentSoft} />
               </View>
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   routeHead: {
     flexDirection: 'row',
   },
-  telixCard: {
+  rutixCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

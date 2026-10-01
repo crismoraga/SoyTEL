@@ -41,6 +41,8 @@ export async function loadProfile(): Promise<UserProfile> {
   if (raw) {
     try {
       profile = { ...defaultProfile, ...JSON.parse(raw) as Partial<UserProfile> };
+      // La mascota pasó a llamarse Rutix: se migra el logro guardado con el nombre anterior.
+      profile = { ...profile, unlockedAchievements: profile.unlockedAchievements.map((id) => (id === 'telix-friend' ? 'rutix-friend' : id)) };
     } catch {
       profile = defaultProfile;
     }
@@ -49,7 +51,7 @@ export async function loadProfile(): Promise<UserProfile> {
   return applyMascotDecay(profile);
 }
 
-// El ánimo de Telix baja 6 puntos por cada día sin jugar (mínimo 10).
+// El ánimo de Rutix baja 6 puntos por cada día sin jugar (mínimo 10).
 export function applyMascotDecay(profile: UserProfile, now = Date.now()): UserProfile {
   if (!profile.lastPlayedAt) {
     return profile;
@@ -149,7 +151,7 @@ export async function recordGameResult(result: GameResult): Promise<GameOutcome>
   return { profile: updated, xpGained, leveledUp, newAchievements };
 }
 
-// Revisa logros que dependen de acciones sin partida (Telix, Carrera) y los desbloquea.
+// Revisa logros que dependen de acciones sin partida (Rutix, Carrera) y los desbloquea.
 export async function syncAchievements(): Promise<AchievementId[]> {
   const context = await loadAchievementContext();
   const earned = evaluateAchievements(context);

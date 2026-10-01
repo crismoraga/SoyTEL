@@ -74,7 +74,7 @@ export const careerAreas: CareerArea[] = [
     glyph: 'bulb',
     description: 'Usas datos y tecnología para crear soluciones nuevas: análisis de información, ciudades inteligentes, investigación y emprendimiento.',
     examples: ['Analizar datos para mejorar un servicio', 'Participar en proyectos de investigación', 'Emprender con una solución tecnológica'],
-    practiceLabel: 'Vivir la historia de Telix',
+    practiceLabel: 'Vivir la historia de Rutix',
   },
 ];
 

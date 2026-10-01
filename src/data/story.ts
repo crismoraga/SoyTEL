@@ -1,4 +1,4 @@
-import type { TelixExpression } from '@/graphics/telix';
+import type { RutixExpression } from '@/graphics/rutix';
 import type { MedallionGlyph } from '@/graphics/medallions';
 import type { KnowledgeArea } from '@/types/game';
 
@@ -11,7 +11,7 @@ export interface StoryChallenge {
 }
 
 export interface StoryLine {
-  mood: TelixExpression;
+  mood: RutixExpression;
   text: string;
 }
 

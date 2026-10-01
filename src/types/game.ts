@@ -39,7 +39,7 @@ export type AchievementId =
   | 'perfect-run'
   | 'level-five'
   | 'signal-restored'
-  | 'telix-friend'
+  | 'rutix-friend'
   | 'career-explorer'
   | 'burst-collector'
   | 'quiz-master'

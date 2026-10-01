@@ -16,4 +16,4 @@ export * from './feedback/Skeleton';
 export * from './graphics/BrandBackdrop';
 export * from './graphics/Illustration';
 export * from './graphics/Medallion';
-export * from './graphics/Telix';
+export * from './graphics/Rutix';

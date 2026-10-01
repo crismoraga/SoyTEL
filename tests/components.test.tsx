@@ -4,7 +4,7 @@ import { ProgressBar, ProgressRing } from '@/components/feedback/Progress';
 import { Skeleton, SkeletonCard } from '@/components/feedback/Skeleton';
 import { Illustration } from '@/components/graphics/Illustration';
 import { Medallion } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { OptionButton } from '@/components/Quiz';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon } from '@/components/TelIcon';
@@ -22,15 +22,15 @@ describe('design system components', () => {
     expect(screen.getAllByLabelText('Cargando').length).toBeGreaterThan(0);
   });
 
-  it('renders Telix, medallions and illustrations', () => {
+  it('renders Rutix, medallions and illustrations', () => {
     render(
       <>
-        <Telix expression="celebrate" pose="celebrate" />
+        <Rutix expression="celebrate" pose="celebrate" />
         <Medallion glyph="trophy" tier="oro" state="progress" progress={0.4} />
         <Illustration name="campus" />
       </>,
     );
-    expect(screen.getByLabelText('Telix, la mascota de SoyTEL')).toBeTruthy();
+    expect(screen.getByLabelText('Rutix, la mascota de SoyTEL')).toBeTruthy();
   });
 
   it('renders loaders, skeletons and progress', () => {

@@ -1,11 +1,11 @@
 import { circle, ellipse, path, rect, star4Path, type Drawing, type Gradient, type Shape } from './shapes';
 
-// Telix: robot-antena de SoyTEL. Cabeza crema con pantalla azul noche (como el laptop del
+// Rutix: robot-antena de SoyTEL. Cabeza crema con pantalla azul noche (como el laptop del
 // logo), orejas-puerto, antena que emite señal y barras de señal en el pecho que muestran su ánimo.
-export type TelixExpression = 'neutral' | 'happy' | 'celebrate' | 'sleepy' | 'sleep' | 'sad' | 'alert' | 'think' | 'love';
-export type TelixPose = 'idle' | 'wave' | 'celebrate' | 'think';
+export type RutixExpression = 'neutral' | 'happy' | 'celebrate' | 'sleepy' | 'sleep' | 'sad' | 'alert' | 'think' | 'love';
+export type RutixPose = 'idle' | 'wave' | 'celebrate' | 'think';
 
-export const telixExpressions: TelixExpression[] = ['neutral', 'happy', 'celebrate', 'love', 'think', 'alert', 'sleepy', 'sad', 'sleep'];
+export const rutixExpressions: RutixExpression[] = ['neutral', 'happy', 'celebrate', 'love', 'think', 'alert', 'sleepy', 'sad', 'sleep'];
 
 const CREAM = '#F4ECD7';
 const LIMB = '#E3D3AE';
@@ -14,10 +14,10 @@ const SKY = '#6FB3D9';
 const EYE = '#A7D4ED';
 const NAVY = '#0B2D45';
 
-export const telixGradients: Gradient[] = [
-  { id: 'telix-head', kind: 'linear', x1: 0.2, y1: 0, x2: 0.8, y2: 1, stops: [{ offset: 0, color: '#FDF9EF' }, { offset: 1, color: '#E6D8B5' }] },
-  { id: 'telix-body', kind: 'linear', x1: 0.5, y1: 0, x2: 0.5, y2: 1, stops: [{ offset: 0, color: '#F8F0DD' }, { offset: 1, color: '#DECDA4' }] },
-  { id: 'telix-screen', kind: 'linear', x1: 0.3, y1: 0, x2: 0.7, y2: 1, stops: [{ offset: 0, color: '#18517A' }, { offset: 1, color: NAVY }] },
+export const rutixGradients: Gradient[] = [
+  { id: 'rutix-head', kind: 'linear', x1: 0.2, y1: 0, x2: 0.8, y2: 1, stops: [{ offset: 0, color: '#FDF9EF' }, { offset: 1, color: '#E6D8B5' }] },
+  { id: 'rutix-body', kind: 'linear', x1: 0.5, y1: 0, x2: 0.5, y2: 1, stops: [{ offset: 0, color: '#F8F0DD' }, { offset: 1, color: '#DECDA4' }] },
+  { id: 'rutix-screen', kind: 'linear', x1: 0.3, y1: 0, x2: 0.7, y2: 1, stops: [{ offset: 0, color: '#18517A' }, { offset: 1, color: NAVY }] },
 ];
 
 const strokePath = (d: string, color: string, width: number, extra: Partial<Shape> = {}): Shape =>
@@ -27,7 +27,7 @@ function heartPath(cx: number, cy: number, s: number): string {
   return `M${cx} ${cy + s * 0.9}C${cx - s * 1.4} ${cy - s * 0.1} ${cx - s} ${cy - s * 1.2} ${cx} ${cy - s * 0.45}C${cx + s} ${cy - s * 1.2} ${cx + s * 1.4} ${cy - s * 0.1} ${cx} ${cy + s * 0.9}Z`;
 }
 
-function arms(pose: TelixPose): Shape[] {
+function arms(pose: RutixPose): Shape[] {
   const left = pose === 'celebrate'
     ? { d: 'M69 142C50 141 34 133 28 117', hand: [26.5, 113] }
     : { d: 'M68 143C56 147 52 157 54 167', hand: [54.5, 168] };
@@ -44,7 +44,7 @@ function arms(pose: TelixPose): Shape[] {
   ];
 }
 
-export function telixBody(pose: TelixPose = 'idle', signal = 3): Shape[] {
+export function rutixBody(pose: RutixPose = 'idle', signal = 3): Shape[] {
   const bars = [6, 10, 14, 18].map((height, index) =>
     rect(86 + index * 8.5, 161 - height, 5.5, height, 1.6, {
       fill: index < signal ? SKY : BLUE,
@@ -57,7 +57,7 @@ export function telixBody(pose: TelixPose = 'idle', signal = 3): Shape[] {
     rect(74, 170, 20, 11, 5.5, { fill: BLUE }),
     rect(106, 170, 20, 11, 5.5, { fill: BLUE }),
     ...behindHead,
-    rect(66, 126, 68, 50, 22, { fill: 'url(#telix-body)' }),
+    rect(66, 126, 68, 50, 22, { fill: 'url(#rutix-body)' }),
     rect(80, 138, 40, 27, 8, { fill: NAVY, op: 0.94 }),
     ...bars,
     strokePath('M100 50V27', BLUE, 6),
@@ -67,15 +67,15 @@ export function telixBody(pose: TelixPose = 'idle', signal = 3): Shape[] {
     rect(152, 79, 14, 33, 7, { fill: BLUE }),
     circle(41, 95.5, 2.6, { fill: SKY }),
     circle(159, 95.5, 2.6, { fill: SKY }),
-    rect(42, 45, 116, 97, 38, { fill: 'url(#telix-head)' }),
+    rect(42, 45, 116, 97, 38, { fill: 'url(#rutix-head)' }),
     strokePath('M63 60C73 52 89 49.5 103 50', '#FFFFFF', 5, { op: 0.55 }),
-    rect(56, 61, 88, 65, 24, { fill: 'url(#telix-screen)' }),
+    rect(56, 61, 88, 65, 24, { fill: 'url(#rutix-screen)' }),
     strokePath('M69 72h15', '#FFFFFF', 4, { op: 0.13 }),
     ...inFront,
   ];
 }
 
-export function telixFace(expression: TelixExpression = 'neutral', blink = false): Shape[] {
+export function rutixFace(expression: RutixExpression = 'neutral', blink = false): Shape[] {
   const cheeks = [circle(69, 110, 6, { fill: SKY, op: 0.32 }), circle(131, 110, 6, { fill: SKY, op: 0.32 })];
   const openEyes = [
     ellipse(82, 92, 7.5, 9.5, { fill: EYE }),
@@ -158,7 +158,7 @@ export function telixFace(expression: TelixExpression = 'neutral', blink = false
   }
 }
 
-export function telixSignalArcs(): Shape[] {
+export function rutixSignalArcs(): Shape[] {
   return [
     strokePath('M87.7 13.4a15 15 0 0 0 0 17.2', SKY, 3.5),
     strokePath('M112.3 13.4a15 15 0 0 1 0 17.2', SKY, 3.5),
@@ -167,7 +167,7 @@ export function telixSignalArcs(): Shape[] {
   ];
 }
 
-export function telixExtras(expression: TelixExpression): Shape[] {
+export function rutixExtras(expression: RutixExpression): Shape[] {
   switch (expression) {
     case 'sleep':
       return [strokePath('M140 44h11l-11 12h11', EYE, 3.4), strokePath('M158 25h7l-7 8h7', EYE, 2.6, { op: 0.8 })];
@@ -197,30 +197,30 @@ export function telixExtras(expression: TelixExpression): Shape[] {
   }
 }
 
-export interface TelixDrawingOptions {
-  expression?: TelixExpression;
-  pose?: TelixPose;
+export interface RutixDrawingOptions {
+  expression?: RutixExpression;
+  pose?: RutixPose;
   signal?: number;
   blink?: boolean;
   shadow?: boolean;
 }
 
-export function telixDrawing({ expression = 'neutral', pose = 'idle', signal = 3, blink = false, shadow = true }: TelixDrawingOptions = {}): Drawing {
+export function rutixDrawing({ expression = 'neutral', pose = 'idle', signal = 3, blink = false, shadow = true }: RutixDrawingOptions = {}): Drawing {
   return {
     w: 200,
     h: 200,
-    gradients: telixGradients,
+    gradients: rutixGradients,
     shapes: [
       ...(shadow ? [ellipse(100, 186, 44, 7, { fill: '#000000', op: 0.18 })] : []),
-      ...(signal > 0 ? telixSignalArcs() : []),
-      ...telixBody(pose, signal),
-      ...telixFace(expression, blink),
-      ...telixExtras(expression),
+      ...(signal > 0 ? rutixSignalArcs() : []),
+      ...rutixBody(pose, signal),
+      ...rutixFace(expression, blink),
+      ...rutixExtras(expression),
     ],
   };
 }
 
-export function expressionForMood(mood: number): TelixExpression {
+export function expressionForMood(mood: number): RutixExpression {
   if (mood >= 85) return 'happy';
   if (mood >= 60) return 'neutral';
   if (mood >= 35) return 'sleepy';

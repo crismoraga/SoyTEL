@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { brandImages } from '@/components/Brand';
 import { BrandBackdrop } from '@/components/graphics/BrandBackdrop';
 import { Illustration } from '@/components/graphics/Illustration';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
@@ -36,8 +36,8 @@ const slides: Slide[] = [
     body: 'Sesiones de 15 a 20 minutos: ráfagas frenéticas, un concurso de preguntas, una historia en el campus y recorridos en grupo.',
   },
   {
-    kicker: 'Tu compañero Telix',
-    title: 'Cuida a Telix y colecciona medallas',
+    kicker: 'Tu compañero Rutix',
+    title: 'Cuida a Rutix y colecciona medallas',
     body: 'Cada partida sube su señal. Si lo dejas solo, se desanima. Sin cuentas ni correos: tu progreso vive en este teléfono.',
   },
 ];
@@ -81,7 +81,7 @@ export default function OnboardingScreen() {
           <View style={styles.artStage}>
             <BrandBackdrop variant={step === 1 ? 'network' : 'stars'} seed={step * 5 + 3} />
             <Animated.View key={step} entering={entering.pop()}>
-              {step === 1 ? <Illustration name="burst" width={280} tone="dark" /> : <Telix size={230} expression="happy" pose="wave" signal={4} />}
+              {step === 1 ? <Illustration name="burst" width={280} tone="dark" /> : <Rutix size={230} expression="happy" pose="wave" signal={4} />}
             </Animated.View>
           </View>
         )}

@@ -72,7 +72,7 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
         .reduce((max, result) => Math.max(max, Number(result.metadata?.chapter ?? 0)), 0);
     case 'burst-collector':
       return new Set(wonMicroGames(results)).size;
-    case 'telix-friend':
+    case 'rutix-friend':
       return mascotDays;
     case 'quiz-master':
       return results.some((result) => result.gameId === 'millionaire' && Number(result.metadata?.correctAnswers ?? 0) >= 10) ? 1 : 0;

@@ -7,7 +7,7 @@ import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { Illustration } from '@/components/graphics/Illustration';
 import { Medallion } from '@/components/graphics/Medallion';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { FeedbackPanel, OptionButton, type OptionState } from '@/components/Quiz';
 import { Screen, ScreenFooter } from '@/components/Screen';
@@ -31,9 +31,9 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 
 type Phase = 'intro' | 'playing' | 'finished';
 type Reveal = 'idle' | 'locking' | 'revealed';
-type Lifeline = 'fifty' | 'telix' | 'audience';
+type Lifeline = 'fifty' | 'rutix' | 'audience';
 
-interface TelixHint {
+interface RutixHint {
   index: number;
   confidence: number;
 }
@@ -45,9 +45,9 @@ export default function MillionaireScreen() {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [reveal, setReveal] = useState<Reveal>('idle');
-  const [used, setUsed] = useState<Record<Lifeline, boolean>>({ fifty: false, telix: false, audience: false });
+  const [used, setUsed] = useState<Record<Lifeline, boolean>>({ fifty: false, rutix: false, audience: false });
   const [hidden, setHidden] = useState<number[]>([]);
-  const [hint, setHint] = useState<TelixHint | null>(null);
+  const [hint, setHint] = useState<RutixHint | null>(null);
   const [poll, setPoll] = useState<number[] | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
@@ -67,7 +67,7 @@ export default function MillionaireScreen() {
     setIndex(0);
     setPicked(null);
     setReveal('idle');
-    setUsed({ fifty: false, telix: false, audience: false });
+    setUsed({ fifty: false, rutix: false, audience: false });
     setHidden([]);
     setHint(null);
     setPoll(null);
@@ -138,7 +138,7 @@ export default function MillionaireScreen() {
       setHidden((value) => [...value, ...shuffled.slice(0, 2)]);
       return;
     }
-    if (kind === 'telix') {
+    if (kind === 'rutix') {
       const accuracy = 0.92 - (question.difficulty - 1) * 0.07;
       const right = Math.random() < accuracy;
       const guess = right ? question.answerIndex : wrong[Math.floor(Math.random() * wrong.length)];
@@ -178,7 +178,7 @@ export default function MillionaireScreen() {
         </View>
         <View style={styles.rules}>
           <Rule icon="hash" text="50:50 elimina dos alternativas incorrectas." />
-          <Rule icon="robot" text="Pregunta a Telix: te dice qué cree (no siempre acierta)." />
+          <Rule icon="robot" text="Pregunta a Rutix: te dice qué cree (no siempre acierta)." />
           <Rule icon="users" text="Consulta al público: mira cómo votaría la sala." />
           <Rule icon="flag" text="Plántate cuando quieras para asegurar tus puntos." />
         </View>
@@ -194,7 +194,7 @@ export default function MillionaireScreen() {
       <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
         <Celebration burstKey={good ? correctCount : null} count={correctCount === 10 ? 44 : 28} />
         <View style={styles.finishHero}>
-          <Telix size={170} expression={correctCount === 10 ? 'celebrate' : good ? 'happy' : 'sad'} pose={good ? 'celebrate' : 'idle'} signal={good ? 4 : 2} />
+          <Rutix size={170} expression={correctCount === 10 ? 'celebrate' : good ? 'happy' : 'sad'} pose={good ? 'celebrate' : 'idle'} signal={good ? 4 : 2} />
           <TelText variant="overline" color="accent" align="center">
             {endReason === 'won' ? '¡Respondiste todo!' : endReason === 'retired' ? 'Te plantaste' : 'Fin del concurso'}
           </TelText>
@@ -346,7 +346,7 @@ export default function MillionaireScreen() {
 
       {hint && !revealed && (
         <Animated.View entering={entering.fadeUp()} style={styles.hint}>
-          <Telix size={64} expression="think" animated={false} />
+          <Rutix size={64} expression="think" animated={false} />
           <TelText variant="bodyStrong" color="primary" style={styles.flex}>
             Mmm… creo que es la {LETTERS[hint.index]}. Estoy {hint.confidence}% seguro.
           </TelText>
@@ -364,7 +364,7 @@ export default function MillionaireScreen() {
       {reveal === 'idle' && (
         <View style={styles.lifelines}>
           <LifelineButton icon="hash" label="50:50" used={used.fifty} onPress={() => applyLifeline('fifty')} />
-          <LifelineButton icon="robot" label="Telix" used={used.telix} onPress={() => applyLifeline('telix')} />
+          <LifelineButton icon="robot" label="Rutix" used={used.rutix} onPress={() => applyLifeline('rutix')} />
           <LifelineButton icon="users" label="Público" used={used.audience} onPress={() => applyLifeline('audience')} />
         </View>
       )}

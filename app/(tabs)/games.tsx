@@ -7,7 +7,7 @@ import { Tag } from '@/components/Chips';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { SkeletonCard } from '@/components/feedback/Skeleton';
 import { Illustration, type IllustrationName } from '@/components/graphics/Illustration';
-import { Telix } from '@/components/graphics/Telix';
+import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
@@ -49,7 +49,7 @@ const modes: ModeCard[] = [
   },
   {
     title: 'Historia: La señal perdida',
-    subtitle: 'Cinco capítulos con Telix por el campus. Cada uno es un reto de un área distinta.',
+    subtitle: 'Cinco capítulos con Rutix por el campus. Cada uno es un reto de un área distinta.',
     duration: '10–15 min',
     illustration: 'campus',
     route: '/story',
@@ -178,14 +178,14 @@ export default function GamesScreen() {
               </Animated.View>
             ))
           : [0, 1, 2].map((index) => <SkeletonCard key={index} />)}
-        <TelCard onPress={() => router.push('/mascot')} accessibilityLabel="Visitar a Telix" style={styles.modeCard}>
+        <TelCard onPress={() => router.push('/mascot')} accessibilityLabel="Visitar a Rutix" style={styles.modeCard}>
           <View style={styles.modeArt}>
-            <Telix size={96} expression="happy" pose="wave" signal={4} animated={false} />
+            <Rutix size={96} expression="happy" pose="wave" signal={4} animated={false} />
           </View>
           <View style={styles.flex}>
             <Tag tone="warning" icon="heart" label="1 min al día" />
             <TelText variant="subtitle" color="primary">
-              Telix, tu mascota
+              Rutix, tu mascota
             </TelText>
             <TelText variant="caption" color="muted">
               Cuídalo cada día: su señal sube cuando juegas y baja si lo olvidas.
