@@ -20,8 +20,11 @@ import { coachLine } from '@/data/coachLines';
 import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { PauseSheet, useBackToPause } from '@/features/coach/PauseSheet';
 import { DAILY_BONUS, DAILY_ROUNDS, dailyKey, dailySeed, isDailyDone } from '@/features/burst/daily';
+import { getMicroGameGuide } from '@/features/burst/guides';
 import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
+import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
+import { tutorials } from '@/features/tutorial/tutorials';
 import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
@@ -30,6 +33,7 @@ import { useEntering, useMotionEnabled } from '@/lib/motion';
 import { PACE_ACCELERATION, paceFactor } from '@/lib/pace';
 import { loadResults, recordGameResult } from '@/storage/profile';
 import { useSettings, type GamePace } from '@/storage/settings';
+import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome, MicroGameId } from '@/types/game';
 
@@ -112,6 +116,8 @@ export default function BurstScreen() {
   // Desafío diario: los mismos microjuegos para todos durante el día, con bono la primera vez.
   const daily = !focusGame && diario === '1';
   const coach = useCoachEnabled();
+  // La primera vez, Rutix explica cómo funciona la ráfaga antes de empezar.
+  const tutorial = useTutorial(focusGame ? null : 'burst');
   const [dailyDone, setDailyDone] = useState(false);
   const entering = useEntering();
   const motionEnabled = useMotionEnabled();
@@ -258,7 +264,7 @@ export default function BurstScreen() {
 
   if (state.phase === 'intro') {
     return (
-      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent onBack={() => router.back()} compact />}>
+      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent onBack={() => router.back()} compact right={focusGame ? undefined : <HelpButton onPress={tutorial.open} />} />}>
         <Animated.View entering={entering.pop()} style={styles.introArt}>
           <Illustration name="burst" width={250} tone="dark" />
         </Animated.View>
@@ -296,6 +302,7 @@ export default function BurstScreen() {
         )}
         <TelButton label="¡Empezar!" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
         <AccountGate />
+        <TutorialSheet tutorial={tutorials.burst} visible={tutorial.visible} onClose={tutorial.close} />
       </Screen>
     );
   }
@@ -372,6 +379,7 @@ export default function BurstScreen() {
   if (!current) {
     return <Screen tone="dark" />;
   }
+  const guide = getMicroGameGuide(current.id);
 
   if (state.phase === 'ready') {
     const faster = !focusGame && acceleration > 0 && state.round >= 2;
@@ -387,7 +395,7 @@ export default function BurstScreen() {
             Ronda {state.round + 1} de {state.games.length}
           </TelText>
           <View style={styles.readyIcon}>
-            <TelIcon name={current.icon} size={54} color={colors.primary} />
+            <TelIcon name={current.icon} size={44} color={colors.primary} />
           </View>
           <TelText variant="hero" color="cream" align="center">
             {current.title}
@@ -395,6 +403,23 @@ export default function BurstScreen() {
           <TelText variant="subtitle" color="accentSoft" align="center">
             {current.instruction}
           </TelText>
+          <View style={styles.steps} accessible accessibilityLabel={`Cómo se juega. ${guide.steps.map((step, index) => `Paso ${index + 1}: ${step}`).join(' ')}`}>
+            <TelText variant="small" color="accent" style={styles.stepsKicker}>
+              CÓMO SE JUEGA
+            </TelText>
+            {guide.steps.map((step, index) => (
+              <View key={step} style={styles.step}>
+                <View style={styles.stepNumber}>
+                  <TelText variant="small" color="primary">
+                    {index + 1}
+                  </TelText>
+                </View>
+                <TelText variant="caption" color="cream" style={styles.flex}>
+                  {step}
+                </TelText>
+              </View>
+            ))}
+          </View>
           {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
         </Animated.View>
         {coach && (
@@ -493,9 +518,17 @@ export default function BurstScreen() {
               <TelText variant="subtitle" color={state.lastPoints > 0 ? 'accent' : 'dangerSoft'} align="center">
                 {state.lastPoints > 0 ? `+${state.lastPoints} pts` : '−1 vida'}
               </TelText>
+              {coach && (
+                <TelText variant="label" color="accentSoft" align="center">
+                  {coachLine(state.lastPoints > 0 ? 'good' : 'bad', state.round + state.score)}
+                </TelText>
+              )}
               <View style={styles.overlayNote}>
+                <TelText variant="small" color="accent" align="center" style={styles.stepsKicker}>
+                  {state.lastPoints > 0 ? 'LO QUE APRENDISTE' : 'PARA LA PRÓXIMA'}
+                </TelText>
                 <TelText variant="body" color="cream" align="center">
-                  {state.lastNote ?? (coach ? coachLine(state.lastPoints > 0 ? 'good' : 'bad', state.round + state.score) : '')}
+                  {state.lastNote ?? guide.learn}
                 </TelText>
               </View>
               {pace !== 'fast' && (
@@ -573,12 +606,35 @@ const styles = StyleSheet.create({
   },
   ready: {
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  steps: {
+    alignSelf: 'stretch',
+    gap: 6,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(18, 61, 92, 0.85)',
+  },
+  stepsKicker: {
+    letterSpacing: 1.2,
+  },
+  step: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  stepNumber: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
   },
   readyIcon: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: colors.cream,
     borderWidth: 6,
     borderColor: colors.accent,
@@ -591,15 +647,19 @@ const styles = StyleSheet.create({
   readyTap: {
     flex: 1,
     justifyContent: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   readyCoach: {
     alignSelf: 'stretch',
   },
   overlayNote: {
     minHeight: 48,
-    maxWidth: 320,
+    maxWidth: 330,
+    gap: 4,
     justifyContent: 'center',
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(18, 61, 92, 0.9)',
   },
   overlayCta: {
     flexDirection: 'row',

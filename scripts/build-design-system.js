@@ -23,6 +23,9 @@ const { rutixDrawing, rutixExpressions, rutixPoses, rutixWardrobe } = src('graph
 const { coachLooks, coachLines } = src('data/coachLines');
 const net = src('features/puzzles/netwalk');
 const { mulberry32 } = src('route/random');
+const { runnerCharacterDrawing, runnerItemDrawing, runnerItemKinds } = src('graphics/runners');
+const { runnerCharacters } = src('features/runner/characters');
+const { tutorials } = src('features/tutorial/tutorials');
 const { illustrationDrawing, illustrationNames } = src('graphics/illustrations');
 const { patternPreviews } = src('graphics/patterns');
 const { campusMapDrawing } = src('graphics/campusMap');
@@ -313,6 +316,9 @@ const rutixOutfits = rutixWardrobe.filter((item) => item.id !== 'none');
 rutixExpressions.forEach((expression) => addAsset('Rutix', `rutix-${expression}.svg`, drawingToSvg(rutixDrawing(rutixLook(expression)), { width: 400 })));
 rutixPoses.forEach((pose) => addAsset('Rutix', `pose-${pose.toLowerCase()}.svg`, drawingToSvg(rutixDrawing(poseLook(pose)), { width: 400 })));
 rutixOutfits.forEach((item) => addAsset('Rutix', `accesorio-${item.id}.svg`, drawingToSvg(rutixDrawing(accessoryLook(item.id)), { width: 400 })));
+// TEL Runner: personajes telemáticos y objetos de la pista.
+runnerCharacters.forEach((character) => addAsset('Runner', `personaje-${character.id}.svg`, drawingToSvg(runnerCharacterDrawing(character.id), { width: 320 })));
+runnerItemKinds.forEach((kind) => addAsset('Runner', `objeto-${kind}.svg`, drawingToSvg(runnerItemDrawing(kind), { width: 160 })));
 illustrationNames.forEach((name) => {
   addAsset('Ilustraciones', `${name}.svg`, drawingToSvg(illustrationDrawing(name), { width: 480, height: 400 }));
   addAsset('Ilustraciones', `${name}-oscuro.svg`, drawingToSvg(illustrationDrawing(name, 'dark'), { width: 480, height: 400 }));
@@ -328,7 +334,7 @@ const avatarSvg = (index, size = 96) => {
   const inner = iconToSvg(icons[info.icon], { size: 50, color: colors.primary }).replace(/currentColor/g, colors.primary).replace('<svg ', '<svg x="23" y="23" ');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 96 96"><circle cx="48" cy="48" r="45" fill="${info.color}" stroke="${colors.cream}" stroke-width="4"/>${inner}</svg>`;
 };
-avatars.forEach((info, index) => addAsset('Ruta', `avatar-${index + 1}-${info.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}.svg`, avatarSvg(index)));
+avatars.forEach((info, index) => addAsset('Ruta', `avatar-${index + 1}-${info.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}.svg`, avatarSvg(index)));
 const shapeSvg = (index) => {
   const style = answerStyles[index];
   const glyph = {
@@ -359,6 +365,7 @@ const groupReadmes = {
   Rutix: '# Rutix\n\nMascota de SoyTEL (diseño v2): robot-antena con pantalla por cara, orejas-puerto, botas y barras de señal en el pecho que muestran su ánimo (0–4).\n\n- `rutix-<expresión>.svg` — las 15 expresiones (`neutral`, `happy`, `celebrate`, `love`, `wink`, `proud`, `laugh`, `think`, `focus`, `surprised`, `alert`, `worried`, `sleepy`, `sad`, `sleep`), cada una con la pose y la señal que mejor la acompañan.\n- `pose-<pose>.svg` — las 7 poses: `idle`, `wave`, `celebrate`, `think`, `point`, `thumbsup` y `shrug`.\n- `accesorio-<id>.svg` — el guardarropa que se desbloquea jugando: `cap` (jockey TEL, nivel 2), `headphones` (audífonos, tres ráfagas), `graduation` (birrete, las seis áreas de la carrera) y `crown` (corona, nivel 8 o ganar una ruta en vivo).\n\nSus colores son fijos en los dos temas (cuerpo `cream`, pantalla `primary`, ojos `accentSoft`): ponlo sobre fondos azul noche o dentro de un círculo `primary`. En la app flota, parpadea y su antena pulsa (componente `Rutix`); en los juegos habla desde una burbuja (`CoachBubble`). Úsalo como guía y reacción emocional, nunca como decoración repetida: máximo un Rutix por pantalla.\n',
   Ilustraciones: '# Ilustraciones\n\nIlustraciones planas en el estilo de «Ilustraciones rápidas» de la marca, generadas desde una paleta: versión clara (fondo `highlight`) para pantallas claras y `-oscuro` para pantallas azules. `connect`, `burst`, `campus`, `globe`, `trophy`, `inbox` (estado vacío de avisos), `quiz`, `route`, `offline` (error), `career`. `mapa-campus.svg` es el mapa del modo historia.\n',
   Ruta: '# Ruta Telemática\n\nGráficos del modo en vivo (stand → B215 → B213 → pasillo). `templo-*`: el Templo de Telemática de Didactic-Tel; cada columna toma el color de su pilar cuando el participante completa el juego del proyecto (Datos, Software, Redes, Telecomunicaciones, Hardware) y con los cinco se enciende el frontón. `avatar-*`: los 8 avatares que elige cada participante (círculo de color con anillo crema e ícono en tinta primaria). `respuesta-*`: color y forma de las cuatro alternativas de la trivia final, estilo Kahoot (triángulo, rombo, círculo, cuadrado), para que se distingan también sin color.\n',
+  Runner: '# TEL Runner\n\nGráficos de la carrera sin fin.\n\n- `personaje-<id>.svg` — los siete personajes telemáticos: `rutix` (robot-antena, inicial), `paqui` (paquete de datos), `routa` (router), `fibri` (fibra óptica), `satelin` (satélite), `dronix` (dron) y `nubi` (la nube). Se desbloquean con paquetes de datos y cada uno trae una ventaja ligada a lo que hace en una red real.\n- `objeto-<tipo>.svg` — lo que aparece en la pista: `packet` (paquete de datos, suma), `shield` (cortafuegos, protege de un golpe), `fiber` (rayo de fibra, duplica los paquetes), `virus` (obstáculo alto: se esquiva) y `cable` (obstáculo bajo: se salta).\n\nColores fijos en los dos temas: todo va sobre la pista azul noche. Los obstáculos son los únicos elementos en rojo o naranja y además tienen forma propia (púas, chispas), para que no dependan solo del color.\n',
   Patrones: '# Patrones\n\nFondos decorativos de las pantallas oscuras (`BrandBackdrop`): `estrellas` (por defecto), `red` (nodos conectados), `senal` (ondas desde una esquina) y `orbitas` (anillos crema como la bienvenida). Siempre detrás del contenido, sin competir con el texto; una capa de estrellas titila si el movimiento está activado.\n',
 };
 Object.entries(groupReadmes).forEach(([group, text]) => write(path.join(project, 'assets', group, 'README.md'), text));
@@ -812,6 +819,69 @@ readme('Themes', `
 Los dos temas de la app, lado a lado. Solo cambian los colores de superficie (\`paper\`, \`surface\`, \`surfaceAlt\`, \`border\`, \`highlight\`), el texto que va sobre ellos (\`ink\`, \`inkSoft\`, \`inkAccent\`), los estados suaves y la acción principal (\`action\` con \`actionInk\`: azul noche con texto crema en claro, celeste con texto azul noche en oscuro). Los colores de marca no cambian: las cabeceras y las pantallas de juego son azul noche en ambos temas. Regla: sobre una superficie del tema se escribe con \`ink\`, \`inkSoft\` o \`inkAccent\`; sobre un relleno de marca (\`cream\`, \`accent\`, color de pilar) con \`primary\` o \`secondary\`. El tema se elige en Ajustes («Sistema», «Claro», «Oscuro») y por defecto sigue al del sistema. Los chips de la muestra son el ajuste «Ritmo de los juegos»: tranquilo (por defecto), normal y rápido.
 `);
 
+// ---------- TEL Runner, tutoriales y guía de inicio ----------
+const runnerSvg = (id, size) => drawingToSvg(runnerCharacterDrawing(id), { width: size });
+const itemSvg = (kind, size) => drawingToSvg(runnerItemDrawing(kind), { width: size });
+const runnerCss = `.rn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:620px}
+.rn-cell{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:var(--radius-md);background:var(--primarySoft);border:1px solid rgba(167,212,237,.2);color:var(--cream);font-weight:800;font-size:13px;line-height:17px;text-align:center}
+.rn-cell small{font-size:11px;line-height:15px;font-weight:700;color:var(--accentSoft)}
+.rn-cell.on{background:var(--cream);border-color:var(--cream);color:var(--primary)}.rn-cell.on small{color:var(--secondary)}
+.rn-hud{display:flex;align-items:center;justify-content:space-between;width:330px}
+.rn-ctrl{display:flex;gap:8px;width:330px}
+.rn-ctrl span{flex:1;min-height:56px;border-radius:var(--radius-md);background:var(--accent);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-display);font-weight:700;font-size:16px}
+.rn-ctrl span.wide{flex:1.5;background:var(--cream)}
+.rn-items{display:flex;gap:18px;align-items:flex-end}
+.rn-items div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:800;color:var(--accentSoft);width:74px;text-align:center}`;
+preview('RunnerCharacters', { group: 'Juegos', height: 370, subtitle: 'Personajes telemáticos de TEL Runner' }, `<div class="tel-stage dark"><div class="rn-grid">${runnerCharacters.map((character, index) => `<div class="rn-cell${index === 0 ? ' on' : ''}">${runnerSvg(character.id, 78)}<span>${character.name}</span><small>${character.role}</small><small>${index === 0 ? 'En uso' : `${character.cost} paquetes`}</small></div>`).join('')}</div></div>`, runnerCss);
+readme('RunnerCharacters', `
+Personajes de TEL Runner. Cada uno es un equipo o concepto real de las redes y se desbloquea con paquetes de datos recogidos corriendo; nunca con dinero ni al azar. Todos comparten rasgos: ojos azul noche con brillo, sonrisa corta, mejillas suaves y una sombra elíptica debajo. Cada ficha muestra el dibujo, el nombre, qué es en una red de verdad, un dato para aprender y su ventaja en la carrera: ${runnerCharacters.map((character) => `**${character.name}** (${character.role.toLowerCase()}, ${character.cost === 0 ? 'inicial' : `${character.cost} paquetes`}): ${character.perk.replace(/\.$/, '').toLowerCase()}`).join('; ')}. El elegido va en una celda \`cream\`; los bloqueados se muestran atenuados con su precio. Sus colores son fijos: van sobre fondos azul noche.
+`);
+
+const trackScene = (() => {
+  const width = 330;
+  const height = 420;
+  const cx = width / 2;
+  const horizon = 24;
+  const playerY = 330;
+  const lane = 88;
+  const depth = playerY - horizon;
+  const at = (laneIndex, ahead) => {
+    const eased = (1 - ahead / 24) ** 2;
+    return { x: cx + (laneIndex - 1) * lane * (0.3 + 0.7 * eased), y: horizon + depth * eased, scale: 0.3 + 0.7 * eased };
+  };
+  const topHalf = 1.5 * lane * 0.3;
+  const bottomHalf = 1.5 * lane * (0.3 + 0.7 * ((height - horizon) / depth));
+  const nest = (svg, x, y, size) => svg.replace('<svg ', `<svg x="${(x - size / 2).toFixed(1)}" y="${(y - size * 0.92).toFixed(1)}" `).replace(/width="[^"]*" height="[^"]*"/, `width="${size.toFixed(1)}" height="${size.toFixed(1)}"`);
+  let body = `<polygon points="${cx - topHalf},${horizon} ${cx + topHalf},${horizon} ${cx + bottomHalf},${height} ${cx - bottomHalf},${height}" fill="${colors.primaryDeep}"/>`;
+  [-1, 1].forEach((side) => {
+    body += `<line x1="${cx + side * topHalf}" y1="${horizon}" x2="${cx + side * bottomHalf}" y2="${height}" stroke="${colors.accent}" stroke-width="3" stroke-opacity=".8"/>`;
+    body += `<line x1="${cx + (side * topHalf) / 3}" y1="${horizon}" x2="${cx + (side * bottomHalf) / 3}" y2="${height}" stroke="${colors.accentSoft}" stroke-width="2" stroke-opacity=".3" stroke-dasharray="10 12"/>`;
+  });
+  [['packet', 1, 20], ['packet', 1, 16], ['virus', 0, 14], ['packet', 1, 12], ['packet', 2, 8.5], ['cable', 0, 5.5], ['shield', 2, 4]].forEach(([kind, laneIndex, ahead]) => {
+    const point = at(laneIndex, ahead);
+    body += nest(itemSvg(kind, 100), point.x, point.y, 56 * point.scale);
+  });
+  const player = at(1, 0);
+  body += `<ellipse cx="${player.x}" cy="${player.y - 3}" rx="30" ry="7" fill="#000" opacity=".3"/>${nest(runnerSvg('rutix', 100), player.x, player.y, 88)}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+})();
+const heartSvg = iconToSvg(icons.heartSolid, { size: 20, color: '#F4B8C4' });
+preview('RunnerTrack', { group: 'Juegos', height: 600, subtitle: 'TEL Runner: pista, objetos y controles' }, `<div class="tel-stage dark tel-row" style="align-items:flex-start;gap:28px"><div class="tel-col" style="gap:8px"><div class="rn-hud"><span style="display:flex;gap:3px">${heartSvg}${heartSvg}${heartSvg}</span><span class="rt-pill">${svgIcon('route', 16, colors.accent)} 148 m</span><span class="rt-pill">${svgIcon('packet', 16, colors.accent)} 23</span><span class="tel-iconbtn dark" style="width:40px;height:40px">${svgIcon('pause', 20)}</span></div>${trackScene}<div class="rn-ctrl"><span>${svgIcon('chevronLeft', 28, 'currentColor', 2.6)}</span><span class="wide">${svgIcon('chevronUp', 28, 'currentColor', 2.6)} Saltar</span><span>${svgIcon('chevronRight', 28, 'currentColor', 2.6)}</span></div></div><div class="tel-col" style="gap:14px;width:300px"><span class="tel-overline">Objetos de la pista</span><div class="rn-items">${[['packet', 'Paquete de datos'], ['shield', 'Cortafuegos'], ['fiber', 'Rayo de fibra']].map(([kind, label]) => `<div>${itemSvg(kind, 60)}${label}</div>`).join('')}</div><div class="rn-items">${[['virus', 'Virus: se esquiva'], ['cable', 'Cable: se salta']].map(([kind, label]) => `<div>${itemSvg(kind, 60)}${label}</div>`).join('')}</div></div></div>`, `${routeCss}\n${runnerCss}`);
+readme('RunnerTrack', `
+Pantalla de juego de TEL Runner, la carrera sin fin por la «autopista de datos». Tres pistas en perspectiva (trapecio \`primaryDeep\` con bordes \`accent\` y divisiones punteadas) por las que se acercan los objetos; el personaje corre abajo. Arriba: vidas, metros, paquetes (la píldora se vuelve dorada con «×2» durante el rayo de fibra) y pausa. Abajo, tres botones grandes: izquierda y derecha en \`accent\`, «Saltar» en \`cream\`; también se juega deslizando el dedo o con las flechas del teclado. Objetos buenos: paquete de datos (suma), cortafuegos (protege de un golpe) y rayo de fibra (duplica los paquetes). Obstáculos: el virus es alto y solo se esquiva; el cable suelto es bajo y se puede saltar. Reglas de juego limpio: los virus nunca tapan las tres pistas, tras un obstáculo vienen filas libres y el rastro de paquetes siempre lleva a una pista segura. La velocidad sigue el ritmo elegido en Ajustes.
+`);
+
+const tutorialSample = tutorials.runner;
+preview('TutorialSheet', { group: 'Juegos', height: 420, subtitle: 'Cómo se juega, paso a paso' }, `<div class="tel-stage dark" style="align-items:flex-end;padding:0"><div style="width:380px;border-radius:28px 28px 0 0;background:var(--primary);border:1px solid rgba(167,212,237,.2);border-bottom:0;padding:10px 20px 20px;display:flex;flex-direction:column;gap:12px"><span style="align-self:center;width:44px;height:5px;border-radius:3px;background:var(--secondary)"></span><div class="tel-row" style="flex-wrap:nowrap">${rutix({ expression: 'wink', pose: 'point', signal: 3 }, 76)}<div class="tel-col" style="gap:2px"><span class="tel-overline">Paso 2 de ${tutorialSample.steps.length}</span><span class="tel-subtitle" style="color:var(--cream);font-size:19px;line-height:25px">${tutorialSample.title}</span></div></div><div style="display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:var(--radius-lg);background:var(--cream);color:var(--primary);min-height:110px"><span style="flex:none;width:56px;height:56px;border-radius:28px;background:var(--accent);display:flex;align-items:center;justify-content:center">${svgIcon(tutorialSample.steps[1].icon, 30)}</span><div class="tel-col" style="gap:2px"><span class="tel-subtitle">${tutorialSample.steps[1].title}</span><span style="font-size:16px;line-height:24px">${tutorialSample.steps[1].text}</span></div></div><div style="display:flex;justify-content:center;gap:6px">${tutorialSample.steps.map((step, index) => `<span style="width:${index === 1 ? 24 : 8}px;height:8px;border-radius:4px;background:${index === 1 ? 'var(--cream)' : index < 1 ? 'var(--accent)' : 'var(--secondary)'}"></span>`).join('')}</div><div class="tel-row" style="flex-wrap:nowrap"><span class="tel-iconbtn dark" style="width:52px;height:52px">${svgIcon('chevronLeft', 24)}</span><span class="tel-btn accent" style="flex:1">Siguiente ${svgIcon('arrowRight')}</span></div><span style="text-align:center;color:var(--accentSoft);font-weight:700;font-size:14px">Saltar explicación</span></div></div>`);
+readme('TutorialSheet', `
+Tutorial «Cómo se juega». Se abre solo la primera vez que se entra a cada juego y después queda a un toque en el botón de ayuda (\`HelpButton\`, ícono \`help\`) de la cabecera. Una idea por paso: Rutix apuntando, «Paso N de M», una tarjeta \`cream\` con ícono en círculo \`accent\`, título y una o dos frases de menos de 140 caracteres; puntos de avance y botones «Siguiente» / «¡Entendido, a jugar!». Siempre se puede saltar. Hay tutoriales para: ${Object.values(tutorials).map((tutorial) => tutorial.title.replace(/^Cómo (se juega|funcionan?) (la |los |el )?/, '')).join(', ')}. Además, cada microjuego muestra antes de la ronda sus «pasos» numerados y, después, lo que se aprendió («Lo que aprendiste» / «Para la próxima»).
+`);
+
+preview('GuideCard', { group: 'Contenedores', height: 260, subtitle: 'Guía de inicio en la pantalla principal' }, `<div class="tel-stage"><div class="tel-card" style="width:360px"><div class="tel-row" style="flex-wrap:nowrap"><span style="flex:none;width:64px;height:64px;border-radius:32px;background:var(--primary);display:flex;align-items:center;justify-content:center">${rutix({ expression: 'wink', pose: 'point', signal: 3, shadow: false }, 54)}</span><div class="tel-col" style="gap:2px"><span class="tel-small" style="color:var(--inkAccent);letter-spacing:1.4px">GUÍA DE INICIO · 2 DE 6</span><p class="tel-subtitle">Corre en TEL Runner</p><p class="tel-caption">Junta paquetes de datos, esquiva virus y desbloquea personajes.</p></div></div><div style="display:flex;gap:8px">${[['check', 'done'], ['rocket', 'now'], ['network', ''], ['router', ''], ['robot', ''], ['check', 'done']].map(([icon, state]) => `<span style="flex:1;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:${state === 'done' ? 'var(--success)' : state === 'now' ? 'var(--action)' : 'var(--surfaceAlt)'};color:${state === 'done' ? '#fff' : state === 'now' ? 'var(--actionInk)' : 'var(--inkSoft)'}">${svgIcon(icon, 14, 'currentColor', state === 'done' ? 3 : 2)}</span>`).join('')}</div><span class="tel-btn primary sm">Vamos ${svgIcon('arrowRight')}</span></div></div>`);
+readme('GuideCard', `
+Guía de inicio de la pantalla principal: los primeros seis pasos recomendados para quien abre SoyTEL por primera vez (una Ráfaga, TEL Runner, un desafío sin reloj, un juego de la ruta, Rutix y un área de la carrera). Rutix, dentro de un círculo \`primary\`, señala el siguiente paso con su título y una frase; debajo, una fila de píldoras muestra el avance: \`success\` con ✓ los pasos listos, \`action\` el actual y \`surfaceAlt\` los pendientes. El botón «Vamos» lleva directo al paso. Cada paso se marca solo al cumplirse y la tarjeta desaparece cuando están todos.
+`);
+
 // Cover
 const cover = `<!-- @dsCard height=288 -->
 <!doctype html>
@@ -876,7 +946,7 @@ write(path.join(project, 'README.md'), fs.readFileSync(path.join(__dirname, 'des
 // ---------- índice ----------
 if (idsFile) {
   const ids = JSON.parse(fs.readFileSync(idsFile, 'utf8'));
-  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Rutix: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
+  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Rutix: 'm', Runner: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
   const types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg' };
   const assetGroups = {};
   Object.keys(tiles).filter((group) => assetFiles[group]).forEach((group) => {
@@ -903,7 +973,7 @@ if (idsFile) {
     assetGroups,
     blobs: previous?.blobs ?? {},
     docs: previous?.docs ?? { sections: [] },
-    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: `SoyTEL 3.0: tema oscuro, Rutix v2 (${rutixExpressions.length} expresiones, ${rutixPoses.length} poses y guardarropa), Rutix en los juegos, desafíos sin reloj y ${Object.keys(icons).length} íconos. Generado desde el código de la app.` },
+    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: `SoyTEL 3.0: tema oscuro, Rutix v2 (${rutixExpressions.length} expresiones, ${rutixPoses.length} poses y guardarropa), Rutix en los juegos, TEL Runner con ${runnerCharacters.length} personajes, tutoriales paso a paso, desafíos sin reloj y ${Object.keys(icons).length} íconos. Generado desde el código de la app.` },
   };
   write(path.join(project, 'design-system.json'), `${JSON.stringify(index, null, 2)}\n`);
 }

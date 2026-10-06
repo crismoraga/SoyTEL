@@ -11,10 +11,13 @@ import { PauseSheet, useBackToPause } from '@/features/coach/PauseSheet';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getStationGame } from '@/features/stations/registry';
+import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
+import { tutorials } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
 import { usePaceFactor } from '@/lib/pace';
 import { formatNumber } from '@/lib/format';
 import { recordGameResult } from '@/storage/profile';
+import { useTutorial } from '@/storage/tutorials';
 import { spacing } from '@/theme';
 import type { GameOutcome } from '@/types/game';
 
@@ -26,6 +29,7 @@ export default function StationPracticeScreen() {
   const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: 0 }));
   const [result, setResult] = useState<{ score: number; outcome: GameOutcome | null } | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const tutorial = useTutorial(info ? 'station' : null);
   // Con una partida en curso, volver atrás pregunta antes de salir.
   useBackToPause(Boolean(info) && !result && !leaving, () => setLeaving(true));
 
@@ -75,7 +79,16 @@ export default function StationPracticeScreen() {
       backdrop="stars"
       scroll={false}
       header={
-        <AppHeader compact onBack={() => setLeaving(true)} right={<Tag tone="glass" icon="pin" label={info.place} />}>
+        <AppHeader
+          compact
+          onBack={() => setLeaving(true)}
+          right={
+            <View style={styles.headRight}>
+              <Tag tone="glass" icon="pin" label={info.place} />
+              <HelpButton onPress={tutorial.open} />
+            </View>
+          }
+        >
           <TelText variant="heading" color="cream">
             {info.title}
           </TelText>
@@ -99,6 +112,12 @@ export default function StationPracticeScreen() {
         }}
       />
       <AccountGate />
+      <TutorialSheet
+        tutorial={tutorials.station}
+        visible={tutorial.visible}
+        onClose={tutorial.close}
+        intro={{ icon: info.icon, title: info.title, text: info.summary }}
+      />
       <PauseSheet
         visible={leaving}
         title="¿Salir del juego?"
@@ -126,5 +145,10 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.sm,
     marginTop: 'auto',
+  },
+  headRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
 });

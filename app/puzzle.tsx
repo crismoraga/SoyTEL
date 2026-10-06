@@ -17,11 +17,14 @@ import { getPuzzle } from '@/features/puzzles/catalog';
 import { CipherGame } from '@/features/puzzles/CipherGame';
 import { NetWalkGame } from '@/features/puzzles/NetWalkGame';
 import type { PuzzleGameProps, PuzzleResult } from '@/features/puzzles/types';
+import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
+import { getTutorial } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
 import { useFocusData } from '@/lib/useFocusData';
 import { recordGameResult } from '@/storage/profile';
 import { loadPuzzleProgress, recordPuzzleSolved, type PuzzleId } from '@/storage/puzzles';
+import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome } from '@/types/game';
 
@@ -42,6 +45,8 @@ export default function PuzzleScreen() {
   const { juego } = useLocalSearchParams<{ juego?: string }>();
   const info = getPuzzle(juego ?? '');
   const coach = useCoachEnabled();
+  const tutorial = useTutorial(info ? `puzzle-${info.id}` : null);
+  const guide = info ? getTutorial(`puzzle-${info.id}`) : undefined;
   const { data: progress, setData: setProgress } = useFocusData(loadPuzzleProgress);
   const [chosenLevel, setChosenLevel] = useState<number | null>(null);
   const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: now() }));
@@ -121,7 +126,16 @@ export default function PuzzleScreen() {
       tone="dark"
       backdrop="stars"
       header={
-        <AppHeader compact onBack={() => router.back()} right={<Tag tone="glass" icon={info.icon} label={`Nivel ${level} · ${info.levelName(level)}`} />}>
+        <AppHeader
+          compact
+          onBack={() => router.back()}
+          right={
+            <View style={styles.headRight}>
+              <Tag tone="glass" icon={info.icon} label={`Nivel ${level} · ${info.levelName(level)}`} />
+              <HelpButton onPress={tutorial.open} />
+            </View>
+          }
+        >
           <TelText variant="heading" color="cream">
             {info.title}
           </TelText>
@@ -148,11 +162,17 @@ export default function PuzzleScreen() {
         </TelText>
       </View>
       <AccountGate />
+      {guide && <TutorialSheet tutorial={guide} visible={tutorial.visible} onClose={tutorial.close} />}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  headRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   hero: {
     alignItems: 'center',
     gap: spacing.xs,

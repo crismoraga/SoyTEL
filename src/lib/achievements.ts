@@ -44,6 +44,10 @@ export function puzzleLevels(results: GameResult[], game: string): number {
   return new Set(results.filter((result) => result.gameId === 'puzzle' && result.metadata?.game === game).map((result) => Number(result.metadata?.level ?? 0))).size;
 }
 
+function runnerRuns(results: GameResult[]): GameResult[] {
+  return results.filter((result) => result.gameId === 'runner');
+}
+
 // Valor actual de cada logro (se compara con su umbral). Función pura y testeable.
 export function achievementProgress(id: AchievementId, context: AchievementContext): number {
   const { profile, results, mascotDays, careerAreas } = context;
@@ -92,6 +96,11 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
       return puzzleLevels(results, 'cifrado');
     case 'daily-three':
       return dailyDays(results);
+    case 'runner-rookie':
+    case 'runner-courier':
+      return runnerRuns(results).reduce((max, result) => Math.max(max, Number(result.metadata?.distance ?? 0)), 0);
+    case 'data-collector':
+      return runnerRuns(results).reduce((total, result) => total + Number(result.metadata?.data ?? 0), 0);
     case 'rutix-friend':
       return mascotDays;
     case 'quiz-master':

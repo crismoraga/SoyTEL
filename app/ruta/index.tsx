@@ -14,6 +14,8 @@ import { useAccount } from '@/account/store';
 import { AccountGate } from '@/features/account/AccountGate';
 import { AvatarPicker } from '@/features/account/AvatarPicker';
 import { CodeBoxes, RouteProgress } from '@/features/route/parts';
+import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
+import { tutorials } from '@/features/tutorial/tutorials';
 import { useEntering } from '@/lib/motion';
 import { currentPaceFactor } from '@/lib/pace';
 import { isValidJourneyCode, sanitizeJourneyCode } from '@/lib/progression';
@@ -31,6 +33,7 @@ export default function RouteLandingScreen() {
   const view = useMemberView();
   const [code, setCode] = useState(() => sanitizeJourneyCode(params.codigo ?? ''));
   const [alias, setAlias] = useState('');
+  const [helpOpen, setHelpOpen] = useState(false);
   const [avatar, setAvatar] = useState(0);
   const [unlocks, setUnlocks] = useState<{ level: number; achievements: string[] }>({ level: 1, achievements: [] });
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export default function RouteLandingScreen() {
     <Screen
       keyboard
       header={
-        <AppHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))} kicker="Ruta Telemática" title="Stand → B215 → B213 → Pasillo" subtitle="Juega en grupo y en vivo con el código del stand">
+        <AppHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))} right={<HelpButton onPress={() => setHelpOpen(true)} label="Cómo funciona la ruta" />} kicker="Ruta Telemática" title="Stand → B215 → B213 → Pasillo" subtitle="Juega en grupo y en vivo con el código del stand">
           <RouteProgress stop="stand" />
         </AppHeader>
       }
@@ -170,6 +173,7 @@ export default function RouteLandingScreen() {
         <TelButton label="Soy del equipo del stand" variant="ghost" icon="flag" size="sm" onPress={() => router.push('/ruta/stand')} />
       </Animated.View>
       {!active && <AccountGate />}
+      <TutorialSheet tutorial={tutorials.ruta} visible={helpOpen} onClose={() => setHelpOpen(false)} doneLabel="Entendido" />
     </Screen>
   );
 }

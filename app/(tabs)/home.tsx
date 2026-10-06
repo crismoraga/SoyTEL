@@ -27,13 +27,15 @@ import { TipSheet } from '@/features/tips/TipSheet';
 import { useMemberView } from '@/route/hooks';
 import { expressionForMood, signalForMood } from '@/graphics/rutix';
 import { formatNumber, greeting } from '@/lib/format';
+import { guideProgress, starterGuide } from '@/lib/guide';
 import { nextMission } from '@/lib/missions';
 import { useEntering } from '@/lib/motion';
 import { levelTitle, progressToNextLevel, xpToNextLevel } from '@/lib/progression';
 import { useFocusData } from '@/lib/useFocusData';
 import { ensureDailyInbox, useUnreadCount } from '@/storage/inbox';
 import { loadProfile, loadResults } from '@/storage/profile';
-import { loadStoryProgress } from '@/storage/story';
+import { loadCareerProgress } from '@/storage/career';
+import { loadMascotDays, loadStoryProgress } from '@/storage/story';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 interface ExploreItem {
@@ -48,7 +50,7 @@ const explore: ExploreItem[] = [
   { label: 'Historia', glyph: 'book', route: '/story' },
   { label: 'Ruta', glyph: 'route', route: '/ruta' },
   { label: 'Rutix', glyph: 'robot', route: '/mascot' },
-  { label: 'Ranking', glyph: 'trophy', route: '/ranking' },
+  { label: 'Runner', glyph: 'rocket', route: '/runner' },
   { label: 'Malla', glyph: 'cap', route: '/malla' },
   { label: 'Conecta', glyph: 'network', route: { pathname: '/puzzle', params: { juego: 'red' } } },
 ];
@@ -68,8 +70,8 @@ export default function HomeScreen() {
   const [tipOpen, setTipOpen] = useState(false);
   const [brandOpen, setBrandOpen] = useState(false);
   const { data } = useFocusData(async () => {
-    const [profile, results, story] = await Promise.all([loadProfile(), loadResults(), loadStoryProgress()]);
-    return { profile, results, story };
+    const [profile, results, story, mascotDays, career] = await Promise.all([loadProfile(), loadResults(), loadStoryProgress(), loadMascotDays(), loadCareerProgress()]);
+    return { profile, results, story, mascotDays: mascotDays.length, careerAreas: Object.values(career).filter(Boolean).length };
   });
   const profile = data?.profile;
 
@@ -82,6 +84,9 @@ export default function HomeScreen() {
   const mission = data ? nextMission(data.results, data.story.completedChapters) : null;
   const tip = tipForDate(new Date());
   const dailyDone = data ? isDailyDone(data.results, dailyKey(new Date())) : false;
+  const guideSteps = data ? starterGuide(data) : [];
+  const guide = guideProgress(guideSteps);
+  const nextStep = guide.next;
 
   return (
     <Screen
@@ -175,6 +180,42 @@ export default function HomeScreen() {
           )}
         </TelCard>
       </View>
+
+      {nextStep && (
+        <Animated.View entering={entering.fadeUp(1)}>
+          <TelCard style={styles.guideCard}>
+            <View style={styles.guideHead}>
+              <View style={styles.guideRutix}>
+                <Rutix size={54} expression="wink" pose="point" animated={false} accessibilityLabel="" />
+              </View>
+              <View style={styles.flex}>
+                <TelText variant="small" color="inkAccent" style={styles.kicker}>
+                  GUÍA DE INICIO · {guide.done} DE {guide.total}
+                </TelText>
+                <TelText variant="subtitle" color="ink">
+                  {nextStep.title}
+                </TelText>
+                <TelText variant="caption" color="inkSoft">
+                  {nextStep.text}
+                </TelText>
+              </View>
+            </View>
+            <View style={styles.guideSteps} accessible accessibilityLabel={`Guía de inicio: ${guide.done} de ${guide.total} pasos listos`}>
+              {guideSteps.map((step) => (
+                <View key={step.id} style={[styles.guideDot, step.done && styles.guideDotDone, step.id === nextStep.id && styles.guideDotNow]}>
+                  <TelIcon
+                    name={step.done ? 'check' : step.icon}
+                    size={14}
+                    color={step.done ? colors.white : step.id === nextStep.id ? colors.actionInk : colors.inkSoft}
+                    strokeWidth={step.done ? 3 : 2}
+                  />
+                </View>
+              ))}
+            </View>
+            <TelButton label="Vamos" size="sm" iconRight="arrowRight" onPress={() => router.push(nextStep.route)} />
+          </TelCard>
+        </Animated.View>
+      )}
 
       <Animated.View entering={entering.fadeUp(1)}>
         <TelCard tone="navy" style={styles.routeCard}>
@@ -381,6 +422,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  guideCard: {
+    gap: spacing.sm,
+  },
+  guideHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  guideRutix: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  guideSteps: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  guideDot: {
+    flex: 1,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceAlt,
+  },
+  guideDotDone: {
+    backgroundColor: colors.success,
+  },
+  guideDotNow: {
+    backgroundColor: colors.action,
   },
   dailyIcon: {
     backgroundColor: colors.accent,

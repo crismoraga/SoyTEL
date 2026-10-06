@@ -12,7 +12,8 @@ export type GameId =
   | 'mascot'
   | 'route'
   | 'station'
-  | 'puzzle';
+  | 'puzzle'
+  | 'runner';
 
 export type MicroGameId =
   | 'connect-network'
@@ -57,7 +58,10 @@ export type AchievementId =
   | 'binary-brain'
   | 'code-breaker'
   | 'daily-three'
-  | 'burst-master';
+  | 'burst-master'
+  | 'runner-rookie'
+  | 'runner-courier'
+  | 'data-collector';
 
 export interface Achievement {
   id: AchievementId;

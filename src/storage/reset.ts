@@ -7,19 +7,22 @@ import { CAREER_KEYS } from './career';
 import { INBOX_KEYS, resetInboxCache } from './inbox';
 import { PROFILE_KEYS } from './profile';
 import { PUZZLE_KEYS } from './puzzles';
+import { RUNNER_KEYS } from './runner';
 import { resetSettingsCache, SETTINGS_KEYS } from './settings';
 import { STORY_KEYS } from './story';
+import { resetTutorialsCache, TUTORIAL_KEYS } from './tutorials';
 
-// Borra todo lo que SoyTEL guarda en el dispositivo: perfil, resultados, historia, avisos, ajustes,
+// Borra todo lo que SoyTEL guarda en el dispositivo: perfil, resultados, historia, TEL Runner, avisos, ajustes,
 // la sesión de la cuenta y todo lo de la ruta (credenciales, rutas del stand y concesiones).
 // La cuenta del servidor no se elimina: se puede recuperar con su código.
 export async function resetAllData({ keepOnboarding = true }: { keepOnboarding?: boolean } = {}): Promise<void> {
   routeMember.reset();
   hostManager.stopAll();
   const storyKeys = keepOnboarding ? STORY_KEYS.filter((key) => key !== '@soytel/onboarded') : STORY_KEYS;
-  await AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...PUZZLE_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]);
+  await AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...PUZZLE_KEYS, ...RUNNER_KEYS, ...TUTORIAL_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]);
   await clearRouteStorage();
   await resetAccountLocal();
   resetInboxCache();
   resetSettingsCache();
+  resetTutorialsCache();
 }

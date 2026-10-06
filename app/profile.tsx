@@ -53,6 +53,8 @@ function describeResult(result: GameResult): { title: string; icon: IconName } {
       return { title: getStationGame(String(result.metadata?.game ?? ''))?.title ?? 'Juego de la ruta', icon: getStationGame(String(result.metadata?.game ?? ''))?.icon ?? 'gamepad' };
     case 'story':
       return { title: `Historia · capítulo ${String(result.metadata?.chapter ?? '')}`, icon: 'book' };
+    case 'runner':
+      return { title: `TEL Runner · ${String(result.metadata?.distance ?? 0)} m`, icon: 'rocket' };
     case 'puzzle': {
       const puzzle = getPuzzle(String(result.metadata?.game ?? ''));
       return { title: `${puzzle?.title ?? 'Desafío'} · nivel ${String(result.metadata?.level ?? '')}`, icon: puzzle?.icon ?? 'grid' };

@@ -66,6 +66,7 @@ export default function RootLayout() {
           <Stack.Screen name="ruta/stand" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="estacion" options={{ animation: 'fade_from_bottom', gestureEnabled: false, contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="puzzle" options={{ animation: 'fade_from_bottom', contentStyle: { backgroundColor: colors.primary } }} />
+          <Stack.Screen name="runner" options={{ animation: 'fade_from_bottom', gestureEnabled: false, contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="story" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="mascot" options={{ contentStyle: { backgroundColor: colors.primary } }} />
           <Stack.Screen name="profile" />

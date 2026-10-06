@@ -18,13 +18,17 @@ import { storyChapters } from '@/data/story';
 import { microGameCatalog } from '@/features/burst/catalog';
 import { DAILY_BONUS, dailyKey, isDailyDone } from '@/features/burst/daily';
 import { puzzles } from '@/features/puzzles/catalog';
+import { runnerCharacters } from '@/features/runner/characters';
 import { stationGames } from '@/features/stations/registry';
+import { runnerCharacterDrawing } from '@/graphics/runners';
+import { SvgDrawing } from '@/graphics/ShapeLayer';
 import { wonMicroGames } from '@/lib/achievements';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadResults } from '@/storage/profile';
 import { loadPuzzleProgress } from '@/storage/puzzles';
+import { loadRunnerSave } from '@/storage/runner';
 import { loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 import type { GameResult } from '@/types/game';
@@ -64,8 +68,8 @@ const modes: ModeCard[] = [
 export default function GamesScreen() {
   const entering = useEntering();
   const { data } = useFocusData(async () => {
-    const [results, story, puzzleProgress] = await Promise.all([loadResults(), loadStoryProgress(), loadPuzzleProgress()]);
-    return { results, chapters: story.completedChapters.length, puzzleProgress };
+    const [results, story, puzzleProgress, runner] = await Promise.all([loadResults(), loadStoryProgress(), loadPuzzleProgress(), loadRunnerSave()]);
+    return { results, chapters: story.completedChapters.length, puzzleProgress, runner };
   });
   const won = new Set(data ? wonMicroGames(data.results) : []);
   const bestBurst = data ? data.results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0) : 0;
@@ -96,6 +100,29 @@ export default function GamesScreen() {
             )}
           </View>
           <TelButton label="Ingresar código del stand" variant="cream" icon="qr" onPress={() => router.push('/ruta')} />
+        </TelCard>
+      </Animated.View>
+
+      <Animated.View entering={entering.fadeUp(1)}>
+        <TelCard tone="navy" onPress={() => router.push('/runner')} accessibilityLabel="TEL Runner, carrera sin fin. Jugar" style={styles.runnerCard}>
+          <View style={styles.runnerArt}>
+            <SvgDrawing drawing={runnerCharacterDrawing(data?.runner.selected ?? 'rutix')} width={84} height={84} />
+          </View>
+          <View style={styles.flex}>
+            <Tag tone="cream" icon="sparkle" label="NUEVO" style={styles.runnerTag} />
+            <TelText variant="heading" color="cream">
+              TEL Runner
+            </TelText>
+            <TelText variant="caption" color="accentSoft">
+              Carrera sin fin por la autopista de datos: junta paquetes, esquiva virus y desbloquea personajes telemáticos.
+            </TelText>
+            <TelText variant="label" color="accent" tabular>
+              {data && data.runner.best > 0
+                ? `Récord: ${formatNumber(data.runner.best)} pts · ${data.runner.unlocked.length}/${runnerCharacters.length} personajes`
+                : `${runnerCharacters.length} personajes por desbloquear`}
+            </TelText>
+          </View>
+          <TelIcon name="chevronRight" size={22} color={colors.cream} />
         </TelCard>
       </Animated.View>
 
@@ -276,6 +303,22 @@ export default function GamesScreen() {
 }
 
 const styles = StyleSheet.create({
+  runnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  runnerTag: {
+    alignSelf: 'flex-start',
+  },
+  runnerArt: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryDeep,
+  },
   featured: {
     gap: spacing.sm,
     overflow: 'hidden',
