@@ -33,7 +33,12 @@ export type IncomingPacket =
   | { type: 'suback'; packetId: number; granted: number[] }
   | { type: 'unsuback'; packetId: number }
   | { type: 'pingresp' }
-  | { type: 'unknown'; code: number };
+  | { type: 'unknown'; code: number }
+  // Paquete que no respeta el formato o supera el tamaño permitido: la conexión se descarta.
+  | { type: 'malformed'; reason: 'length' | 'size' | 'body' };
+
+// Tope de un paquete entrante. Un estado de la ruta con 60 participantes ronda los 40 kB.
+export const MAX_PACKET_BYTES = 256 * 1024;
 
 function encodeLength(length: number): Uint8Array {
   const bytes: number[] = [];
@@ -49,6 +54,7 @@ function encodeLength(length: number): Uint8Array {
 
 function encodeString(text: string): Uint8Array {
   const body = utf8Encode(text);
+  if (body.length > 0xffff) throw new RangeError('mqtt-string-too-long');
   return concatBytes(Uint8Array.of(body.length >> 8, body.length & 0xff), body);
 }
 
@@ -100,16 +106,22 @@ export function encodeUnsubscribe(packetId: number, topics: string[]): Uint8Arra
 export const PINGREQ = Uint8Array.of(PacketType.PINGREQ << 4, 0);
 export const DISCONNECT = Uint8Array.of(PacketType.DISCONNECT << 4, 0);
 
+const MALFORMED_BODY: IncomingPacket = { type: 'malformed', reason: 'body' };
+
 function decodePacket(first: number, body: Uint8Array): IncomingPacket {
   const type = first >> 4;
   switch (type) {
     case PacketType.CONNACK:
+      if (body.length < 2) return MALFORMED_BODY;
       return { type: 'connack', sessionPresent: (body[0] & 1) === 1, returnCode: body[1] };
     case PacketType.PUBLISH: {
-      const qos = ((first >> 1) & 3) as QoS;
+      const level = (first >> 1) & 3;
+      if (level > 1 || body.length < 2) return MALFORMED_BODY;
+      const qos = level as QoS;
       const topicLength = (body[0] << 8) | body[1];
-      const topic = utf8Decode(body.subarray(2, 2 + topicLength));
       let offset = 2 + topicLength;
+      if (offset + (qos > 0 ? 2 : 0) > body.length) return MALFORMED_BODY;
+      const topic = utf8Decode(body.subarray(2, 2 + topicLength));
       let packetId: number | undefined;
       if (qos > 0) {
         packetId = (body[offset] << 8) | body[offset + 1];
@@ -118,10 +130,13 @@ function decodePacket(first: number, body: Uint8Array): IncomingPacket {
       return { type: 'publish', topic, payload: body.slice(offset), qos, retain: (first & 1) === 1, dup: (first & 8) === 8, packetId };
     }
     case PacketType.PUBACK:
+      if (body.length < 2) return MALFORMED_BODY;
       return { type: 'puback', packetId: (body[0] << 8) | body[1] };
     case PacketType.SUBACK:
+      if (body.length < 3) return MALFORMED_BODY;
       return { type: 'suback', packetId: (body[0] << 8) | body[1], granted: Array.from(body.subarray(2)) };
     case PacketType.UNSUBACK:
+      if (body.length < 2) return MALFORMED_BODY;
       return { type: 'unsuback', packetId: (body[0] << 8) | body[1] };
     case PacketType.PINGRESP:
       return { type: 'pingresp' };
@@ -131,10 +146,15 @@ function decodePacket(first: number, body: Uint8Array): IncomingPacket {
 }
 
 // Acumula bytes del WebSocket y entrega paquetes completos (un frame puede traer varios o solo una parte).
+// Tras un paquete inválido deja de leer: quien lo usa debe cerrar la conexión.
 export class PacketReader {
   private buffer: Uint8Array = new Uint8Array(0);
+  private broken = false;
+
+  constructor(private readonly maxPacketBytes = MAX_PACKET_BYTES) {}
 
   push(chunk: Uint8Array): IncomingPacket[] {
+    if (this.broken) return [];
     this.buffer = this.buffer.length ? concatBytes(this.buffer, chunk) : chunk;
     const packets: IncomingPacket[] = [];
     for (;;) {
@@ -153,8 +173,13 @@ export class PacketReader {
           break;
         }
       }
+      // La longitud usa como máximo 4 bytes: un quinto byte de continuación no es MQTT.
+      if (!complete && index > 4) return this.fail(packets, 'length');
+      if (complete && length > this.maxPacketBytes) return this.fail(packets, 'size');
       if (!complete || this.buffer.length < index + length) break;
-      packets.push(decodePacket(this.buffer[0], this.buffer.slice(index, index + length)));
+      const packet = decodePacket(this.buffer[0], this.buffer.slice(index, index + length));
+      if (packet.type === 'malformed') return this.fail(packets, packet.reason);
+      packets.push(packet);
       this.buffer = this.buffer.slice(index + length);
     }
     return packets;
@@ -162,6 +187,14 @@ export class PacketReader {
 
   reset() {
     this.buffer = new Uint8Array(0);
+    this.broken = false;
+  }
+
+  private fail(packets: IncomingPacket[], reason: 'length' | 'size' | 'body'): IncomingPacket[] {
+    this.broken = true;
+    this.buffer = new Uint8Array(0);
+    packets.push({ type: 'malformed', reason });
+    return packets;
   }
 }
 
