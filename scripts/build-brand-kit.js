@@ -395,6 +395,8 @@ async function main() {
     await tab.goto(fileUrl(path.join(htmlDir, `${item_.name}.html`)), { waitUntil: 'load' });
     await tab.evaluate(() => document.fonts.ready);
     await tab.screenshot({ path: path.join(outDir, item_.group, `${item_.name}.png`), omitBackground: item_.transparent });
+    // La imagen de enlaces compartidos también sale en JPEG: es la que usa la web (public/og.jpg).
+    if (item_.name.startsWith('vista-previa')) await tab.screenshot({ path: path.join(outDir, item_.group, `${item_.name}.jpg`), type: 'jpeg', quality: 88 });
   }
   await browser.close();
   console.log(`Kit de marca: ${pieces.length} piezas en ${outDir}`);
