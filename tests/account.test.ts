@@ -101,10 +101,10 @@ describe('motion levels', () => {
     expect(parseSettings('{oops')).toEqual(defaultSettings);
   });
 
-  it('defaults to a calm game pace and validates stored values', () => {
-    expect(defaultSettings.pace).toBe('calm');
+  it('defaults to an unhurried game pace and validates stored values', () => {
+    expect(defaultSettings.pace).toBe('relaxed');
     expect(parseSettings(JSON.stringify({ pace: 'fast', theme: 'dark', coach: false }))).toMatchObject({ pace: 'fast', theme: 'dark', coach: false });
-    expect(parseSettings(JSON.stringify({ pace: 'turbo', theme: 'neon' }))).toMatchObject({ pace: 'calm', theme: 'system', coach: true });
+    expect(parseSettings(JSON.stringify({ pace: 'turbo', theme: 'neon' }))).toMatchObject({ pace: 'relaxed', theme: 'system', coach: true });
     expect(paceFactor('calm')).toBeGreaterThan(paceFactor('normal'));
     expect(paceFactor('fast')).toBe(1);
     expect(paceFromFactor(1.68)).toBe('calm');

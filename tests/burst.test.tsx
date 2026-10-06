@@ -22,12 +22,16 @@ const expectedIds: MicroGameId[] = [
   'fast-route',
   'safe-url',
   'unit-order',
+  'port-match',
+  'device-role',
+  'wifi-safe',
+  'acronym',
 ];
 
 describe('burst registry', () => {
-  it('has eighteen unique microgames', () => {
+  it('has twenty-two unique microgames', () => {
     const ids = microGameRegistry.map((game) => game.id);
-    expect(new Set(ids).size).toBe(18);
+    expect(new Set(ids).size).toBe(22);
     expect([...ids].sort()).toEqual([...expectedIds].sort());
   });
 

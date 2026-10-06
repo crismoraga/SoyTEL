@@ -14,11 +14,14 @@ import Svg from 'react-native-svg';
 import { GradientDefs, ShapeLayer } from '@/graphics/ShapeLayer';
 import {
   rutixAccessory,
+  rutixAccessoryBack,
+  rutixAccessoryFront,
   rutixBody,
   rutixExtras,
   rutixFace,
   rutixGradients,
   rutixSignalArcs,
+  TALL_ACCESSORIES,
   type RutixAccessory,
   type RutixExpression,
   type RutixPose,
@@ -44,6 +47,8 @@ interface RutixProps {
 }
 
 const BLINKING: RutixExpression[] = ['neutral', 'sad', 'alert', 'think', 'wink', 'worried', 'focus'];
+// Expresiones con los ojos abiertos: de vez en cuando Rutix mira hacia un lado.
+const GAZING: RutixExpression[] = ['neutral', 'alert', 'think', 'worried', 'focus', 'surprised'];
 const VIEWBOX = '0 0 200 200';
 
 export function Rutix({
@@ -64,6 +69,7 @@ export function Rutix({
   // Las ondas de señal laten solo con animaciones completas; flotar y parpadear es barato.
   const pulseEnabled = level === 'full' && animated;
   const [blink, setBlink] = useState(false);
+  const [gaze, setGaze] = useState(0);
   const float = useSharedValue(0);
   const pulse = useSharedValue(0);
   const bounce = useSharedValue(1);
@@ -118,6 +124,30 @@ export function Rutix({
     };
   }, [canBlink]);
 
+  const canGaze = motionEnabled && GAZING.includes(expression);
+
+  useEffect(() => {
+    if (!canGaze) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (!active) return;
+        setGaze(Math.random() < 0.5 ? -1 : 1);
+        timer = setTimeout(() => {
+          if (!active) return;
+          setGaze(0);
+          schedule();
+        }, 950);
+      }, 3400 + Math.random() * 3800);
+    };
+    schedule();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [canGaze]);
+
   useEffect(() => {
     if (reactKey === undefined || !motionEnabled) return;
     bounce.value = withSequence(withSpring(1.14, motion.spring.bouncy), withSpring(1, motion.spring.gentle));
@@ -135,11 +165,12 @@ export function Rutix({
 
   const body = useMemo(() => rutixBody(pose, signal), [pose, signal]);
   const eyesClosed = canBlink && blink;
-  const face = useMemo(() => rutixFace(expression, eyesClosed), [eyesClosed, expression]);
+  const look = canGaze && !eyesClosed ? gaze : 0;
+  const face = useMemo(() => rutixFace(expression, eyesClosed, look), [eyesClosed, expression, look]);
   const extras = useMemo(() => rutixExtras(expression), [expression]);
   const arcs = useMemo(() => rutixSignalArcs(), []);
-  const outfit = useMemo(() => rutixAccessory(worn), [worn]);
-  const showArcs = signal > 0 && worn !== 'graduation' && worn !== 'crown';
+  const outfit = useMemo(() => ({ back: rutixAccessoryBack(worn), middle: rutixAccessory(worn), front: rutixAccessoryFront(worn) }), [worn]);
+  const showArcs = signal > 0 && !TALL_ACCESSORIES.includes(worn);
 
   return (
     <View
@@ -166,9 +197,11 @@ export function Rutix({
         )}
         <Svg width={size} height={size} viewBox={VIEWBOX} style={StyleSheet.absoluteFill}>
           <GradientDefs gradients={rutixGradients} />
+          <ShapeLayer shapes={outfit.back} />
           <ShapeLayer shapes={body} />
-          <ShapeLayer shapes={outfit} />
+          <ShapeLayer shapes={outfit.middle} />
           <ShapeLayer shapes={face} />
+          <ShapeLayer shapes={outfit.front} />
           <ShapeLayer shapes={extras} />
         </Svg>
       </Animated.View>

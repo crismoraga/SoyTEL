@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const out = path.join(root, 'dist', 'web');
 
 fs.rmSync(out, { recursive: true, force: true });
-execSync('npx expo export --platform web --output-dir dist/web', {
+execSync('npx expo export --platform web --output-dir dist/web --clear', {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, CI: '1', NODE_ENV: 'production' },

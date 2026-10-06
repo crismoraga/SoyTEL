@@ -44,6 +44,9 @@ export function puzzleLevels(results: GameResult[], game: string): number {
   return new Set(results.filter((result) => result.gameId === 'puzzle' && result.metadata?.game === game).map((result) => Number(result.metadata?.level ?? 0))).size;
 }
 
+// Modos que cuentan para "Prueba de todo".
+const PLAY_MODES: string[] = ['burst', 'runner', 'puzzle', 'station', 'route', 'millionaire', 'story', 'practice'];
+
 function runnerRuns(results: GameResult[]): GameResult[] {
   return results.filter((result) => result.gameId === 'runner');
 }
@@ -95,7 +98,16 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
     case 'code-breaker':
       return puzzleLevels(results, 'cifrado');
     case 'daily-three':
+    case 'daily-seven':
       return dailyDays(results);
+    case 'memory-ace':
+      return puzzleLevels(results, 'memoria');
+    case 'puzzle-fan':
+      return new Set(results.filter((result) => result.gameId === 'puzzle').map((result) => `${String(result.metadata?.game)}-${String(result.metadata?.level)}`)).size;
+    case 'all-rounder':
+      return new Set(results.map((result) => result.gameId).filter((id) => PLAY_MODES.includes(id))).size;
+    case 'burst-flawless':
+      return results.some((result) => result.gameId === 'burst' && !result.metadata?.focus && Number(result.metadata?.lives ?? 0) >= 3 && Number(result.metadata?.rounds ?? 0) >= 5) ? 1 : 0;
     case 'runner-rookie':
     case 'runner-courier':
       return runnerRuns(results).reduce((max, result) => Math.max(max, Number(result.metadata?.distance ?? 0)), 0);

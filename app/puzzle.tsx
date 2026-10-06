@@ -14,6 +14,7 @@ import { AccountGate } from '@/features/account/AccountGate';
 import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { BinaryLabGame } from '@/features/puzzles/BinaryLabGame';
 import { getPuzzle } from '@/features/puzzles/catalog';
+import { MemoryGame } from '@/features/puzzles/MemoryGame';
 import { CipherGame } from '@/features/puzzles/CipherGame';
 import { NetWalkGame } from '@/features/puzzles/NetWalkGame';
 import type { PuzzleGameProps, PuzzleResult } from '@/features/puzzles/types';
@@ -30,6 +31,7 @@ import type { GameOutcome } from '@/types/game';
 
 const components: Record<PuzzleId, React.ComponentType<PuzzleGameProps>> = {
   red: NetWalkGame,
+  memoria: MemoryGame,
   binario: BinaryLabGame,
   cifrado: CipherGame,
 };
@@ -40,7 +42,7 @@ interface Solved {
   outcome: GameOutcome | null;
 }
 
-// Desafíos sin reloj (Conecta la red, Binario, Mensaje cifrado): por niveles y con Rutix de guía.
+// Desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado): por niveles y con Rutix de guía.
 export default function PuzzleScreen() {
   const { juego } = useLocalSearchParams<{ juego?: string }>();
   const info = getPuzzle(juego ?? '');

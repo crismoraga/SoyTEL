@@ -13,6 +13,7 @@ import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { danceLines, highFiveLines, pickDifferent, rutixJokes, rutixTrueFalse, tickleReactions } from '@/data/rutixPlay';
 import { randomTip } from '@/data/tips';
+import { MissionsCard } from '@/features/missions/MissionsCard';
 import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { tutorials } from '@/features/tutorial/tutorials';
 import { expressionForMood, isAccessoryUnlocked, rutixWardrobe, signalForMood } from '@/graphics/rutix';
@@ -20,7 +21,7 @@ import { now } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
-import { loadProfile, saveProfile, syncAchievements } from '@/storage/profile';
+import { loadProfile, loadResults, saveProfile, syncAchievements } from '@/storage/profile';
 import { updateSettings, useSettings } from '@/storage/settings';
 import { loadMascotDays, loadMascotLog, logMascotDay, saveMascotLog } from '@/storage/story';
 import { useTutorial } from '@/storage/tutorials';
@@ -81,9 +82,9 @@ export default function MascotScreen() {
   const danceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const wiggle = useSharedValue(0);
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 9}deg` }, { translateY: -Math.abs(wiggle.value) * 6 }] }));
-  const { data, setData } = useFocusData(async () => {
-    const [profile, log, days] = await Promise.all([loadProfile(), loadMascotLog(), loadMascotDays()]);
-    return { profile, log, days: days.length };
+  const { data, setData, reload } = useFocusData(async () => {
+    const [profile, log, days, results] = await Promise.all([loadProfile(), loadMascotLog(), loadMascotDays(), loadResults()]);
+    return { profile, log, days: days.length, results };
   });
 
   useEffect(() => () => {
@@ -120,7 +121,7 @@ export default function MascotScreen() {
     const log = { date: data.log.date, count: data.log.count + 1 };
     const days = await logMascotDay(new Date().toISOString());
     await Promise.all([saveProfile(profile), saveMascotLog(log)]);
-    setData({ profile, log, days: days.length });
+    setData({ profile, log, days: days.length, results: data.results });
 
     if (kind === 'feed') {
       setMessage('¡Datos frescos! Mi batería de conocimiento está al máximo.');
@@ -247,6 +248,18 @@ export default function MascotScreen() {
           ))}
         </View>
       </View>
+
+      {data && (
+        <MissionsCard
+          results={data.results}
+          onClaimed={() => {
+            reload();
+            setMessage('¡Misiones cumplidas! Te dejé paquetes de datos para TEL Runner.');
+            react('proud', 'celebrate', 3200);
+            setBurst((value) => (value ?? 0) + 1);
+          }}
+        />
+      )}
 
       <View style={styles.statusRow}>
         <View style={styles.statusCard}>
@@ -380,11 +393,14 @@ const styles = StyleSheet.create({
   },
   wardrobeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginTop: spacing.xxs,
   },
   outfit: {
-    flex: 1,
+    flexBasis: '18%',
+    flexGrow: 1,
+    maxWidth: '19%',
     alignItems: 'center',
     gap: 2,
     paddingVertical: spacing.xs,

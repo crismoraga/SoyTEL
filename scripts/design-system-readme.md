@@ -45,7 +45,7 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 ## Medallas, Rutix e ilustraciones
 
 - Las medallas (grupo Medallas) representan logros, áreas de la carrera, estaciones de la ruta y accesos de Inicio. Estado bloqueado en gris con candado; en progreso con arco parcial; la rareza cambia el anillo y suma estrellas.
-- Rutix (grupo Rutix) acompaña, reacciona y celebra: 15 expresiones, 7 poses y un guardarropa de accesorios que se desbloquean jugando. Su ánimo se ve en las barras del pecho (0–4). Sus colores son fijos, por eso va sobre fondos azul noche. Un solo Rutix por pantalla.
+- Rutix (grupo Rutix) acompaña, reacciona y celebra: 15 expresiones, 7 poses y un guardarropa de ocho accesorios que se desbloquean jugando. De vez en cuando mira hacia los lados y parpadea. Su ánimo se ve en las barras del pecho (0–4). Sus colores son fijos, por eso va sobre fondos azul noche. Un solo Rutix por pantalla.
 - Las ilustraciones (grupo Ilustraciones) abren estados vacíos, errores, onboarding y tarjetas de modos. Versión clara sobre `paper`, versión `-oscuro` sobre `primary`.
 - El arte rasterizado de la marca (grupo Marca) se usa en la bienvenida, el primer paso del onboarding y las tarjetas de carrusel; nunca se redibuja el logo.
 
@@ -76,10 +76,11 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 ## Juegos
 
 - Nadie juega contra el apuro: cada ronda y cada etapa parten cuando la persona toca («Toca para jugar», «Toca para empezar») y, tras cada respuesta, la explicación espera un «Continuar».
-- El ritmo se elige en Ajustes: tranquilo (por defecto, tiempos ×1,7), normal (×1,35) o rápido (×1, y la Ráfaga acelera). En la ruta en vivo lo fija el stand para todo el grupo.
+- El ritmo se elige en Ajustes: sin apuro (por defecto, tiempos ×2,5), tranquilo (×1,7), normal (×1,35) o rápido (×1, y la Ráfaga acelera). En la ruta en vivo lo fija el stand para todo el grupo.
 - Rutix acompaña la partida (`CoachBubble`): da una pista antes de cada microjuego, mira el reloj contigo, celebra los aciertos y anima tras un error. Se puede apagar en Ajustes; entonces las pistas se muestran como texto.
 - Todo juego con reloj tiene pausa (`PauseSheet`); salir de una partida en curso siempre pide confirmación.
-- Los desafíos sin reloj («Conecta la red», «Binario», «Mensaje cifrado») avanzan por niveles y premian resolver con pocos movimientos, no la velocidad.
+- Los desafíos sin reloj («Conecta la red», «Parejas TEL», «Binario» y «Mensaje cifrado») avanzan por niveles y premian resolver con pocos movimientos, no la velocidad.
+- Rutix propone tres misiones cada día; al cumplirlas regala paquetes de datos para TEL Runner.
 - El color nunca es la única señal: acierto y error llevan ícono y palabra; los cables con señal cambian también de relleno.
 
 ## Pantallas de referencia

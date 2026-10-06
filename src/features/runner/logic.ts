@@ -143,7 +143,8 @@ export function spawnRunnerRow(state: RunnerState, at: number, random: () => num
     state.rowsSinceObstacle = 0;
     if (random() < 0.4) {
       // Cable suelto: es bajo, se salta o se esquiva; puede cruzar varias pistas.
-      const span = 1 + Math.floor(random() * LANES);
+      // En el primer tramo deja siempre una pista libre: también se puede esquivar.
+      const span = 1 + Math.floor(random() * (level === 0 ? LANES - 1 : LANES));
       const start = Math.floor(random() * (LANES - span + 1));
       for (let lane = start; lane < start + span; lane += 1) row[lane] = 'cable';
     } else {

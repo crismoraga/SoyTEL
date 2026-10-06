@@ -83,6 +83,13 @@ export async function recordRun(run: RunSummary): Promise<RunnerSave> {
   return store(applyRun(await loadRunnerSave(), run));
 }
 
+// Paquetes de regalo (misiones de Rutix): van a la billetera sin contar como carrera.
+export async function addRunnerData(amount: number): Promise<RunnerSave> {
+  const save = await loadRunnerSave();
+  const extra = count(amount);
+  return store({ ...save, data: save.data + extra, totalData: save.totalData + extra });
+}
+
 export async function unlockRunnerCharacter(id: string): Promise<RunnerSave> {
   return store(applyUnlock(await loadRunnerSave(), id));
 }

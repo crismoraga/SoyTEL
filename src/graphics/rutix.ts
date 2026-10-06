@@ -1,4 +1,4 @@
-import { circle, ellipse, path, rect, star4Path, type Drawing, type Gradient, type Shape } from './shapes';
+import { circle, ellipse, group, path, rect, star4Path, type Drawing, type Gradient, type Shape } from './shapes';
 
 // Rutix: robot-antena de SoyTEL. Cabeza crema con pantalla azul noche (como el laptop del
 // logo), orejas-puerto, antena que emite señal y barras de señal en el pecho que muestran su ánimo.
@@ -21,7 +21,7 @@ export type RutixExpression =
   | 'laugh'
   | 'focus';
 export type RutixPose = 'idle' | 'wave' | 'celebrate' | 'think' | 'point' | 'thumbsUp' | 'shrug';
-export type RutixAccessory = 'none' | 'cap' | 'headphones' | 'graduation' | 'crown';
+export type RutixAccessory = 'none' | 'cap' | 'headphones' | 'graduation' | 'crown' | 'glasses' | 'scarf' | 'helmet' | 'cape';
 
 export const rutixExpressions: RutixExpression[] = [
   'neutral',
@@ -41,7 +41,7 @@ export const rutixExpressions: RutixExpression[] = [
   'sleep',
 ];
 export const rutixPoses: RutixPose[] = ['idle', 'wave', 'celebrate', 'think', 'point', 'thumbsUp', 'shrug'];
-export const rutixAccessories: RutixAccessory[] = ['none', 'cap', 'headphones', 'graduation', 'crown'];
+export const rutixAccessories: RutixAccessory[] = ['none', 'cap', 'headphones', 'graduation', 'crown', 'glasses', 'scarf', 'helmet', 'cape'];
 
 const CREAM = '#F4ECD7';
 const LIMB = '#E3D3AE';
@@ -173,7 +173,13 @@ const openEye = (cx: number, cy = 92, rx = 7.5, ry = 9.5): Shape[] => [
 ];
 const arcEye = (cx: number, y = 96): Shape => strokePath(`M${cx - 9} ${y}q9-12 18 0`, EYE, 5.5);
 
-export function rutixFace(expression: RutixExpression = 'neutral', blink = false): Shape[] {
+// `gaze` corre la cara un poco hacia un lado (-1 izquierda, 1 derecha): así Rutix mira alrededor.
+export function rutixFace(expression: RutixExpression = 'neutral', blink = false, gaze = 0): Shape[] {
+  const shapes = faceShapes(expression, blink);
+  return gaze === 0 ? shapes : [group(shapes, { tf: `translate(${gaze * 3.2} 0)` })];
+}
+
+function faceShapes(expression: RutixExpression, blink: boolean): Shape[] {
   const cheeks = [circle(69, 110, 6, { fill: SKY, op: 0.32 }), circle(131, 110, 6, { fill: SKY, op: 0.32 })];
   const openEyes = [...openEye(82), ...openEye(118)];
   const blinkEyes = [strokePath('M74 93h16', EYE, 5), strokePath('M110 93h16', EYE, 5)];
@@ -398,11 +404,57 @@ export function rutixAccessory(accessory: RutixAccessory = 'none'): Shape[] {
         circle(58, 22, 3.2, { fill: CREAM }),
         circle(142, 22, 3.2, { fill: CREAM }),
       ];
+    case 'scarf':
+      return [
+        path('M58 128C78 140 122 140 142 128L143 138C122 151 78 151 57 138Z', { fill: SKY }),
+        strokePath('M61 134C80 145 120 145 139 134', BLUE, 2.4, { op: 0.55 }),
+        rect(59, 139, 15, 30, 6, { fill: SKY }),
+        strokePath('M61 150h11M61 158h11', BLUE, 2.4, { op: 0.55 }),
+        strokePath('M62 169v5M66.5 169v5M71 169v5', SKY, 2.6),
+      ];
+    case 'helmet':
+      return [
+        path('M48 64C48 26 152 26 152 64Z', { fill: GOLD }),
+        path('M48 64C48 26 152 26 152 64Z', { fill: 'none', stroke: GOLD_DEEP, sw: 2, op: 0.7 }),
+        strokePath('M76 40C70 46 67 52 66 58M124 40C130 46 133 52 134 58', GOLD_DEEP, 3, { op: 0.5 }),
+        rect(40, 58, 120, 11, 5.5, { fill: GOLD_DEEP }),
+        rect(90, 43, 20, 12, 3, { fill: CREAM }),
+        strokePath('M95 49h10', BLUE, 2.4),
+        strokePath('M100 35V25', BLUE, 6),
+        circle(100, 20, 9, { fill: SKY }),
+        circle(97, 17, 2.8, { fill: '#FFFFFF', op: 0.75 }),
+      ];
+    case 'cape':
+      return [strokePath('M72 130C86 139 114 139 128 130', GOLD, 4.5), path(star4Path(100, 136, 6.5), { fill: GOLD })];
     case 'none':
     default:
       return [];
   }
 }
+
+// Parte del accesorio que va detrás del cuerpo (la capa).
+export function rutixAccessoryBack(accessory: RutixAccessory = 'none'): Shape[] {
+  if (accessory !== 'cape') return [];
+  return [
+    path('M70 130C40 146 30 172 40 192L100 181L160 192C170 172 160 146 130 130Z', { fill: BLUE_DEEP }),
+    path('M70 130C40 146 30 172 40 192L53 189.500C46 172 54 150 78 136Z', { fill: SKY, op: 0.45 }),
+    path('M130 130C160 146 170 172 160 192L147 189.500C154 172 146 150 122 136Z', { fill: SKY, op: 0.45 }),
+  ];
+}
+
+// Parte del accesorio que va delante de la cara (los lentes).
+export function rutixAccessoryFront(accessory: RutixAccessory = 'none'): Shape[] {
+  if (accessory !== 'glasses') return [];
+  return [
+    rect(66, 79, 31, 27, 10, { fill: EYE, fop: 0.16, stroke: GOLD, sw: 3.2 }),
+    rect(103, 79, 31, 27, 10, { fill: EYE, fop: 0.16, stroke: GOLD, sw: 3.2 }),
+    strokePath('M97 90q3-3 6 0', GOLD, 3),
+    strokePath('M66 88l-8-3M134 88l8-3', GOLD, 3),
+  ];
+}
+
+// Accesorios altos: tapan las ondas de la antena.
+export const TALL_ACCESSORIES: RutixAccessory[] = ['graduation', 'crown', 'helmet'];
 
 export interface RutixDrawingOptions {
   expression?: RutixExpression;
@@ -415,7 +467,7 @@ export interface RutixDrawingOptions {
 
 export function rutixDrawing({ expression = 'neutral', pose = 'idle', signal = 3, blink = false, shadow = true, accessory = 'none' }: RutixDrawingOptions = {}): Drawing {
   // Los accesorios altos tapan las ondas de la antena.
-  const arcs = signal > 0 && accessory !== 'graduation' && accessory !== 'crown';
+  const arcs = signal > 0 && !TALL_ACCESSORIES.includes(accessory);
   return {
     w: 200,
     h: 200,
@@ -423,9 +475,11 @@ export function rutixDrawing({ expression = 'neutral', pose = 'idle', signal = 3
     shapes: [
       ...(shadow ? [ellipse(100, 187, 46, 7, { fill: '#000000', op: 0.18 })] : []),
       ...(arcs ? rutixSignalArcs() : []),
+      ...rutixAccessoryBack(accessory),
       ...rutixBody(pose, signal),
       ...rutixAccessory(accessory),
       ...rutixFace(expression, blink),
+      ...rutixAccessoryFront(accessory),
       ...rutixExtras(expression),
     ],
   };
@@ -460,6 +514,10 @@ export const rutixWardrobe: RutixAccessoryInfo[] = [
   { id: 'headphones', label: 'Audífonos', hint: 'Completa tres ráfagas.', achievement: 'burst-starter' },
   { id: 'graduation', label: 'Birrete', hint: 'Domina las seis áreas de la carrera.', achievement: 'career-explorer' },
   { id: 'crown', label: 'Corona', hint: 'Llega al nivel 8 o gana una ruta en vivo.', level: 8, achievement: 'route-champion' },
+  { id: 'glasses', label: 'Lentes', hint: 'Resuelve tres niveles del desafío Binario.', achievement: 'binary-brain' },
+  { id: 'scarf', label: 'Bufanda', hint: 'Corre 200 metros en TEL Runner.', achievement: 'runner-rookie' },
+  { id: 'helmet', label: 'Casco', hint: 'Juega los seis juegos de la ruta.', achievement: 'station-explorer' },
+  { id: 'cape', label: 'Capa', hint: 'Corre 1.000 metros en TEL Runner o llega al nivel 6.', level: 6, achievement: 'runner-courier' },
 ];
 
 export function isAccessoryUnlocked(info: RutixAccessoryInfo, progress: { level: number; achievements: string[] }): boolean {

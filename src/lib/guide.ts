@@ -24,7 +24,7 @@ export interface GuideInput {
 export function starterGuide({ results, mascotDays, careerAreas }: GuideInput): GuideStep[] {
   const played = (...ids: string[]) => results.some((result) => ids.includes(result.gameId));
   return [
-    { id: 'burst', title: 'Juega tu primera Ráfaga', text: 'Seis microjuegos cortos. Rutix te da una pista antes de cada uno.', icon: 'bolt', route: '/burst', done: played('burst') },
+    { id: 'burst', title: 'Juega tu primera Ráfaga', text: 'Ocho microjuegos cortos. Rutix te explica cada uno antes de empezar.', icon: 'bolt', route: '/burst', done: played('burst') },
     { id: 'runner', title: 'Corre en TEL Runner', text: 'Junta paquetes de datos, esquiva virus y desbloquea personajes.', icon: 'rocket', route: '/runner', done: played('runner') },
     {
       id: 'puzzle',

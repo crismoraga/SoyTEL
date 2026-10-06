@@ -319,6 +319,23 @@ rutixOutfits.forEach((item) => addAsset('Rutix', `accesorio-${item.id}.svg`, dra
 // TEL Runner: personajes telemáticos y objetos de la pista.
 runnerCharacters.forEach((character) => addAsset('Runner', `personaje-${character.id}.svg`, drawingToSvg(runnerCharacterDrawing(character.id), { width: 320 })));
 runnerItemKinds.forEach((kind) => addAsset('Runner', `objeto-${kind}.svg`, drawingToSvg(runnerItemDrawing(kind), { width: 160 })));
+// Kit de marca (npm run brand:kit): logos, piezas para redes, impresos y fondos de presentación.
+const kitDir = path.join(root, 'dist', 'brand-kit');
+const kitGroups = { logos: 'Logos', social: 'Social', impresos: 'Impresos', presentacion: 'Presentacion' };
+const kitUses = {
+  'soytel-wordmark-oscuro': 'Logotipo para fondos azul noche.',
+  'soytel-wordmark-claro': 'Logotipo para fondos claros.',
+  'soytel-lockup-horizontal-oscuro': 'Versión principal para fondos azul noche.',
+  'soytel-lockup-horizontal-claro': 'Versión principal para fondos claros.',
+  'soytel-lockup-vertical-oscuro': 'Formatos cuadrados o altos.',
+  'rutix-sello': 'Avatar de redes sociales y sello de cierre.',
+  'post-cuadrado-1080': 'Publicación cuadrada de presentación.',
+  'post-runner-1080': 'Publicación cuadrada de TEL Runner.',
+  'historia-1080x1920': 'Historia vertical con el QR de la ruta.',
+  'banner-1600x900': 'Banner 16:9 para pantallas, sitios y video.',
+};
+const kitPieces = fs.existsSync(path.join(kitDir, 'kit.json')) ? JSON.parse(fs.readFileSync(path.join(kitDir, 'kit.json'), 'utf8')).filter((item) => fs.existsSync(path.join(kitDir, item.group, item.file))) : [];
+kitPieces.forEach((item) => addAsset(kitGroups[item.group], item.file, fs.readFileSync(path.join(kitDir, item.group, item.file))));
 illustrationNames.forEach((name) => {
   addAsset('Ilustraciones', `${name}.svg`, drawingToSvg(illustrationDrawing(name), { width: 480, height: 400 }));
   addAsset('Ilustraciones', `${name}-oscuro.svg`, drawingToSvg(illustrationDrawing(name, 'dark'), { width: 480, height: 400 }));
@@ -362,13 +379,19 @@ const groupReadmes = {
   Marca: '# Marca\n\nArte rasterizado de la identidad Telemática USM, extraído de las hojas de marca y del export de Claude Design.\n\n- `logo-app.png` — logo en formato ícono de app (cuadrado redondeado). Úsalo con esquinas de 24% y sombra `shadow-logo` sobre `primary`.\n- `badge.png` — insignia circular recortada (fondo transparente); es la imagen del splash nativo.\n- `fondo-bienvenida.jpg` — fondo de la pantalla de bienvenida, siempre con velo azul encima.\n- `arte-onboarding.jpg` — ilustración de la primera lámina del onboarding.\n- `banner.jpg` — pieza horizontal para comunicación.\n- `spot-*.jpg` — ilustraciones puntuales con fondo blanco para tarjetas de carrusel (recorte `cover`).\n',
   Iconos: '# Íconos\n\nGrilla de 24×24, trazo 2, extremos y uniones redondeadas (estilo de las pantallas de Claude Design). En la app se dibujan con `TelIcon` y `currentColor`; estos SVG exportados usan tinta `primary` (#0B2D45) porque `<img>` no hereda color. Tamaños: 16–18 en etiquetas, 20–24 en filas y botones, 26–34 en tarjetas de juego. `heartSolid` y `starSolid` son las únicas variantes rellenas.\n',
   Medallas: '# Medallas\n\nMedallones de la marca: anillo crema, disco azul noche, arco celeste, estrellas de cuatro puntas y un glifo sólido crema. `medallionDrawing({ glyph, tier, state, progress, ribbon })` genera todas las variantes: rareza por anillo (`bronce`, `plata`, `oro`, `platino`, o `crema` por defecto) y estado (`unlocked`, `progress` con arco parcial, `locked` en gris con candado). Úsalas para logros, áreas de la carrera, estaciones y accesos del Inicio. Tamaños: 44–64 en listas, 76 en grillas, 88–132 en detalle.\n',
-  Rutix: '# Rutix\n\nMascota de SoyTEL (diseño v2): robot-antena con pantalla por cara, orejas-puerto, botas y barras de señal en el pecho que muestran su ánimo (0–4).\n\n- `rutix-<expresión>.svg` — las 15 expresiones (`neutral`, `happy`, `celebrate`, `love`, `wink`, `proud`, `laugh`, `think`, `focus`, `surprised`, `alert`, `worried`, `sleepy`, `sad`, `sleep`), cada una con la pose y la señal que mejor la acompañan.\n- `pose-<pose>.svg` — las 7 poses: `idle`, `wave`, `celebrate`, `think`, `point`, `thumbsup` y `shrug`.\n- `accesorio-<id>.svg` — el guardarropa que se desbloquea jugando: `cap` (jockey TEL, nivel 2), `headphones` (audífonos, tres ráfagas), `graduation` (birrete, las seis áreas de la carrera) y `crown` (corona, nivel 8 o ganar una ruta en vivo).\n\nSus colores son fijos en los dos temas (cuerpo `cream`, pantalla `primary`, ojos `accentSoft`): ponlo sobre fondos azul noche o dentro de un círculo `primary`. En la app flota, parpadea y su antena pulsa (componente `Rutix`); en los juegos habla desde una burbuja (`CoachBubble`). Úsalo como guía y reacción emocional, nunca como decoración repetida: máximo un Rutix por pantalla.\n',
+  Rutix: '# Rutix\n\nMascota de SoyTEL (diseño v2): robot-antena con pantalla por cara, orejas-puerto, botas y barras de señal en el pecho que muestran su ánimo (0–4).\n\n- `rutix-<expresión>.svg` — las 15 expresiones (`neutral`, `happy`, `celebrate`, `love`, `wink`, `proud`, `laugh`, `think`, `focus`, `surprised`, `alert`, `worried`, `sleepy`, `sad`, `sleep`), cada una con la pose y la señal que mejor la acompañan.\n- `pose-<pose>.svg` — las 7 poses: `idle`, `wave`, `celebrate`, `think`, `point`, `thumbsup` y `shrug`.\n- `accesorio-<id>.svg` — el guardarropa que se desbloquea jugando: `cap` (jockey TEL, nivel 2), `headphones` (audífonos, tres ráfagas), `graduation` (birrete, las seis áreas de la carrera), `crown` (corona, nivel 8 o ganar una ruta en vivo), `glasses` (lentes, tres niveles de Binario), `scarf` (bufanda, 200 metros en TEL Runner), `helmet` (casco, los seis juegos de la ruta) y `cape` (capa, 1.000 metros en TEL Runner o nivel 6).\n\nSus colores son fijos en los dos temas (cuerpo `cream`, pantalla `primary`, ojos `accentSoft`): ponlo sobre fondos azul noche o dentro de un círculo `primary`. En la app flota, parpadea y su antena pulsa (componente `Rutix`); en los juegos habla desde una burbuja (`CoachBubble`). Úsalo como guía y reacción emocional, nunca como decoración repetida: máximo un Rutix por pantalla.\n',
   Ilustraciones: '# Ilustraciones\n\nIlustraciones planas en el estilo de «Ilustraciones rápidas» de la marca, generadas desde una paleta: versión clara (fondo `highlight`) para pantallas claras y `-oscuro` para pantallas azules. `connect`, `burst`, `campus`, `globe`, `trophy`, `inbox` (estado vacío de avisos), `quiz`, `route`, `offline` (error), `career`. `mapa-campus.svg` es el mapa del modo historia.\n',
   Ruta: '# Ruta Telemática\n\nGráficos del modo en vivo (stand → B215 → B213 → pasillo). `templo-*`: el Templo de Telemática de Didactic-Tel; cada columna toma el color de su pilar cuando el participante completa el juego del proyecto (Datos, Software, Redes, Telecomunicaciones, Hardware) y con los cinco se enciende el frontón. `avatar-*`: los 8 avatares que elige cada participante (círculo de color con anillo crema e ícono en tinta primaria). `respuesta-*`: color y forma de las cuatro alternativas de la trivia final, estilo Kahoot (triángulo, rombo, círculo, cuadrado), para que se distingan también sin color.\n',
   Runner: '# TEL Runner\n\nGráficos de la carrera sin fin.\n\n- `personaje-<id>.svg` — los siete personajes telemáticos: `rutix` (robot-antena, inicial), `paqui` (paquete de datos), `routa` (router), `fibri` (fibra óptica), `satelin` (satélite), `dronix` (dron) y `nubi` (la nube). Se desbloquean con paquetes de datos y cada uno trae una ventaja ligada a lo que hace en una red real.\n- `objeto-<tipo>.svg` — lo que aparece en la pista: `packet` (paquete de datos, suma), `shield` (cortafuegos, protege de un golpe), `fiber` (rayo de fibra, duplica los paquetes), `virus` (obstáculo alto: se esquiva) y `cable` (obstáculo bajo: se salta).\n\nColores fijos en los dos temas: todo va sobre la pista azul noche. Los obstáculos son los únicos elementos en rojo o naranja y además tienen forma propia (púas, chispas), para que no dependan solo del color.\n',
+  Logos: '# Logos\n\nEl logotipo SoyTEL y sus combinaciones con el emblema de Telemática USM, en PNG con fondo transparente. `oscuro` es para fondos azul noche y `claro` para fondos claros. `rutix-sello` es el avatar de Rutix para redes sociales. Reglas de uso (zona de respeto, tamaños mínimos y lo que no se hace) en la sección «Logo y marca» del libro.\n',
+  Social: '# Redes sociales\n\nPiezas listas para publicar: publicaciones cuadradas (1080×1080), historia vertical (1080×1920) con el QR de la ruta, banner 16:9, imagen para enlaces compartidos (1200×630) y gráfico de la tienda (1024×500). El texto es parte de la imagen: para cambiarlo, edita el HTML fuente que genera `npm run brand:kit`.\n',
+  Impresos: '# Impresos\n\nPiezas para el stand y los eventos, a 150 dpi salvo que se indique: afiche A4 con el QR de la ruta, diploma A4 horizontal con espacio para el nombre, credencial de 54×85 mm (300 dpi) para quienes atienden el stand y dos hojas de stickers para troquelar.\n',
+  Presentacion: '# Presentación\n\nFondos 16:9 (1920×1080) para láminas: una portada con título de ejemplo y dos fondos de contenido, oscuro y claro, con el logotipo abajo a la derecha y una línea de acento donde parte el título.\n',
   Patrones: '# Patrones\n\nFondos decorativos de las pantallas oscuras (`BrandBackdrop`): `estrellas` (por defecto), `red` (nodos conectados), `senal` (ondas desde una esquina) y `orbitas` (anillos crema como la bienvenida). Siempre detrás del contenido, sin competir con el texto; una capa de estrellas titila si el movimiento está activado.\n',
 };
-Object.entries(groupReadmes).forEach(([group, text]) => write(path.join(project, 'assets', group, 'README.md'), text));
+Object.entries(groupReadmes)
+  .filter(([group]) => assetFiles[group])
+  .forEach(([group, text]) => write(path.join(project, 'assets', group, 'README.md'), text));
 write(path.join(outDir, 'uploads.json'), JSON.stringify(assetFiles, null, 2));
 
 // ---------- CSS compartido de las vistas previas ----------
@@ -584,9 +607,9 @@ Mascota animada de SoyTEL (diseño v2): flota, parpadea y la antena pulsa. Props
 `);
 
 // Guardarropa de Rutix
-preview('RutixWardrobe', { group: 'Gráficos', height: 250, subtitle: 'Accesorios que se desbloquean jugando' }, `<div class="rx-sheet">
+preview('RutixWardrobe', { group: 'Gráficos', height: 400, subtitle: 'Accesorios que se desbloquean jugando' }, `<div class="rx-sheet">
 <span class="rx-title">Guardarropa</span>
-<div class="rx-grid" style="grid-template-columns:repeat(${rutixWardrobe.length},1fr)">${rutixWardrobe.map((item) => rutixCell(accessoryLook(item.id), item.label, 104, item.hint)).join('')}</div>
+<div class="rx-grid">${rutixWardrobe.map((item) => rutixCell(accessoryLook(item.id), item.label, 104, item.hint)).join('')}</div>
 </div>`, rutixCss);
 readme('RutixWardrobe', `
 Accesorios de Rutix (pantalla de Rutix → «Guardarropa»). Cada uno se gana jugando y queda puesto en toda la app: ${rutixWardrobe.map((item) => `\`${item.id}\` «${item.label}» (${item.hint.replace(/\.$/, '').toLowerCase()})`).join(', ')}. Los bloqueados se muestran atenuados con candado y la condición para desbloquearlos; nunca se venden ni dependen del azar. El accesorio va en la capa \`outfit\`, sobre la cabeza y sin tapar la pantalla ni la antena.
@@ -734,7 +757,7 @@ Podio del cierre (2º · 1º · 3º) con los colores de rareza plata, oro y bron
 `);
 preview('StationHud', { group: 'Juegos', height: 290, subtitle: 'Barra de juego y presentación de etapa' }, `<div class="tel-stage dark tel-row" style="align-items:flex-start;gap:28px"><div class="rt-hud"><div class="row"><div style="flex:1"><div class="tel-small" style="color:var(--accentSoft);letter-spacing:1.2px">ETAPA 2 DE 3</div><div class="tel-subtitle" style="color:var(--cream)">Enruta los paquetes</div></div><div style="text-align:center;color:var(--cream)"><div class="tel-num">358</div><div class="tel-small" style="color:var(--accentSoft)">pts</div></div><span class="rt-pill">${svgIcon('timer', 16)} 44s</span></div><div class="tel-bar" style="background:var(--primarySoft);height:5px"><span style="width:90%;background:var(--accent)"></span></div></div><div class="rt-banner"><span style="width:84px;height:84px;border-radius:42px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:var(--primary)">${svgIcon('send', 40)}</span><span class="tel-overline">Etapa 2</span><span class="tel-title" style="font-size:24px">Enruta los paquetes</span><span style="color:var(--accentSoft);font-size:15px;line-height:22px">Ahora tú eres el router: envía cada paquete por la interfaz correcta.</span></div></div>`, routeCss);
 readme('StationHud', `
-Estructura común de los seis juegos de la ruta: \`StationHud\` (etapa, título, puntaje y reloj que se vuelve rojo en los últimos 5 s), \`StageBanner\` (Rutix presenta cada etapa y espera a que toques «Continuar»: el reloj no corre mientras lees) y \`StationSummary\` (puntaje final, desglose por etapa y lo aprendido). Cada juego suma hasta 1.000 puntos y usa el color de su pilar como acento. Todos los tiempos se multiplican por el ritmo elegido (tranquilo ×1,7 por defecto, normal ×1,35, rápido ×1); en la ruta en vivo el ritmo lo fija el stand.
+Estructura común de los seis juegos de la ruta: \`StationHud\` (etapa, título, puntaje y reloj que se vuelve rojo en los últimos 5 s), \`StageBanner\` (Rutix presenta cada etapa y espera a que toques «Continuar»: el reloj no corre mientras lees) y \`StationSummary\` (puntaje final, desglose por etapa y lo aprendido). Cada juego suma hasta 1.000 puntos y usa el color de su pilar como acento. Todos los tiempos se multiplican por el ritmo elegido (sin apuro ×2,5 por defecto, tranquilo ×1,7, normal ×1,35 o rápido ×1); en la ruta en vivo el ritmo lo fija el stand.
 `);
 
 preview('CodeBoxes', { group: 'Ruta', height: 150, subtitle: 'Ingreso del código de la ruta' }, `<div class="tel-stage tel-col" style="width:360px;align-items:stretch"><div class="rt-boxes">${'LYJ6'.split('').map((character) => `<span class="rt-box filled">${character}</span>`).join('')}<span class="rt-box active"></span><span class="rt-box"></span></div><span class="tel-caption">Toca cualquier casilla para escribir. El código no usa 0, 1, I ni O.</span></div>`, routeCss);
@@ -801,7 +824,7 @@ const netBoard = (() => {
 })();
 preview('PuzzleBoard', { group: 'Juegos', height: 440, subtitle: 'Conecta la red, desafío sin reloj' }, `<div class="tel-stage dark tel-col" style="align-items:center;width:330px"><div class="tel-row"><span class="rt-pill">${svgIcon('laptop', 16, colors.accent)} ${netBoard.online}/${netBoard.total} equipos</span><span class="rt-pill">${svgIcon('refresh', 16, colors.accent)} 7 giros</span></div>${netBoard.svg}<div class="tel-row" style="width:100%;flex-wrap:nowrap"><span class="tel-btn sm outlineLight" style="flex:1">${svgIcon('lightbulb')} Pista</span><span class="tel-btn sm outlineLight" style="flex:1">${svgIcon('refresh')} Reiniciar</span></div></div>`, routeCss);
 readme('PuzzleBoard', `
-Tablero de «Conecta la red», uno de los tres desafíos sin reloj (con «Binario» y «Mensaje cifrado»). Cada casilla es una pieza de cable que gira 90° al tocarla. El servidor (círculo \`cream\` con borde \`accent\`) emite la señal: los cables y equipos que la reciben se encienden en \`accent\` y el resto queda en gris azulado sobre \`primaryDeep\`. Arriba van las píldoras de equipos en línea y giros; abajo, «Pista» (Rutix acomoda una pieza) y «Reiniciar». Tableros de 3×3 a 6×6 según el nivel, sin reloj ni vidas: el puntaje premia resolver con pocos giros. El estado no depende solo del color: el equipo conectado cambia de relleno y el lector de pantalla anuncia «con señal» o «sin señal».
+Tablero de «Conecta la red», uno de los cuatro desafíos sin reloj (con «Parejas TEL», «Binario» y «Mensaje cifrado»). Cada casilla es una pieza de cable que gira 90° al tocarla. El servidor (círculo \`cream\` con borde \`accent\`) emite la señal: los cables y equipos que la reciben se encienden en \`accent\` y el resto queda en gris azulado sobre \`primaryDeep\`. Arriba van las píldoras de equipos en línea y giros; abajo, «Pista» (Rutix acomoda una pieza) y «Reiniciar». Tableros de 3×3 a 6×6 según el nivel, sin reloj ni vidas: el puntaje premia resolver con pocos giros. El estado no depende solo del color: el equipo conectado cambia de relleno y el lector de pantalla anuncia «con señal» o «sin señal».
 `);
 
 // ---------- Temas ----------
@@ -811,12 +834,12 @@ const themeCss = `.th-wrap{display:flex;gap:16px;padding:16px;background:var(--s
 const themePhone = (theme, label) => `<div class="th-phone" data-theme="${theme}">
 <div class="tel-header" style="padding:14px 16px 16px"><span class="tel-overline">${label}</span><h2 class="tel-title" style="font-size:22px;line-height:28px">Hola, Cami</h2></div>
 <div class="th-body"><div class="tel-card"><span class="tel-small" style="color:var(--inkAccent);letter-spacing:1.2px">DESAFÍO DE HOY</span><p class="tel-subtitle">5 microjuegos · bono +250</p><p class="tel-caption">Cada ronda parte cuando tú tocas.</p><div class="tel-bar"><span style="width:40%"></span></div><span class="tel-btn primary sm">Jugar ${svgIcon('arrowRight')}</span></div>
-<div class="tel-row" style="gap:8px"><span class="tel-chip active">Tranquilo</span><span class="tel-chip">Normal</span><span class="tel-chip">Rápido</span></div>
+<div class="tel-row" style="gap:8px"><span class="tel-chip active">Sin apuro</span><span class="tel-chip">Tranquilo</span><span class="tel-chip">Normal</span></div>
 <div class="tel-row" style="gap:8px"><span class="tel-tag success">Completada</span><span class="tel-tag sky">${svgIcon('clock', 13)} 8–12 min</span><span class="tel-tag warning">Racha 3 días</span></div></div>
 ${tabBar('width:auto')}</div>`;
 preview('Themes', { group: 'Fundamentos', height: 520, subtitle: 'Tema claro y tema oscuro' }, `<div class="th-wrap">${themePhone('light', 'Tema claro')}${themePhone('dark', 'Tema oscuro')}</div>`, themeCss);
 readme('Themes', `
-Los dos temas de la app, lado a lado. Solo cambian los colores de superficie (\`paper\`, \`surface\`, \`surfaceAlt\`, \`border\`, \`highlight\`), el texto que va sobre ellos (\`ink\`, \`inkSoft\`, \`inkAccent\`), los estados suaves y la acción principal (\`action\` con \`actionInk\`: azul noche con texto crema en claro, celeste con texto azul noche en oscuro). Los colores de marca no cambian: las cabeceras y las pantallas de juego son azul noche en ambos temas. Regla: sobre una superficie del tema se escribe con \`ink\`, \`inkSoft\` o \`inkAccent\`; sobre un relleno de marca (\`cream\`, \`accent\`, color de pilar) con \`primary\` o \`secondary\`. El tema se elige en Ajustes («Sistema», «Claro», «Oscuro») y por defecto sigue al del sistema. Los chips de la muestra son el ajuste «Ritmo de los juegos»: tranquilo (por defecto), normal y rápido.
+Los dos temas de la app, lado a lado. Solo cambian los colores de superficie (\`paper\`, \`surface\`, \`surfaceAlt\`, \`border\`, \`highlight\`), el texto que va sobre ellos (\`ink\`, \`inkSoft\`, \`inkAccent\`), los estados suaves y la acción principal (\`action\` con \`actionInk\`: azul noche con texto crema en claro, celeste con texto azul noche en oscuro). Los colores de marca no cambian: las cabeceras y las pantallas de juego son azul noche en ambos temas. Regla: sobre una superficie del tema se escribe con \`ink\`, \`inkSoft\` o \`inkAccent\`; sobre un relleno de marca (\`cream\`, \`accent\`, color de pilar) con \`primary\` o \`secondary\`. El tema se elige en Ajustes («Sistema», «Claro», «Oscuro») y por defecto sigue al del sistema. Los chips de la muestra son el ajuste «Ritmo de los juegos»: sin apuro (por defecto), tranquilo, normal y rápido.
 `);
 
 // ---------- TEL Runner, tutoriales y guía de inicio ----------
@@ -882,6 +905,78 @@ readme('GuideCard', `
 Guía de inicio de la pantalla principal: los primeros seis pasos recomendados para quien abre SoyTEL por primera vez (una Ráfaga, TEL Runner, un desafío sin reloj, un juego de la ruta, Rutix y un área de la carrera). Rutix, dentro de un círculo \`primary\`, señala el siguiente paso con su título y una frase; debajo, una fila de píldoras muestra el avance: \`success\` con ✓ los pasos listos, \`action\` el actual y \`surfaceAlt\` los pendientes. El botón «Vamos» lleva directo al paso. Cada paso se marca solo al cumplirse y la tarjeta desaparece cuando están todos.
 `);
 
+// ---------- Libro de marca: secciones además del README ----------
+const kitRows = kitPieces
+  .map((item) => `| \`${kitGroups[item.group]}/${item.file}\` | ${item.width}×${item.height} | ${item.note || kitUses[item.file.replace(/\.png$/, '')] || ''} |`)
+  .join('\n');
+write(
+  path.join(project, '10-logo-y-marca.md'),
+  `# Logo y marca
+
+SoyTEL usa dos elementos: el **emblema de Telemática USM** (la insignia con el notebook, que es de la carrera) y el **logotipo SoyTEL** («Soy» + «TEL» en Montserrat 800). Todas las versiones están en el grupo de activos Logos.
+
+## Versiones
+
+- \`soytel-lockup-horizontal-*\`: emblema + logotipo + lema. Es la versión principal para cabeceras, afiches y presentaciones.
+- \`soytel-lockup-vertical-oscuro\`: para formatos cuadrados o altos (portadas, perfiles).
+- \`soytel-wordmark-*\`: solo el logotipo, cuando el emblema ya aparece cerca o el espacio es muy angosto.
+- \`rutix-sello\`: Rutix dentro de un círculo azul noche con anillo crema. Úsalo como avatar de redes sociales o sello de cierre; no reemplaza al emblema.
+- Cada versión viene en \`oscuro\` (para fondos azul noche: «Soy» en \`cream\`, «TEL» en \`accent\`) y \`claro\` (para fondos claros: «Soy» en \`primary\`, «TEL» en \`secondary\`).
+
+## Reglas
+
+- El emblema nunca se redibuja, recolorea ni recorta: se usa el archivo tal cual, con esquinas redondeadas al 24 % cuando va como ícono de app.
+- Zona de respeto: deja libre alrededor al menos la mitad del alto del emblema.
+- Tamaño mínimo: 24 px de alto para el emblema solo y 120 px de ancho para el lockup horizontal.
+- Fondos permitidos: \`primary\`, \`primaryDeep\`, el degradado azul noche, \`paper\`, \`cream\` y blanco. Sobre fotos, pon antes un velo \`overlay\`.
+- El lema es «Mismas redes, un mejor mañana.», en Montserrat 600, siempre con punto final.
+- No lo deformes, no le pongas sombra ni contorno, no cambies la tipografía y no escribas «SOYTEL» ni «Soy Tel»: es **SoyTEL**.
+`,
+);
+write(
+  path.join(project, '20-rutix-y-personajes.md'),
+  `# Rutix y los personajes
+
+## Rutix
+
+Rutix es el robot-antena de SoyTEL: curioso, paciente y de buen humor. Explica antes de preguntar, celebra los aciertos y, cuando algo sale mal, anima a intentarlo otra vez.
+
+- **Cómo habla**: en primera persona, frases de una línea, sin tecnicismos sin explicar. «Te doy una pista…», «¡Buena conexión!», «Casi. ¡Probemos de nuevo!». Nunca reta ni apura.
+- **Qué expresión usar**: \`happy\` y \`wave\` para saludar; \`wink\` + \`point\` para pistas y tutoriales; \`proud\` + \`thumbsUp\` para aciertos; \`celebrate\` para logros; \`worried\` + \`shrug\` para errores; \`think\` para preguntas y pausas; \`alert\` cuando queda poco tiempo. \`sad\`, \`sleepy\` y \`sleep\` solo para su propia señal baja, nunca para culpar a quien juega.
+- **Dónde va**: sus colores son fijos (cuerpo \`cream\`, pantalla \`primary\`), así que siempre sobre azul noche o dentro de un círculo \`primary\`. Máximo un Rutix por pantalla o pieza.
+- **Guardarropa**: ${rutixWardrobe.filter((item) => item.id !== 'none').map((item) => item.label.toLowerCase()).join(', ')}. Los accesorios se ganan jugando; en piezas de comunicación usa el Rutix clásico, salvo que la pieza hable de ese logro.
+- **Qué no hacer**: no lo gires ni lo recolorees, no le cambies las proporciones, no lo uses como patrón repetido y no le pongas texto en la pantalla (ahí va su cara).
+
+## Personajes de TEL Runner
+
+Son equipos e ideas reales de las redes; cada uno enseña algo: ${runnerCharacters.map((character) => `**${character.name}** (${character.role.toLowerCase()})`).join(', ')}. Comparten con Rutix los ojos azul noche con brillo, la sonrisa corta y la sombra elíptica. Úsalos juntos, en fila, para hablar de TEL Runner o de «todo lo que conecta una red»; por separado, siempre con su nombre y lo que son.
+
+## Stickers
+
+Las hojas \`stickers-rutix\` y \`stickers-personajes\` (grupo Impresos) están listas para imprimir y troquelar en círculos de unos 5 cm. Cada sticker lleva una frase corta de Rutix.
+`,
+);
+write(
+  path.join(project, '30-piezas-y-plantillas.md'),
+  `# Piezas y plantillas
+
+Piezas listas para usar, compuestas con los mismos tokens, fuentes y gráficos de la app. Se generan con \`npm run brand:kit\` (el HTML fuente de cada una queda junto a los PNG, por si hay que cambiar un texto).
+
+| Archivo | Tamaño (px) | Para qué |
+| --- | --- | --- |
+${kitRows}
+
+## Cómo componer una pieza nueva
+
+- **Fondo**: degradado \`primaryDeep\` → \`primary\` → \`primarySoft\` con el patrón de estrellas y, si hay un punto de atención, las ondas de señal detrás.
+- **Texto**: un kicker en mayúsculas espaciadas (\`accent\`), un titular en Montserrat 800 con una sola idea resaltada en \`accent\`, y como máximo dos líneas de apoyo en Nunito Sans.
+- **Acción**: una sola, en una píldora \`cream\` (la dirección web o «Escanea y juega»).
+- **Cierre**: emblema + logotipo + «Ingeniería Civil Telemática · USM» abajo a la izquierda.
+- **QR**: siempre sobre una tarjeta blanca con esquinas redondeadas y la dirección escrita debajo, para quien no pueda escanear.
+- En las piezas claras (diploma, stickers) el fondo es \`creamSoft\` o \`surfaceAlt\` y el texto \`primary\`.
+`,
+);
+
 // Cover
 const cover = `<!-- @dsCard height=288 -->
 <!doctype html>
@@ -946,7 +1041,7 @@ write(path.join(project, 'README.md'), fs.readFileSync(path.join(__dirname, 'des
 // ---------- índice ----------
 if (idsFile) {
   const ids = JSON.parse(fs.readFileSync(idsFile, 'utf8'));
-  const tiles = { Marca: 'l', Iconos: 'xs', Medallas: 's', Rutix: 'm', Runner: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l' };
+  const tiles = { Logos: 'l', Marca: 'l', Iconos: 'xs', Medallas: 's', Rutix: 'm', Runner: 'm', Ilustraciones: 'm', Ruta: 'm', Patrones: 'l', Social: 'l', Impresos: 'l', Presentacion: 'l' };
   const types = { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg' };
   const assetGroups = {};
   Object.keys(tiles).filter((group) => assetFiles[group]).forEach((group) => {
@@ -973,7 +1068,7 @@ if (idsFile) {
     assetGroups,
     blobs: previous?.blobs ?? {},
     docs: previous?.docs ?? { sections: [] },
-    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: `SoyTEL 3.0: tema oscuro, Rutix v2 (${rutixExpressions.length} expresiones, ${rutixPoses.length} poses y guardarropa), Rutix en los juegos, TEL Runner con ${runnerCharacters.length} personajes, tutoriales paso a paso, desafíos sin reloj y ${Object.keys(icons).length} íconos. Generado desde el código de la app.` },
+    lastChange: { by: 'Cristóbal Moraga', at: now, via: 'Claude Code', note: `SoyTEL 3.0: tema oscuro, Rutix v2 (${rutixExpressions.length} expresiones, ${rutixPoses.length} poses y guardarropa), TEL Runner con ${runnerCharacters.length} personajes, tutoriales paso a paso y kit de marca (${kitPieces.length} piezas: logos, redes sociales, impresos y presentación). Generado desde el código de la app.` },
   };
   write(path.join(project, 'design-system.json'), `${JSON.stringify(index, null, 2)}\n`);
 }

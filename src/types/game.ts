@@ -33,7 +33,11 @@ export type MicroGameId =
   | 'ip-valid'
   | 'fast-route'
   | 'safe-url'
-  | 'unit-order';
+  | 'unit-order'
+  | 'port-match'
+  | 'device-role'
+  | 'wifi-safe'
+  | 'acronym';
 
 export type AchievementId =
   | 'first-signal'
@@ -61,7 +65,12 @@ export type AchievementId =
   | 'burst-master'
   | 'runner-rookie'
   | 'runner-courier'
-  | 'data-collector';
+  | 'data-collector'
+  | 'memory-ace'
+  | 'puzzle-fan'
+  | 'all-rounder'
+  | 'burst-flawless'
+  | 'daily-seven';
 
 export interface Achievement {
   id: AchievementId;

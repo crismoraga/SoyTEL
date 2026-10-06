@@ -23,7 +23,7 @@ const THEME_OPTIONS: { id: ThemePreference; label: string; icon: IconName }[] = 
   { id: 'dark', label: 'Oscuro', icon: 'moon' },
 ];
 
-const PACE_OPTIONS: { id: GamePace; label: string }[] = (['calm', 'normal', 'fast'] as GamePace[]).map((id) => ({ id, label: paceLabels[id].label }));
+const PACE_OPTIONS: { id: GamePace; label: string }[] = (['relaxed', 'calm', 'normal', 'fast'] as GamePace[]).map((id) => ({ id, label: paceLabels[id].label }));
 
 const MOTION_OPTIONS: { id: MotionPreference; label: string }[] = [
   { id: 'auto', label: 'Automático' },
