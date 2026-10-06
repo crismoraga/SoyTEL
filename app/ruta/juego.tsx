@@ -16,6 +16,7 @@ import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
+import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { BigCountdown, PlayerAvatar, PlayerChip, RouteProgress } from '@/features/route/parts';
 import { Leaderboard, Podium } from '@/features/route/Podium';
 import { QuizQuestion, QuizReveal } from '@/features/route/QuizViews';
@@ -206,6 +207,23 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
   }
 }
 
+const guideLines: Record<CheckinStop, string> = {
+  b215: '¡Sígueme! En la B215 hay routers, switches y access points de verdad: míralos bien, te servirán en el juego.',
+  b213: 'En la B213 cada proyecto tiene su juego. Pregúntale a quienes lo presentan: ¡dan buenas pistas!',
+  hall: 'Última parada: la trivia. Suma más quien responde bien y rápido. ¡Tú puedes!',
+};
+
+// Rutix guía al grupo entre paradas (si está activado en Ajustes).
+function Guide({ children }: { children: string }) {
+  const coach = useCoachEnabled();
+  if (!coach) return null;
+  return (
+    <CoachBubble mood="tip" size={60}>
+      {children}
+    </CoachBubble>
+  );
+}
+
 interface PhaseProps {
   header: React.ReactNode;
   snapshot: RouteSnapshot;
@@ -228,6 +246,7 @@ function LobbyView({ header, snapshot, me, solo, verification, warning }: PhaseP
           Espera a que el equipo del stand inicie la ruta. Mantén esta pantalla abierta.
         </TelText>
       </Animated.View>
+      <Guide>{solo ? 'Jugaremos la ruta completa tú y yo. ¡Vamos partiendo!' : 'Ya estás en el grupo. Cuando el stand inicie la ruta te llevo a la primera sala.'}</Guide>
       {warning === 'impostor' && (
         <TelCard tone="danger" style={styles.verifyCard}>
           <TelIcon name="alert" size={22} color={colors.dangerInk} />
@@ -290,6 +309,7 @@ function CheckinView({ header, snapshot, me, pending }: PhaseProps & { pending: 
           {copy.hint}
         </TelText>
       </Animated.View>
+      <Guide>{guideLines[stop]}</Guide>
       {me.checkedIn ? (
         <TelCard tone="success" style={styles.confirmedCard}>
           <TelIcon name="checkCircle" size={26} color={colors.success} />
@@ -535,6 +555,7 @@ function ProjectsView({
         </TelText>
       </View>
       <Temple lit={lit} />
+      {doneCount < 5 && <Guide>{doneCount === 0 ? 'Elige cualquier proyecto para empezar. Cada juego enciende un pilar del templo.' : `¡Van ${doneCount} de 5 pilares! Sigue con el que quieras.`}</Guide>}
       <View style={styles.gap}>
         {pillars.map((pillar, index) => {
           const done = lit[pillar.id];

@@ -1,14 +1,17 @@
 import type { ComponentType } from 'react';
 import type { MicroGameId } from '@/types/game';
 import { microGameCatalog } from './catalog';
+import { BinaryBitsGame } from './games/BinaryBitsGame';
 import { CableConnectGame } from './games/CableConnectGame';
 import { CleanSignalGame } from './games/CleanSignalGame';
 import { ColorCodeGame } from './games/ColorCodeGame';
 import { ConnectNetworkGame } from './games/ConnectNetworkGame';
 import { FirewallGame } from './games/FirewallGame';
+import { LayerOrderGame, UnitOrderGame } from './games/OrderTapGame';
 import { PacketCatchGame } from './games/PacketCatchGame';
 import { PacketRushGame } from './games/PacketRushGame';
 import { PasswordStrongGame } from './games/PasswordStrongGame';
+import { FastRouteGame, IpValidGame, SafeUrlGame } from './games/PickOneGame';
 import { PingCheckGame } from './games/PingCheckGame';
 import { SequenceMemoryGame } from './games/SequenceMemoryGame';
 import { SignalTimingGame } from './games/SignalTimingGame';
@@ -28,6 +31,12 @@ const components: Record<MicroGameId, ComponentType<MicroGameProps>> = {
   'packet-catch': PacketCatchGame,
   'wifi-boost': WifiBoostGame,
   'password-strong': PasswordStrongGame,
+  'binary-bits': BinaryBitsGame,
+  'layer-order': LayerOrderGame,
+  'ip-valid': IpValidGame,
+  'fast-route': FastRouteGame,
+  'safe-url': SafeUrlGame,
+  'unit-order': UnitOrderGame,
 };
 
 export const microGameRegistry: MicroGameDefinition[] = microGameCatalog.map((info) => ({

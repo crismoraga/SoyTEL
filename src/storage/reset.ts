@@ -6,6 +6,7 @@ import { clearRouteStorage } from '@/route/storage';
 import { CAREER_KEYS } from './career';
 import { INBOX_KEYS, resetInboxCache } from './inbox';
 import { PROFILE_KEYS } from './profile';
+import { PUZZLE_KEYS } from './puzzles';
 import { resetSettingsCache, SETTINGS_KEYS } from './settings';
 import { STORY_KEYS } from './story';
 
@@ -16,7 +17,7 @@ export async function resetAllData({ keepOnboarding = true }: { keepOnboarding?:
   routeMember.reset();
   hostManager.stopAll();
   const storyKeys = keepOnboarding ? STORY_KEYS.filter((key) => key !== '@soytel/onboarded') : STORY_KEYS;
-  await AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]);
+  await AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...PUZZLE_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]);
   await clearRouteStorage();
   await resetAccountLocal();
   resetInboxCache();

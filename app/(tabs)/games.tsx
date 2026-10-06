@@ -16,12 +16,15 @@ import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { storyChapters } from '@/data/story';
 import { microGameCatalog } from '@/features/burst/catalog';
+import { DAILY_BONUS, dailyKey, isDailyDone } from '@/features/burst/daily';
+import { puzzles } from '@/features/puzzles/catalog';
 import { stationGames } from '@/features/stations/registry';
 import { wonMicroGames } from '@/lib/achievements';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadResults } from '@/storage/profile';
+import { loadPuzzleProgress } from '@/storage/puzzles';
 import { loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 import type { GameResult } from '@/types/game';
@@ -61,11 +64,12 @@ const modes: ModeCard[] = [
 export default function GamesScreen() {
   const entering = useEntering();
   const { data } = useFocusData(async () => {
-    const [results, story] = await Promise.all([loadResults(), loadStoryProgress()]);
-    return { results, chapters: story.completedChapters.length };
+    const [results, story, puzzleProgress] = await Promise.all([loadResults(), loadStoryProgress(), loadPuzzleProgress()]);
+    return { results, chapters: story.completedChapters.length, puzzleProgress };
   });
   const won = new Set(data ? wonMicroGames(data.results) : []);
   const bestBurst = data ? data.results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0) : 0;
+  const dailyDone = data ? isDailyDone(data.results, dailyKey(new Date())) : false;
 
   return (
     <Screen
@@ -141,7 +145,7 @@ export default function GamesScreen() {
               Ráfaga TEL
             </TelText>
             <TelText variant="caption" color="accentSoft">
-              6 microjuegos al azar, 3 vidas y cada vez más rápido.
+              6 microjuegos al azar y 3 vidas. Cada ronda parte cuando tú tocas.
             </TelText>
             {bestBurst > 0 && (
               <TelText variant="label" color="accent" tabular>
@@ -150,8 +154,48 @@ export default function GamesScreen() {
             )}
           </View>
           <TelButton label="Jugar ráfaga" variant="cream" iconRight="arrowRight" onPress={() => router.push('/burst')} />
+          <TelButton
+            label={dailyDone ? 'Desafío de hoy: completado' : `Desafío de hoy · bono +${DAILY_BONUS}`}
+            variant="outlineLight"
+            icon={dailyDone ? 'checkCircle' : 'calendar'}
+            onPress={() => router.push({ pathname: '/burst', params: { diario: '1' } })}
+          />
         </TelCard>
       </Animated.View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Desafíos sin reloj" subtitle="Rompecabezas por niveles: piensa con calma, Rutix te guía" />
+        {puzzles.map((puzzle, index) => {
+          const state = data?.puzzleProgress[puzzle.id];
+          const solved = state?.level ?? 0;
+          return (
+            <Animated.View key={puzzle.id} entering={entering.fadeUp(index)}>
+              <TelCard
+                onPress={() => router.push({ pathname: '/puzzle', params: { juego: puzzle.id } })}
+                accessibilityLabel={`${puzzle.title}. Nivel ${Math.min(solved + 1, puzzle.maxLevel)} de ${puzzle.maxLevel}`}
+                style={styles.puzzleCard}
+              >
+                <View style={[styles.stationIcon, { backgroundColor: puzzle.color }]}>
+                  <TelIcon name={puzzle.icon} size={24} color={colors.primary} />
+                </View>
+                <View style={styles.flex}>
+                  <TelText variant="subtitle" color="ink">
+                    {puzzle.title}
+                  </TelText>
+                  <TelText variant="caption" color="inkSoft">
+                    {puzzle.subtitle}
+                  </TelText>
+                  <ProgressBar progress={solved / puzzle.maxLevel} height={6} accessibilityLabel={`Niveles resueltos de ${puzzle.title}`} />
+                  <TelText variant="small" color={solved > 0 ? 'successInk' : 'inkAccent'}>
+                    {solved >= puzzle.maxLevel ? '¡Todos los niveles resueltos!' : solved > 0 ? `${solved}/${puzzle.maxLevel} niveles · sigue el ${solved + 1}` : `${puzzle.maxLevel} niveles · empieza por el 1`}
+                  </TelText>
+                </View>
+                <TelIcon name="chevronRight" size={20} color={colors.ink} />
+              </TelCard>
+            </Animated.View>
+          );
+        })}
+      </View>
 
       <View style={styles.section}>
         <SectionHeader title="Modos de juego" />
@@ -250,6 +294,11 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  puzzleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   modeCard: {
     flexDirection: 'row',

@@ -21,6 +21,7 @@ import { setIdentity, syncNow, useAccount } from '@/account/store';
 import { achievements } from '@/data/achievements';
 import { areaLabels } from '@/data/questions';
 import { AvatarPicker } from '@/features/account/AvatarPicker';
+import { getPuzzle } from '@/features/puzzles/catalog';
 import { getStationGame } from '@/features/stations/registry';
 import { formatNumber, relativeTime } from '@/lib/format';
 import { LINKS, openLink } from '@/lib/links';
@@ -52,6 +53,10 @@ function describeResult(result: GameResult): { title: string; icon: IconName } {
       return { title: getStationGame(String(result.metadata?.game ?? ''))?.title ?? 'Juego de la ruta', icon: getStationGame(String(result.metadata?.game ?? ''))?.icon ?? 'gamepad' };
     case 'story':
       return { title: `Historia · capítulo ${String(result.metadata?.chapter ?? '')}`, icon: 'book' };
+    case 'puzzle': {
+      const puzzle = getPuzzle(String(result.metadata?.game ?? ''));
+      return { title: `${puzzle?.title ?? 'Desafío'} · nivel ${String(result.metadata?.level ?? '')}`, icon: puzzle?.icon ?? 'grid' };
+    }
     default:
       return { title: 'Actividad', icon: 'sparkle' };
   }

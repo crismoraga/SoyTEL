@@ -12,11 +12,12 @@ import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { randomTip } from '@/data/tips';
-import { expressionForMood, signalForMood } from '@/graphics/rutix';
+import { expressionForMood, isAccessoryUnlocked, rutixWardrobe, signalForMood } from '@/graphics/rutix';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadProfile, saveProfile, syncAchievements } from '@/storage/profile';
+import { updateSettings, useSettings } from '@/storage/settings';
 import { loadMascotDays, loadMascotLog, logMascotDay, saveMascotLog } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 
@@ -40,6 +41,7 @@ function moodLabel(value: number): string {
 // Tamagotchi de Rutix: su señal (ánimo) sube con partidas y cuidados, y baja si lo olvidas.
 export default function MascotScreen() {
   const entering = useEntering();
+  const settings = useSettings();
   const [message, setMessage] = useState('¡Hola! Soy Rutix. Mantengo la señal del campus y aprendo contigo.');
   const [reaction, setReaction] = useState<{ expression: RutixExpression; pose: RutixPose } | null>(null);
   const [reactKey, setReactKey] = useState(0);
@@ -86,7 +88,7 @@ export default function MascotScreen() {
       react('celebrate', 'celebrate');
     } else {
       setMessage(`¿Sabías que…? ${randomTip().text}`);
-      react('think', 'think', 3200);
+      react('wink', 'point', 3200);
     }
     await feedbackSuccess();
 
@@ -183,12 +185,96 @@ export default function MascotScreen() {
       <TelText variant="caption" color="accentSoft" align="center">
         {left > 0 ? `Te quedan ${left} ${left === 1 ? 'cuidado' : 'cuidados'} hoy. Jugar también sube su señal.` : 'Ya lo cuidaste hoy. ¡Juega una partida para alegrarlo más!'}
       </TelText>
+      <View style={styles.wardrobe}>
+        <TelText variant="heading" color="cream">
+          Guardarropa
+        </TelText>
+        <TelText variant="caption" color="accentSoft">
+          Rutix lleva lo que elijas en toda la app. Desbloquea más accesorios jugando.
+        </TelText>
+        <View style={styles.wardrobeRow}>
+          {rutixWardrobe.map((item) => {
+            const unlocked = profile ? isAccessoryUnlocked(item, { level: profile.level, achievements: profile.unlockedAchievements }) : item.id === 'none';
+            const selected = settings.rutixAccessory === item.id;
+            return (
+              <PressableScale
+                key={item.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected, disabled: !unlocked }}
+                accessibilityLabel={unlocked ? item.label : `${item.label}, bloqueado. ${item.hint}`}
+                haptic
+                onPress={() => {
+                  if (!unlocked) {
+                    setMessage(`Para el accesorio «${item.label}»: ${item.hint}`);
+                    react('think', 'think');
+                    return;
+                  }
+                  void updateSettings({ rutixAccessory: item.id });
+                  setMessage(item.id === 'none' ? 'Al natural también me veo bien, ¿no?' : `¿Qué tal me queda? ¡Me encanta el estilo ${item.label}!`);
+                  react('proud', 'thumbsUp');
+                }}
+                style={[styles.outfit, selected && styles.outfitOn, !unlocked && styles.outfitLocked]}
+              >
+                <Rutix size={58} accessory={item.id} expression="happy" animated={false} accessibilityLabel="" />
+                {!unlocked && (
+                  <View style={styles.outfitLock}>
+                    <TelIcon name="lock" size={12} color={colors.white} strokeWidth={2.6} />
+                  </View>
+                )}
+                <TelText variant="small" color={selected ? 'primary' : 'cream'} align="center" numberOfLines={1} style={styles.outfitLabel}>
+                  {item.label}
+                </TelText>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </View>
       <TelButton label="Ir a jugar" variant="cream" iconRight="arrowRight" onPress={() => router.navigate('/games')} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  wardrobe: {
+    gap: spacing.xs,
+  },
+  wardrobeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: spacing.xxs,
+  },
+  outfit: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: 'rgba(167, 212, 237, 0.2)',
+  },
+  outfitOn: {
+    backgroundColor: colors.cream,
+    borderColor: colors.accent,
+  },
+  outfitLocked: {
+    opacity: 0.6,
+  },
+  outfitLock: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.slate,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outfitLabel: {
+    fontSize: 10,
+    paddingHorizontal: 2,
+  },
   stage: {
     alignItems: 'center',
     gap: spacing.sm,

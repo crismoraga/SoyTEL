@@ -20,6 +20,7 @@ import { TelText } from '@/components/TelText';
 import { UserAvatar } from '@/components/UserAvatar';
 import { useAccount } from '@/account/store';
 import { tipForDate } from '@/data/tips';
+import { DAILY_BONUS, dailyKey, isDailyDone } from '@/features/burst/daily';
 import { TelematicaSheet } from '@/features/brand/TelematicaSheet';
 import { RouteProgress } from '@/features/route/parts';
 import { TipSheet } from '@/features/tips/TipSheet';
@@ -49,7 +50,7 @@ const explore: ExploreItem[] = [
   { label: 'Rutix', glyph: 'robot', route: '/mascot' },
   { label: 'Ranking', glyph: 'trophy', route: '/ranking' },
   { label: 'Malla', glyph: 'cap', route: '/malla' },
-  { label: 'Perfil', glyph: 'rocket', route: '/profile' },
+  { label: 'Conecta', glyph: 'network', route: { pathname: '/puzzle', params: { juego: 'red' } } },
 ];
 
 function moodLabel(value: number): string {
@@ -80,6 +81,7 @@ export default function HomeScreen() {
   const routeActive = route.status !== 'idle' && Boolean(route.code);
   const mission = data ? nextMission(data.results, data.story.completedChapters) : null;
   const tip = tipForDate(new Date());
+  const dailyDone = data ? isDailyDone(data.results, dailyKey(new Date())) : false;
 
   return (
     <Screen
@@ -221,6 +223,30 @@ export default function HomeScreen() {
         </TelCard>
       </Animated.View>
 
+      <Animated.View entering={entering.fadeUp(1)}>
+        <TelCard
+          onPress={() => router.push({ pathname: '/burst', params: { diario: '1' } })}
+          accessibilityLabel={dailyDone ? 'Desafío de hoy completado' : 'Desafío de hoy'}
+          style={styles.rankCard}
+        >
+          <View style={[styles.rankIcon, styles.dailyIcon]}>
+            <TelIcon name={dailyDone ? 'checkCircle' : 'calendar'} size={24} color={colors.primary} />
+          </View>
+          <View style={styles.flex}>
+            <TelText variant="small" color="inkAccent" style={styles.kicker}>
+              DESAFÍO DE HOY
+            </TelText>
+            <TelText variant="subtitle" color="ink">
+              {dailyDone ? '¡Completado! Vuelve mañana' : 'Cinco microjuegos, los mismos para todos'}
+            </TelText>
+            <TelText variant="caption" color="inkSoft">
+              {dailyDone ? 'Puedes repetirlo para practicar.' : `Termínalo hoy y suma +${DAILY_BONUS} puntos de bono.`}
+            </TelText>
+          </View>
+          <TelIcon name="chevronRight" size={20} color={colors.ink} />
+        </TelCard>
+      </Animated.View>
+
       <View style={styles.section}>
         <SectionHeader title="Explora" />
         <View style={styles.grid}>
@@ -355,6 +381,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  dailyIcon: {
+    backgroundColor: colors.accent,
   },
   rankIcon: {
     width: 48,

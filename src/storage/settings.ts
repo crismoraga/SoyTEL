@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { rutixAccessories, type RutixAccessory } from '@/graphics/rutix';
 
 const SETTINGS_KEY = '@soytel/settings';
 
@@ -19,6 +20,8 @@ export interface AppSettings {
   theme: ThemePreference;
   // Rutix comenta y da pistas durante los juegos.
   coach: boolean;
+  // Accesorio que lleva Rutix (guardarropa).
+  rutixAccessory: RutixAccessory;
 }
 
 export const defaultSettings: AppSettings = {
@@ -27,6 +30,7 @@ export const defaultSettings: AppSettings = {
   pace: 'calm',
   theme: 'system',
   coach: true,
+  rutixAccessory: 'none',
 };
 
 let cachedSettings: AppSettings = defaultSettings;
@@ -63,6 +67,7 @@ export function parseSettings(raw: string | null): AppSettings {
       pace: PACE_VALUES.includes(parsed.pace as GamePace) ? (parsed.pace as GamePace) : defaultSettings.pace,
       theme: THEME_VALUES.includes(parsed.theme as ThemePreference) ? (parsed.theme as ThemePreference) : defaultSettings.theme,
       coach: parsed.coach !== false,
+      rutixAccessory: rutixAccessories.includes(parsed.rutixAccessory as RutixAccessory) ? (parsed.rutixAccessory as RutixAccessory) : 'none',
     };
   } catch {
     return defaultSettings;

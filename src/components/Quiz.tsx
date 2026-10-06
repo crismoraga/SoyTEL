@@ -2,8 +2,10 @@ import type { PropsWithChildren } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useEntering } from '@/lib/motion';
+import { useSettings } from '@/storage/settings';
 import { colors, radius, spacing, type ColorToken } from '@/theme';
 import { PressableScale } from './PressableScale';
+import { Rutix } from './graphics/Rutix';
 import { TelIcon } from './TelIcon';
 import { TelText } from './TelText';
 
@@ -87,6 +89,7 @@ interface FeedbackPanelProps {
 // Tarjeta de retroalimentación verde/roja con explicación breve.
 export function FeedbackPanel({ kind, title, body, children }: PropsWithChildren<FeedbackPanelProps>) {
   const entering = useEntering();
+  const { coach } = useSettings();
   const palette = kind === 'success'
     ? { bg: colors.successSoft, border: colors.success, icon: colors.success, title: 'successInk' as ColorToken, body: colors.successInk }
     : kind === 'error'
@@ -99,9 +102,13 @@ export function FeedbackPanel({ kind, title, body, children }: PropsWithChildren
       style={[styles.panel, { backgroundColor: palette.bg, borderColor: palette.border }]}
     >
       <View style={styles.panelHead}>
-        <View style={[styles.panelIcon, { backgroundColor: palette.icon }]}>
-          <TelIcon name={kind === 'success' ? 'check' : kind === 'error' ? 'close' : 'info'} size={18} color={colors.white} strokeWidth={3} />
-        </View>
+        {coach && kind !== 'info' ? (
+          <Rutix size={46} expression={kind === 'success' ? 'happy' : 'worried'} pose={kind === 'success' ? 'thumbsUp' : 'shrug'} animated={false} accessibilityLabel="" />
+        ) : (
+          <View style={[styles.panelIcon, { backgroundColor: palette.icon }]}>
+            <TelIcon name={kind === 'success' ? 'check' : kind === 'error' ? 'close' : 'info'} size={18} color={colors.white} strokeWidth={3} />
+          </View>
+        )}
         <TelText variant="subtitle" color={palette.title} style={styles.flex}>
           {title}
         </TelText>

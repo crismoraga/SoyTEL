@@ -11,7 +11,8 @@ export type GameId =
   | 'story'
   | 'mascot'
   | 'route'
-  | 'station';
+  | 'station'
+  | 'puzzle';
 
 export type MicroGameId =
   | 'connect-network'
@@ -25,7 +26,13 @@ export type MicroGameId =
   | 'cable-connect'
   | 'packet-catch'
   | 'wifi-boost'
-  | 'password-strong';
+  | 'password-strong'
+  | 'binary-bits'
+  | 'layer-order'
+  | 'ip-valid'
+  | 'fast-route'
+  | 'safe-url'
+  | 'unit-order';
 
 export type AchievementId =
   | 'first-signal'
@@ -45,7 +52,12 @@ export type AchievementId =
   | 'quiz-master'
   | 'streak-three'
   | 'security-guard'
-  | 'level-ten';
+  | 'level-ten'
+  | 'net-architect'
+  | 'binary-brain'
+  | 'code-breaker'
+  | 'daily-three'
+  | 'burst-master';
 
 export interface Achievement {
   id: AchievementId;

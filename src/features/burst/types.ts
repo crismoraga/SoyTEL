@@ -8,7 +8,8 @@ export interface MicroGameProps {
   level: number;
   // Ritmo de juego: multiplica los tiempos internos (1 = original; mayor = más lento).
   pace: number;
-  onAnswer: (correct: boolean, bonus?: number) => void;
+  // `note` es una explicación breve que Rutix muestra al cerrar la ronda.
+  onAnswer: (correct: boolean, bonus?: number, note?: string) => void;
 }
 
 export interface MicroGameDefinition extends MicroGameInfo {

@@ -15,11 +15,15 @@ import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { getAchievement } from '@/data/achievements';
+import { coachLine } from '@/data/coachLines';
+import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
+import { DAILY_BONUS, DAILY_ROUNDS, dailyKey, dailySeed, isDailyDone } from '@/features/burst/daily';
 import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
 import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
+import { mulberry32 } from '@/route/random';
 import { useEntering, useMotionEnabled } from '@/lib/motion';
 import { PACE_ACCELERATION, paceFactor } from '@/lib/pace';
 import { loadResults, recordGameResult } from '@/storage/profile';
@@ -48,15 +52,17 @@ interface BurstState {
   score: number;
   results: RoundResult[];
   lastPoints: number;
+  // Explicación breve de la última ronda (la dice Rutix).
+  lastNote: string | null;
 }
 
 type Action =
   | { type: 'start'; games: MicroGameDefinition[] }
   | { type: 'play' }
-  | { type: 'answer'; correct: boolean; bonus: number; secondsLeft: number }
+  | { type: 'answer'; correct: boolean; bonus: number; secondsLeft: number; note?: string }
   | { type: 'advance' };
 
-const initialState: BurstState = { phase: 'intro', games: [], round: 0, lives: LIVES, score: 0, results: [], lastPoints: 0 };
+const initialState: BurstState = { phase: 'intro', games: [], round: 0, lives: LIVES, score: 0, results: [], lastPoints: 0, lastNote: null };
 
 function reducer(state: BurstState, action: Action): BurstState {
   switch (action.type) {
@@ -75,6 +81,7 @@ function reducer(state: BurstState, action: Action): BurstState {
         lives: action.correct ? state.lives : state.lives - 1,
         results: [...state.results, { id: game.id, correct: action.correct }],
         lastPoints: points,
+        lastNote: action.note ?? null,
       };
     }
     case 'advance': {
@@ -89,8 +96,12 @@ function reducer(state: BurstState, action: Action): BurstState {
 
 // Ráfaga TEL: microjuegos encadenados estilo WarioWare, con vidas y velocidad creciente.
 export default function BurstScreen() {
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const { focus, diario } = useLocalSearchParams<{ focus?: string; diario?: string }>();
   const focusGame = focus ? getMicroGame(focus) : undefined;
+  // Desafío diario: los mismos microjuegos para todos durante el día, con bono la primera vez.
+  const daily = !focusGame && diario === '1';
+  const coach = useCoachEnabled();
+  const [dailyDone, setDailyDone] = useState(false);
   const entering = useEntering();
   const motionEnabled = useMotionEnabled();
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -109,7 +120,10 @@ export default function BurstScreen() {
   const duration = current ? roundDuration(current.durationSeconds, state.round, Boolean(focusGame), factor, acceleration) : 0;
 
   useEffect(() => {
-    void loadResults().then((results) => setBest(results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0)));
+    void loadResults().then((results) => {
+      setBest(results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0));
+      setDailyDone(isDailyDone(results, dailyKey(new Date())));
+    });
   }, []);
 
   const start = useCallback(() => {
@@ -117,10 +131,14 @@ export default function BurstScreen() {
     setOutcome(null);
     startedAt.current = now();
     setRunId((value) => value + 1);
-    const games = focusGame ? Array.from({ length: FOCUS_ROUNDS }, () => focusGame) : pickBurstGames(ROUNDS);
+    const games = focusGame
+      ? Array.from({ length: FOCUS_ROUNDS }, () => focusGame)
+      : daily
+        ? pickBurstGames(DAILY_ROUNDS, mulberry32(dailySeed(new Date())))
+        : pickBurstGames(ROUNDS);
     dispatch({ type: 'start', games });
     void feedbackHeavy();
-  }, [focusGame]);
+  }, [daily, focusGame]);
 
   // Cada ronda parte cuando el jugador toca la pantalla: así alcanza a leer la instrucción.
   const readyAt = useRef(0);
@@ -157,32 +175,38 @@ export default function BurstScreen() {
     };
   }, [duration, state.phase, state.round, timer]);
 
+  // Solo el ritmo rápido avanza solo; en los demás el jugador toca "Continuar" cuando terminó de leer.
   useEffect(() => {
-    if (state.phase !== 'feedback') return;
+    if (state.phase !== 'feedback' || pace !== 'fast') return;
     const timeout = setTimeout(() => dispatch({ type: 'advance' }), FEEDBACK_MS);
     return () => clearTimeout(timeout);
-  }, [state.phase, state.round]);
+  }, [pace, state.phase, state.round]);
 
   useEffect(() => {
     if (state.phase !== 'finished' || recorded.current) return;
     recorded.current = true;
     const won = [...new Set(state.results.filter((item) => item.correct).map((item) => item.id))];
     const correct = state.results.filter((item) => item.correct).length;
+    const dailyBonus = daily && !dailyDone ? DAILY_BONUS : 0;
     void recordGameResult({
       gameId: 'burst',
-      score: state.score,
+      score: state.score + dailyBonus,
       accuracy: state.games.length ? correct / state.games.length : 0,
       durationSeconds: Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
       completedAt: new Date().toISOString(),
-      metadata: { rounds: state.results.length, won: won.join(','), lives: state.lives, focus: focus ?? '' },
+      metadata: { rounds: state.results.length, won: won.join(','), lives: state.lives, focus: focus ?? '', daily: daily ? dailyKey(new Date()) : '' },
     }).then(setOutcome);
-  }, [focus, state.games.length, state.lives, state.phase, state.results, state.score]);
+  }, [daily, dailyDone, focus, state.games.length, state.lives, state.phase, state.results, state.score]);
 
-  const onAnswer = useCallback((correct: boolean, bonus = 0) => {
-    if (correct) void feedbackSuccess();
-    else void feedbackWarning();
-    dispatch({ type: 'answer', correct, bonus, secondsLeft: secondsRef.current });
-  }, []);
+  const onAnswer = useCallback(
+    (correct: boolean, bonus = 0, note?: string) => {
+      if (correct) void feedbackSuccess();
+      else void feedbackWarning();
+      // El tiempo sobrante se normaliza por el ritmo: jugar tranquilo no da más puntos.
+      dispatch({ type: 'answer', correct, bonus, secondsLeft: Math.round(secondsRef.current / factor), note });
+    },
+    [factor],
+  );
 
   const timerStyle = useAnimatedStyle(() => ({ width: `${timer.value * 100}%` }));
 
@@ -194,17 +218,23 @@ export default function BurstScreen() {
         </Animated.View>
         <View style={styles.introText}>
           <TelText variant="overline" color="accent" align="center">
-            {focusGame ? 'Práctica de microjuego' : 'Modo WarioWare'}
+            {focusGame ? 'Práctica de microjuego' : daily ? 'Desafío de hoy' : 'Modo WarioWare'}
           </TelText>
           <TelText variant="hero" color="cream" align="center">
-            {focusGame ? focusGame.title : 'Ráfaga TEL'}
+            {focusGame ? focusGame.title : daily ? 'Desafío diario' : 'Ráfaga TEL'}
           </TelText>
           <TelText variant="body" color="onDark" align="center">
-            {focusGame ? focusGame.instruction : 'Microjuegos de segundos, uno tras otro. Lee la instrucción, reacciona y no pierdas tus 3 vidas.'}
+            {focusGame
+              ? focusGame.instruction
+              : daily
+                ? dailyDone
+                  ? 'Ya completaste el desafío de hoy. Puedes repetirlo para practicar; el bono vuelve mañana.'
+                  : `Los mismos ${DAILY_ROUNDS} microjuegos para todos, solo por hoy. Termínalo y suma +${DAILY_BONUS} puntos de bono.`
+                : 'Microjuegos cortos, uno tras otro. Lee la instrucción con calma, juega y cuida tus 3 vidas.'}
           </TelText>
         </View>
         <View style={styles.pills}>
-          <Pill icon="bolt" label={focusGame ? `${FOCUS_ROUNDS} rondas` : `${ROUNDS} microjuegos`} />
+          <Pill icon="bolt" label={focusGame ? `${FOCUS_ROUNDS} rondas` : `${daily ? DAILY_ROUNDS : ROUNDS} microjuegos`} />
           <Pill icon="heart" label={`${LIVES} vidas`} />
           <Pill icon="timer" label={focusGame || acceleration === 0 ? 'A tu ritmo' : 'Cada vez más rápido'} />
         </View>
@@ -243,6 +273,7 @@ export default function BurstScreen() {
             puntos · {correct} de {state.games.length} microjuegos
           </TelText>
           <View style={styles.rewardRow}>
+            {daily && !dailyDone && <Tag tone="cream" icon="calendar" label={`Bono diario +${DAILY_BONUS}`} />}
             {newRecord && <Tag tone="cream" icon="crown" label="¡Nuevo récord!" />}
             {outcome && <Tag tone="glass" icon="sparkle" label={`+${outcome.xpGained} XP`} />}
             {outcome?.leveledUp && <Tag tone="cream" icon="rocket" label={`Nivel ${outcome.profile.level}`} />}
@@ -312,6 +343,11 @@ export default function BurstScreen() {
           </TelText>
           {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
         </Animated.View>
+        {coach && (
+          <CoachBubble mood="tip" title="Pista de Rutix" size={64} style={styles.readyCoach}>
+            {current.tip}
+          </CoachBubble>
+        )}
         </PressableScale>
         <PressableScale accessibilityRole="button" accessibilityLabel="Jugar" haptic onPress={play} style={styles.readyCta}>
           <TelIcon name="tap" size={20} color={colors.primary} />
@@ -352,16 +388,40 @@ export default function BurstScreen() {
         <Game key={`${state.round}-${current.id}`} durationSeconds={duration} level={focusGame ? 0 : state.round} pace={factor} active={state.phase === 'playing'} onAnswer={onAnswer} />
         {state.phase === 'feedback' && (
           <View style={styles.overlay} pointerEvents="box-none">
-            <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} style={styles.overlayInner}>
-              <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined} style={[styles.verdict, { backgroundColor: state.lastPoints > 0 ? '#6BC59A' : colors.danger }]}>
-                <TelIcon name={state.lastPoints > 0 ? 'check' : 'close'} size={64} color={colors.white} strokeWidth={3.4} />
-              </Animated.View>
+            <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} scaleTo={0.99} style={styles.overlayInner}>
+              {coach ? (
+                <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined}>
+                  <Rutix
+                    size={150}
+                    expression={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'happy') : 'worried'}
+                    pose={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'thumbsUp') : 'shrug'}
+                    signal={state.lastPoints > 0 ? 4 : 1}
+                  />
+                </Animated.View>
+              ) : (
+                <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined} style={[styles.verdict, { backgroundColor: state.lastPoints > 0 ? '#6BC59A' : colors.danger }]}>
+                  <TelIcon name={state.lastPoints > 0 ? 'check' : 'close'} size={64} color={colors.white} strokeWidth={3.4} />
+                </Animated.View>
+              )}
               <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="assertive">
                 {state.lastPoints > 0 ? '¡Conexión establecida!' : secondsLeft === 0 ? '¡Se acabó el tiempo!' : '¡Paquete perdido!'}
               </TelText>
               <TelText variant="subtitle" color={state.lastPoints > 0 ? 'accent' : 'dangerSoft'} align="center">
                 {state.lastPoints > 0 ? `+${state.lastPoints} pts` : '−1 vida'}
               </TelText>
+              <View style={styles.overlayNote}>
+                <TelText variant="body" color="cream" align="center">
+                  {state.lastNote ?? (coach ? coachLine(state.lastPoints > 0 ? 'good' : 'bad', state.round + state.score) : '')}
+                </TelText>
+              </View>
+              {pace !== 'fast' && (
+                <View style={styles.overlayCta}>
+                  <TelText variant="button" color="primary">
+                    Continuar
+                  </TelText>
+                  <TelIcon name="arrowRight" size={20} color={colors.primary} />
+                </View>
+              )}
             </PressableScale>
           </View>
         )}
@@ -446,6 +506,24 @@ const styles = StyleSheet.create({
   readyTap: {
     flex: 1,
     justifyContent: 'center',
+    gap: spacing.lg,
+  },
+  readyCoach: {
+    alignSelf: 'stretch',
+  },
+  overlayNote: {
+    minHeight: 48,
+    maxWidth: 320,
+    justifyContent: 'center',
+  },
+  overlayCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    minHeight: 52,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.md,
+    backgroundColor: colors.cream,
   },
   readyCta: {
     flexDirection: 'row',

@@ -8,6 +8,9 @@ import { getRouteQuestion } from '@/route/quizBank';
 
 // Anfitrión y participantes reales (cifrado incluido) conectados por el bus local.
 describe('route sync over the local bus', () => {
+  // El cifrado en JavaScript puro es lento cuando Jest corre varias suites en paralelo.
+  jest.setTimeout(60_000);
+
   beforeEach(() => {
     jest.useFakeTimers();
   });

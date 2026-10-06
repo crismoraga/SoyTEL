@@ -123,3 +123,154 @@ export function pingLines(scenario: PingScenario, host = 'usm.cl'): string[] {
   }
   return [header, 'Desde 192.168.1.1: Host de destino inaccesible', 'Desde 192.168.1.1: Host de destino inaccesible'];
 }
+
+// ---- Bits en orden (binario) ----
+export function binaryRound(random: Random = Math.random, bits = 4): { target: number; bits: number } {
+  const max = 2 ** bits - 1;
+  return { target: 1 + Math.floor(random() * max), bits };
+}
+
+// Valor decimal de los bits (el primero es el más significativo).
+export function bitsValue(flags: boolean[]): number {
+  return flags.reduce((total, on, index) => total + (on ? 2 ** (flags.length - 1 - index) : 0), 0);
+}
+
+// ---- Ordenar tocando (capas TCP/IP, unidades de datos) ----
+export interface OrderItem {
+  id: string;
+  label: string;
+  detail: string;
+}
+
+// De abajo (el medio físico) hacia arriba (lo que ve la persona).
+export const tcpIpStack: OrderItem[] = [
+  { id: 'link', label: 'Enlace', detail: 'Wi-Fi o cable' },
+  { id: 'internet', label: 'Internet', detail: 'Direcciones IP' },
+  { id: 'transport', label: 'Transporte', detail: 'TCP o UDP' },
+  { id: 'app', label: 'Aplicación', detail: 'La app que usas' },
+];
+
+export const dataUnits: OrderItem[] = [
+  { id: 'bit', label: 'bit', detail: 'un 0 o un 1' },
+  { id: 'byte', label: 'byte', detail: '8 bits' },
+  { id: 'kb', label: 'kilobyte', detail: 'kB · mil bytes' },
+  { id: 'mb', label: 'megabyte', detail: 'MB · una foto' },
+  { id: 'gb', label: 'gigabyte', detail: 'GB · una película' },
+];
+
+// Elige `count` elementos (respetando su orden) y los entrega desordenados.
+export function orderRound(items: OrderItem[], count: number, random: Random = Math.random): { correct: OrderItem[]; shuffled: OrderItem[] } {
+  const keep = new Set(shuffle(items.map((item) => item.id), random).slice(0, Math.min(count, items.length)));
+  const correct = items.filter((item) => keep.has(item.id));
+  let shuffled = shuffle(correct, random);
+  // Nunca se entrega ya resuelto.
+  if (shuffled.every((item, index) => item.id === correct[index].id)) shuffled = [...shuffled.slice(1), shuffled[0]];
+  return { correct, shuffled };
+}
+
+// ---- ¿IP válida? ----
+export function isValidIpv4(text: string): boolean {
+  const parts = text.split('.');
+  return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+}
+
+export interface IpOption {
+  id: string;
+  text: string;
+  valid: boolean;
+}
+
+export function ipRound(random: Random = Math.random): IpOption[] {
+  const octet = (max = 255) => Math.floor(random() * (max + 1));
+  const base = pick(
+    [
+      () => `192.168.${octet(20)}.${1 + octet(253)}`,
+      () => `10.${octet(50)}.${octet()}.${1 + octet(253)}`,
+      () => `172.16.${octet(31)}.${1 + octet(253)}`,
+      () => `200.${1 + octet(30)}.${octet()}.${1 + octet(253)}`,
+    ],
+    random,
+  );
+  const fakes = shuffle(
+    [
+      () => `192.168.${256 + octet(40)}.${octet(99)}`,
+      () => `10.0.${octet(99)}`,
+      () => `172.16.${octet(31)}.${octet(99)}.${octet(99)}`,
+      () => `192.168,1,${octet(99)}`,
+      () => `300.${octet(99)}.${octet(99)}.1`,
+      () => `10.a.${octet(99)}.7`,
+    ],
+    random,
+  ).slice(0, 3);
+  const options = [{ text: base(), valid: true }, ...fakes.map((make) => ({ text: make(), valid: false }))];
+  return shuffle(options, random).map((option, index) => ({ ...option, id: `ip${index}` }));
+}
+
+// ---- Ruta más rápida ----
+export interface RouteOption {
+  id: string;
+  hops: number[];
+  total: number;
+}
+
+export function fastRouteRound(random: Random = Math.random, level = 0): RouteOption[] {
+  const hopsCount = level >= 3 ? 4 : 3;
+  for (;;) {
+    const routes = ['A', 'B', 'C'].map((id) => {
+      const hops = Array.from({ length: hopsCount }, () => 4 + Math.floor(random() * 42));
+      return { id, hops, total: hops.reduce((sum, value) => sum + value, 0) };
+    });
+    const totals = routes.map((route) => route.total).sort((a, b) => a - b);
+    // Una sola ruta ganadora, con diferencia visible.
+    if (totals[1] - totals[0] >= 4) return routes;
+  }
+}
+
+// ---- Sitio verdadero ----
+export interface UrlOption {
+  id: string;
+  url: string;
+  legit: boolean;
+  why: string;
+}
+
+const urlSets: { legit: string; fakes: { url: string; why: string }[] }[] = [
+  {
+    legit: 'https://www.usm.cl',
+    fakes: [
+      { url: 'http://usm-cl.premios.xyz', why: 'El dominio real es premios.xyz.' },
+      { url: 'https://www.usrn.cl', why: '«rn» imita a la «m».' },
+      { url: 'https://usm.cl.acceso-seguro.ru', why: 'El dominio real es lo último: acceso-seguro.ru.' },
+    ],
+  },
+  {
+    legit: 'https://www.instagram.com',
+    fakes: [
+      { url: 'https://www.lnstagram.com', why: 'Empieza con «L» minúscula, no con «i».' },
+      { url: 'https://instagram.com.premio.live', why: 'El dominio real es premio.live.' },
+      { url: 'http://insta-gram.login.xyz', why: 'Sin candado y con dominio login.xyz.' },
+    ],
+  },
+  {
+    legit: 'https://mail.google.com',
+    fakes: [
+      { url: 'https://mail.google.com.verificar.io', why: 'El dominio real es verificar.io.' },
+      { url: 'https://mail.g00gle.com', why: 'Usa ceros en vez de la letra «o».' },
+      { url: 'http://google-mail.entrar.top', why: 'Sin candado y con dominio entrar.top.' },
+    ],
+  },
+  {
+    legit: 'https://www.bancoestado.cl',
+    fakes: [
+      { url: 'https://bancoestado.cl-clave.com', why: 'El dominio real es cl-clave.com.' },
+      { url: 'http://www.banc0estado.cl', why: 'Tiene un cero en vez de «o» y no usa https.' },
+      { url: 'https://bancoestado.seguridad-cl.net', why: 'El dominio real es seguridad-cl.net.' },
+    ],
+  },
+];
+
+export function urlRound(random: Random = Math.random): UrlOption[] {
+  const set = pick(urlSets, random);
+  const options = [{ url: set.legit, legit: true, why: 'Dominio oficial y con https.' }, ...set.fakes.map((fake) => ({ ...fake, legit: false }))];
+  return shuffle(options, random).map((option, index) => ({ ...option, id: `url${index}` }));
+}
