@@ -20,13 +20,16 @@ import { Leaderboard, Podium } from '@/features/route/Podium';
 import { QrCode } from '@/features/route/QrCode';
 import { QuizQuestion, QuizReveal } from '@/features/route/QuizViews';
 import { formatNumber } from '@/lib/format';
+import { paceFactor, paceLabels } from '@/lib/pace';
 import { webAppUrl } from '@/realtime/config';
 import { pillarIds, stopInfo } from '@/route/content';
+import { settingsForPace } from '@/route/engine';
 import type { HostController, HostView } from '@/route/host';
 import { hostManager } from '@/route/hostManager';
 import { useHostView, useRouteForeground } from '@/route/hooks';
 import type { HostSummary } from '@/route/storage';
 import type { PublicPlayer, RouteSnapshot } from '@/route/types';
+import type { GamePace } from '@/storage/settings';
 import { colors, font, radius, spacing } from '@/theme';
 
 function useClock(intervalMs = 500): number {
@@ -95,6 +98,12 @@ const QUESTION_OPTIONS = [
   { id: '12', label: '12 preguntas' },
 ];
 
+const PACE_OPTIONS: { id: GamePace; label: string }[] = [
+  { id: 'calm', label: `Ritmo ${paceLabels.calm.label.toLowerCase()}` },
+  { id: 'normal', label: paceLabels.normal.label },
+  { id: 'fast', label: paceLabels.fast.label },
+];
+
 const PROJECT_OPTIONS = [
   { id: '10', label: '10 min en B213' },
   { id: '15', label: '15 min' },
@@ -105,6 +114,7 @@ function StandHome() {
   const [codes, setCodes] = useState<HostSummary[]>([]);
   const [questions, setQuestions] = useState('10');
   const [minutes, setMinutes] = useState('15');
+  const [pace, setPace] = useState<GamePace>('calm');
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -119,7 +129,7 @@ function StandHome() {
 
   async function create() {
     setCreating(true);
-    const controller = await hostManager.create({ quizQuestions: Number(questions), projectsSeconds: Number(minutes) * 60 });
+    const controller = await hostManager.create({ ...settingsForPace(paceFactor(pace)), quizQuestions: Number(questions), projectsSeconds: Number(minutes) * 60 });
     setCreating(false);
     router.replace({ pathname: '/ruta/stand', params: { codigo: controller.code } });
   }
@@ -130,31 +140,35 @@ function StandHome() {
     >
       <TelCard style={styles.gap}>
         <Tag tone="sky" icon="flag" label="NUEVA RUTA" />
-        <TelText variant="body" color="primary">
+        <TelText variant="body" color="ink">
           Crea la ruta y muestra el código o el QR en la pantalla del stand. Los participantes se unen desde su teléfono y la ruta avanza sola: B215 → B213 → pasillo.
         </TelText>
         <ChipGroup options={QUESTION_OPTIONS} value={questions} onChange={setQuestions} accessibilityLabel="Preguntas de la trivia" />
         <ChipGroup options={PROJECT_OPTIONS} value={minutes} onChange={setMinutes} accessibilityLabel="Tiempo en la sala B213" />
+        <ChipGroup options={PACE_OPTIONS} value={pace} onChange={setPace} accessibilityLabel="Ritmo de los juegos" />
+        <TelText variant="caption" color="inkSoft">
+          {paceLabels[pace].description} El ritmo es el mismo para todo el grupo.
+        </TelText>
         <TelButton label="Crear ruta" icon="plus" loading={creating} onPress={() => void create()} />
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           Deja este dispositivo encendido y conectado mientras dure la ruta: es el que lleva el puntaje.
         </TelText>
       </TelCard>
       {codes.length > 0 && (
         <View style={styles.gap}>
-          <TelText variant="heading" color="primary">
+          <TelText variant="heading" color="ink">
             Rutas en este dispositivo
           </TelText>
           {codes.map((item) => (
             <TelCard key={item.code} onPress={() => router.replace({ pathname: '/ruta/stand', params: { codigo: item.code } })} accessibilityLabel={`Abrir ruta ${item.code}`} style={styles.savedRow}>
-              <TelText variant="heading" color="primary" style={styles.codeSmall}>
+              <TelText variant="heading" color="ink" style={styles.codeSmall}>
                 {item.code}
               </TelText>
               <View style={styles.flex}>
-                <TelText variant="label" color="secondary">
+                <TelText variant="label" color="inkAccent">
                   {item.players} participantes
                 </TelText>
-                <TelText variant="caption" color="muted">
+                <TelText variant="caption" color="inkSoft">
                   {phaseLabel(item.phase, item.stop)}
                 </TelText>
               </View>

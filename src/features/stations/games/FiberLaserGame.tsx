@@ -11,7 +11,7 @@ import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   acceptanceAngle,
   ANGLE_MAX,
@@ -51,6 +51,7 @@ const LASER_RED = '#FF5A5A';
 
 // B213 · Telecomunicaciones: fibra óptica, reflexión total interna y modulación on-off.
 export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
+  const pace = usePace();
   const [word] = useState(() => pickWord(mulberry32(seed ^ 0xf1be)));
   const [stageIndex, setStageIndex] = useState(0);
   const [banner, setBanner] = useState(true);
@@ -64,8 +65,8 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
-  }, [stageIndex]);
+    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+  }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
     setEndsAt(null);
@@ -101,7 +102,7 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
 
   return (
     <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stage.seconds} accent={ACCENT} />
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
       {endsAt && stage.key === 'angles' && (
         <AnglesStage
           endsAt={endsAt}
@@ -298,6 +299,9 @@ function PulsesStage({
   onFinish: () => void;
 }) {
   const [bits] = useState(() => toBits(word));
+  const pace = usePace();
+  // Cada pulso dura más con un ritmo tranquilo: hay más margen para tocar a tiempo.
+  const bitMs = BIT_MS * pace;
   const [startAt] = useState(() => Date.now() + LEAD_MS);
   const [sent, setSent] = useState<boolean[]>(() => bits.map(() => false));
   const [flash, setFlash] = useState(0);
@@ -305,7 +309,7 @@ function PulsesStage({
   const now = useNow(true, 90);
   const progress = useSharedValue(0);
   const elapsed = now - startAt;
-  const current = Math.floor(elapsed / BIT_MS);
+  const current = Math.floor(elapsed / bitMs);
   const evaluated = clamp(current, 0, bits.length);
   const correct = bits.slice(0, evaluated).filter((bit, index) => bit === (sent[index] ? 1 : 0)).length;
   const received = bits.slice(0, evaluated).map((_, index) => (sent[index] ? 1 : 0));
@@ -313,10 +317,10 @@ function PulsesStage({
   useEffect(() => {
     const delay = Math.max(0, startAt - Date.now());
     const timer = setTimeout(() => {
-      progress.set(withTiming(bits.length + 1, { duration: (bits.length + 1) * BIT_MS, easing: Easing.linear }));
+      progress.set(withTiming(bits.length + 1, { duration: (bits.length + 1) * bitMs, easing: Easing.linear }));
     }, delay);
     return () => clearTimeout(timer);
-  }, [bits.length, progress, startAt]);
+  }, [bitMs, bits.length, progress, startAt]);
 
   useEffect(() => {
     onProgress({ points: Math.round((correct / bits.length) * PULSES_MAX), correct, total: evaluated });
@@ -325,18 +329,18 @@ function PulsesStage({
   const askContinue = useAskContinue();
   useEffect(() => {
     if (done.current) return;
-    const finishAt = Math.min(endsAt, startAt + (bits.length + 1) * BIT_MS + 900);
+    const finishAt = Math.min(endsAt, startAt + (bits.length + 1) * bitMs + 900);
     const timer = setTimeout(() => {
       done.current = true;
       askContinue(onFinish, 'Ver resultado');
     }, Math.max(0, finishAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [askContinue, bits.length, endsAt, onFinish, startAt]);
+  }, [askContinue, bitMs, bits.length, endsAt, onFinish, startAt]);
 
   const trackStyle = useAnimatedStyle(() => ({ transform: [{ translateX: HIT_X - progress.value * CELL }] }));
 
   function tap() {
-    const index = Math.floor((clockNow() - startAt) / BIT_MS);
+    const index = Math.floor((clockNow() - startAt) / bitMs);
     setFlash((value) => value + 1);
     void feedbackTap();
     if (index < 0 || index >= bits.length || sent[index]) return;

@@ -15,13 +15,13 @@ const START = 180;
 const SPAN = 180;
 
 // Microjuego 6: la aguja del dial oscila; detenla dentro de la zona de buena señal.
-export function SignalTimingGame({ active, level, onAnswer }: MicroGameProps) {
+export function SignalTimingGame({ active, level, pace, onAnswer }: MicroGameProps) {
   const [zone] = useState(() => {
     const width = Math.max(0.12, 0.2 - level * 0.015);
     const center = 0.28 + Math.random() * 0.44;
     return { start: center - width / 2, end: center + width / 2, center, width };
   });
-  const period = Math.max(1100, 1800 - level * 120);
+  const period = Math.round(Math.max(1100, 1800 - level * 120) * pace);
   const sweep = useSharedValue(0);
   const startedAt = useRef(0);
   const answered = useRef(false);

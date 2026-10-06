@@ -45,20 +45,20 @@ function PodiumSpot({ entry, height }: { entry: LeaderboardEntry; height: number
 function Row({ entry }: { entry: LeaderboardEntry }) {
   return (
     <View style={[styles.row, entry.me && styles.rowMe]} accessible accessibilityLabel={`Lugar ${entry.rank}: ${entry.alias}, nivel ${entry.level}, ${entry.xp} XP`}>
-      <TelText variant="label" color="secondary" tabular style={styles.rank}>
+      <TelText variant="label" color="inkAccent" tabular style={styles.rank}>
         {entry.rank}
       </TelText>
       <UserAvatar avatar={entry.avatar} size={40} ring={entry.me} />
       <View style={styles.flex}>
-        <TelText variant="label" color="primary" numberOfLines={1}>
+        <TelText variant="label" color="ink" numberOfLines={1}>
           {entry.alias}
           {entry.me ? ' (tú)' : ''}
         </TelText>
-        <TelText variant="small" color="muted">
+        <TelText variant="small" color="inkSoft">
           Nivel {entry.level}
         </TelText>
       </View>
-      <TelText variant="label" color="primary" tabular>
+      <TelText variant="label" color="ink" tabular>
         {formatNumber(entry.xp)} XP
       </TelText>
     </View>
@@ -118,12 +118,12 @@ export default function RankingScreen() {
 
       {account.status === 'guest' && (
         <TelCard tone="accent" style={styles.cta}>
-          <TelIcon name="trophy" size={28} color={colors.secondary} />
+          <TelIcon name="trophy" size={28} color={colors.inkAccent} />
           <View style={styles.flex}>
-            <TelText variant="subtitle" color="primary">
+            <TelText variant="subtitle" color="ink">
               Aparece en el ranking
             </TelText>
-            <TelText variant="caption" color="secondary">
+            <TelText variant="caption" color="inkAccent">
               Crea tu cuenta (solo un alias) y tu XP se suma a la tabla.
             </TelText>
           </View>
@@ -164,7 +164,7 @@ export default function RankingScreen() {
 
       {me && !meVisible && account.status === 'registered' && (
         <View style={styles.gap}>
-          <TelText variant="caption" color="muted" align="center">
+          <TelText variant="caption" color="inkSoft" align="center">
             …
           </TelText>
           <TelCard padded={false} style={styles.list}>
@@ -173,7 +173,7 @@ export default function RankingScreen() {
         </View>
       )}
 
-      <TelText variant="small" color="muted" align="center">
+      <TelText variant="small" color="inkSoft" align="center">
         Solo se muestran alias, avatar, nivel y XP. El XP se suma con cada partida de cualquier modo.
       </TelText>
     </Screen>

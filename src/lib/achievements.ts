@@ -1,4 +1,5 @@
 import { achievements } from '@/data/achievements';
+import { dailyDays } from '@/features/burst/daily';
 import type { AchievementId, GameResult, MicroGameId, UserProfile } from '@/types/game';
 
 export interface AchievementContext {
@@ -36,6 +37,15 @@ export function playedStations(results: GameResult[]): string[] {
     }
   });
   return [...games];
+}
+
+// Niveles distintos resueltos de un desafío sin reloj.
+export function puzzleLevels(results: GameResult[], game: string): number {
+  return new Set(results.filter((result) => result.gameId === 'puzzle' && result.metadata?.game === game).map((result) => Number(result.metadata?.level ?? 0))).size;
+}
+
+function runnerRuns(results: GameResult[]): GameResult[] {
+  return results.filter((result) => result.gameId === 'runner');
 }
 
 // Valor actual de cada logro (se compara con su umbral). Función pura y testeable.
@@ -76,7 +86,21 @@ export function achievementProgress(id: AchievementId, context: AchievementConte
         .filter((result) => result.gameId === 'story')
         .reduce((max, result) => Math.max(max, Number(result.metadata?.chapter ?? 0)), 0);
     case 'burst-collector':
+    case 'burst-master':
       return new Set(wonMicroGames(results)).size;
+    case 'net-architect':
+      return puzzleLevels(results, 'red');
+    case 'binary-brain':
+      return puzzleLevels(results, 'binario');
+    case 'code-breaker':
+      return puzzleLevels(results, 'cifrado');
+    case 'daily-three':
+      return dailyDays(results);
+    case 'runner-rookie':
+    case 'runner-courier':
+      return runnerRuns(results).reduce((max, result) => Math.max(max, Number(result.metadata?.distance ?? 0)), 0);
+    case 'data-collector':
+      return runnerRuns(results).reduce((total, result) => total + Number(result.metadata?.data ?? 0), 0);
     case 'rutix-friend':
       return mascotDays;
     case 'quiz-master':

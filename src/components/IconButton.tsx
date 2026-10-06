@@ -19,7 +19,7 @@ interface IconButtonProps {
 
 const tones: Record<Tone, { bg: string; fg: string }> = {
   dark: { bg: colors.primarySoft, fg: colors.cream },
-  light: { bg: colors.surfaceAlt, fg: colors.primary },
+  light: { bg: colors.surfaceAlt, fg: colors.ink },
   glass: { bg: 'rgba(11, 45, 69, 0.72)', fg: colors.cream },
   cream: { bg: colors.cream, fg: colors.primary },
 };

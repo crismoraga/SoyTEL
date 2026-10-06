@@ -39,8 +39,8 @@ export function ChipGroup<T extends string>({ options, value, onChange, tone = '
             ? { bg: colors.cream, border: colors.cream, fg: 'primary' as ColorToken }
             : { bg: 'transparent', border: colors.secondary, fg: 'onDark' as ColorToken }
           : active
-            ? { bg: colors.primary, border: colors.primary, fg: 'cream' as ColorToken }
-            : { bg: colors.surface, border: colors.border, fg: 'secondary' as ColorToken };
+            ? { bg: colors.action, border: colors.action, fg: 'actionInk' as ColorToken }
+            : { bg: colors.surface, border: colors.border, fg: 'inkAccent' as ColorToken };
         return (
           <PressableScale
             key={option.id}
@@ -68,8 +68,8 @@ const tagTones: Record<TagTone, { bg: string; fg: ColorToken }> = {
   navy: { bg: colors.primary, fg: 'cream' },
   cream: { bg: colors.cream, fg: 'primary' },
   success: { bg: colors.successSoft, fg: 'successInk' },
-  neutral: { bg: colors.surfaceAlt, fg: 'muted' },
-  sky: { bg: colors.highlight, fg: 'secondary' },
+  neutral: { bg: colors.surfaceAlt, fg: 'inkSoft' },
+  sky: { bg: colors.highlight, fg: 'inkAccent' },
   warning: { bg: colors.warningSoft, fg: 'warningInk' },
   danger: { bg: colors.dangerSoft, fg: 'dangerInk' },
   glass: { bg: 'rgba(167, 212, 237, 0.16)', fg: 'accentSoft' },

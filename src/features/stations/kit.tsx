@@ -2,9 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ProgressBar } from '@/components/feedback/Progress';
+import { Rutix } from '@/components/graphics/Rutix';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
+import { coachMoodForScore, coachSummaryLine } from '@/data/coachLines';
+import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { now as clockNow } from '@/lib/clock';
 import { useMotionEnabled } from '@/lib/motion';
 import { colors, radius, spacing } from '@/theme';
@@ -15,6 +18,8 @@ export interface StationGameResult {
 }
 
 export interface StationGameProps {
+  // Ritmo de juego: multiplica los tiempos (1 = original). En la ruta en vivo lo fija el stand para todos.
+  pace?: number;
   seed: number;
   // Hora local (ms) en que el juego debe cerrarse sí o sí (B215 va sincronizado con el grupo).
   deadline?: number | null;
@@ -96,6 +101,13 @@ interface ContinueApi {
 
 const ContinueContext = createContext<ContinueApi>({ ask: (action) => action(), cancel: () => undefined });
 
+const PaceContext = createContext(1);
+
+// Multiplicador de tiempo del juego en curso (lo entrega withContinue desde la prop `pace`).
+export function usePace(): number {
+  return useContext(PaceContext);
+}
+
 export function useAskContinue(): AskContinue {
   return useContext(ContinueContext).ask;
 }
@@ -129,12 +141,14 @@ function ContinueHost({ children }: PropsWithChildren) {
 }
 
 // Envuelve un juego de estación con el botón "Continuar" compartido por sus etapas.
-export function withContinue<P extends object>(Game: ComponentType<P>): ComponentType<P> {
+export function withContinue<P extends { pace?: number }>(Game: ComponentType<P>): ComponentType<P> {
   function WithContinue(props: P) {
     return (
-      <ContinueHost>
-        <Game {...props} />
-      </ContinueHost>
+      <PaceContext.Provider value={props.pace && props.pace > 0 ? props.pace : 1}>
+        <ContinueHost>
+          <Game {...props} />
+        </ContinueHost>
+      </PaceContext.Provider>
     );
   }
   WithContinue.displayName = `WithContinue(${Game.displayName ?? Game.name ?? 'Game'})`;
@@ -153,6 +167,7 @@ interface BannerProps {
 // Presentación de cada etapa: queda en pantalla hasta que el jugador la toca (se lee con calma).
 export function StageBanner({ index, title, body, icon, accent = colors.accent, onDone }: BannerProps) {
   const motion = useMotionEnabled();
+  const coach = useCoachEnabled();
   const shownAt = useRef(0);
   useEffect(() => {
     shownAt.current = clockNow();
@@ -165,9 +180,18 @@ export function StageBanner({ index, title, body, icon, accent = colors.accent, 
   return (
     <Animated.View entering={motion ? FadeIn.duration(200) : undefined} exiting={motion ? FadeOut.duration(160) : undefined} style={styles.bannerWrap}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Etapa ${index}: ${title}. ${body} Toca para empezar`} onPress={start} style={styles.banner}>
-        <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={[styles.bannerIcon, { backgroundColor: accent }]}>
-          <TelIcon name={icon} size={40} color={colors.primary} />
-        </Animated.View>
+        {coach ? (
+          <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={styles.bannerRutix}>
+            <Rutix size={124} expression="happy" pose="point" />
+            <View style={[styles.bannerBadge, { backgroundColor: accent }]}>
+              <TelIcon name={icon} size={24} color={colors.primary} />
+            </View>
+          </Animated.View>
+        ) : (
+          <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={[styles.bannerIcon, { backgroundColor: accent }]}>
+            <TelIcon name={icon} size={40} color={colors.primary} />
+          </Animated.View>
+        )}
         <TelText variant="overline" color="accent" align="center">
           Etapa {index}
         </TelText>
@@ -180,7 +204,7 @@ export function StageBanner({ index, title, body, icon, accent = colors.accent, 
         <View style={[styles.bannerCta, { borderColor: accent }]}>
           <TelIcon name="tap" size={18} color={colors.cream} />
           <TelText variant="label" color="cream">
-            Toca cuando estés listo
+            Toca para empezar
           </TelText>
         </View>
       </Pressable>
@@ -209,11 +233,18 @@ interface ResultProps {
 export function StationSummary({ title, message, rows, total, learned, accent = colors.accent, submitLabel = 'Enviar mi puntaje', onSubmit }: ResultProps) {
   // Si el tiempo cerró el juego con un "Continuar" pendiente, ya no corresponde mostrarlo.
   const { cancel } = useContext(ContinueContext);
+  const coach = useCoachEnabled();
+  const ratio = clamp(total / 1000, 0, 1);
   useEffect(() => {
     cancel();
   }, [cancel]);
   return (
     <Animated.View entering={FadeIn.duration(260)} style={styles.summary}>
+      {coach && (
+        <CoachBubble mood={coachMoodForScore(ratio)} tone={ratio >= 0.45 ? 'good' : 'info'} size={76}>
+          {coachSummaryLine(ratio)}
+        </CoachBubble>
+      )}
       <View style={styles.summaryHead}>
         <TelText variant="overline" color="accent" align="center">
           {title}
@@ -258,7 +289,20 @@ export function GameBoard({ children, style }: PropsWithChildren<{ style?: Style
   return <View style={[styles.board, style]}>{children}</View>;
 }
 
+// Pista o reacción durante el juego. Con "Rutix en los juegos" activo la dice Rutix en una burbuja.
 export function Hint({ children, tone = 'info' }: PropsWithChildren<{ tone?: 'info' | 'good' | 'bad' }>) {
+  const coach = useCoachEnabled();
+  if (coach) {
+    return (
+      <CoachBubble mood={tone === 'good' ? 'good' : tone === 'bad' ? 'bad' : 'tip'} tone={tone} size={44}>
+        {children}
+      </CoachBubble>
+    );
+  }
+  return <PlainHint tone={tone}>{children}</PlainHint>;
+}
+
+function PlainHint({ children, tone = 'info' }: PropsWithChildren<{ tone?: 'info' | 'good' | 'bad' }>) {
   const palette = tone === 'good' ? '#1F5E43' : tone === 'bad' ? '#6E2A2A' : 'rgba(167,212,237,0.12)';
   return (
     <Animated.View entering={FadeIn.duration(160)} style={[styles.hint, { backgroundColor: palette }]}>
@@ -325,6 +369,22 @@ const styles = StyleSheet.create({
   },
   bannerBody: {
     maxWidth: 320,
+  },
+  bannerRutix: {
+    width: 124,
+    height: 124,
+  },
+  bannerBadge: {
+    position: 'absolute',
+    right: -8,
+    bottom: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.primaryDeep,
   },
   bannerCta: {
     flexDirection: 'row',

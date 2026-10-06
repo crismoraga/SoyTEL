@@ -6,7 +6,10 @@ export interface MicroGameProps {
   active: boolean;
   // 0 en la primera ronda; sube a medida que avanza la ráfaga (más difícil).
   level: number;
-  onAnswer: (correct: boolean, bonus?: number) => void;
+  // Ritmo de juego: multiplica los tiempos internos (1 = original; mayor = más lento).
+  pace: number;
+  // `note` es una explicación breve que Rutix muestra al cerrar la ronda.
+  onAnswer: (correct: boolean, bonus?: number, note?: string) => void;
 }
 
 export interface MicroGameDefinition extends MicroGameInfo {

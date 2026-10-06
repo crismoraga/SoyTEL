@@ -16,12 +16,19 @@ import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { storyChapters } from '@/data/story';
 import { microGameCatalog } from '@/features/burst/catalog';
+import { DAILY_BONUS, dailyKey, isDailyDone } from '@/features/burst/daily';
+import { puzzles } from '@/features/puzzles/catalog';
+import { runnerCharacters } from '@/features/runner/characters';
 import { stationGames } from '@/features/stations/registry';
+import { runnerCharacterDrawing } from '@/graphics/runners';
+import { SvgDrawing } from '@/graphics/ShapeLayer';
 import { wonMicroGames } from '@/lib/achievements';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadResults } from '@/storage/profile';
+import { loadPuzzleProgress } from '@/storage/puzzles';
+import { loadRunnerSave } from '@/storage/runner';
 import { loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 import type { GameResult } from '@/types/game';
@@ -61,11 +68,12 @@ const modes: ModeCard[] = [
 export default function GamesScreen() {
   const entering = useEntering();
   const { data } = useFocusData(async () => {
-    const [results, story] = await Promise.all([loadResults(), loadStoryProgress()]);
-    return { results, chapters: story.completedChapters.length };
+    const [results, story, puzzleProgress, runner] = await Promise.all([loadResults(), loadStoryProgress(), loadPuzzleProgress(), loadRunnerSave()]);
+    return { results, chapters: story.completedChapters.length, puzzleProgress, runner };
   });
   const won = new Set(data ? wonMicroGames(data.results) : []);
   const bestBurst = data ? data.results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0) : 0;
+  const dailyDone = data ? isDailyDone(data.results, dailyKey(new Date())) : false;
 
   return (
     <Screen
@@ -95,6 +103,29 @@ export default function GamesScreen() {
         </TelCard>
       </Animated.View>
 
+      <Animated.View entering={entering.fadeUp(1)}>
+        <TelCard tone="navy" onPress={() => router.push('/runner')} accessibilityLabel="TEL Runner, carrera sin fin. Jugar" style={styles.runnerCard}>
+          <View style={styles.runnerArt}>
+            <SvgDrawing drawing={runnerCharacterDrawing(data?.runner.selected ?? 'rutix')} width={84} height={84} />
+          </View>
+          <View style={styles.flex}>
+            <Tag tone="cream" icon="sparkle" label="NUEVO" style={styles.runnerTag} />
+            <TelText variant="heading" color="cream">
+              TEL Runner
+            </TelText>
+            <TelText variant="caption" color="accentSoft">
+              Carrera sin fin por la autopista de datos: junta paquetes, esquiva virus y desbloquea personajes telemáticos.
+            </TelText>
+            <TelText variant="label" color="accent" tabular>
+              {data && data.runner.best > 0
+                ? `Récord: ${formatNumber(data.runner.best)} pts · ${data.runner.unlocked.length}/${runnerCharacters.length} personajes`
+                : `${runnerCharacters.length} personajes por desbloquear`}
+            </TelText>
+          </View>
+          <TelIcon name="chevronRight" size={22} color={colors.cream} />
+        </TelCard>
+      </Animated.View>
+
       <View style={styles.section}>
         <SectionHeader title="Juegos de la ruta" subtitle="Practícalos antes de la feria o repítelos cuando quieras" />
         <View style={styles.stationGrid}>
@@ -113,13 +144,13 @@ export default function GamesScreen() {
                     <TelIcon name={game.icon} size={24} color={colors.primary} />
                   </View>
                   <View style={styles.flex}>
-                    <TelText variant="small" color="secondary">
+                    <TelText variant="small" color="inkAccent">
                       {game.place.toUpperCase()} · {game.pillar}
                     </TelText>
-                    <TelText variant="label" color="primary" numberOfLines={1}>
+                    <TelText variant="label" color="ink" numberOfLines={1}>
                       {game.title}
                     </TelText>
-                    <TelText variant="small" color={best ? 'successInk' : 'muted'}>
+                    <TelText variant="small" color={best ? 'successInk' : 'inkSoft'}>
                       {best ? `Récord ${formatNumber(best)} pts` : game.minutes}
                     </TelText>
                   </View>
@@ -141,7 +172,7 @@ export default function GamesScreen() {
               Ráfaga TEL
             </TelText>
             <TelText variant="caption" color="accentSoft">
-              6 microjuegos al azar, 3 vidas y cada vez más rápido.
+              6 microjuegos al azar y 3 vidas. Cada ronda parte cuando tú tocas.
             </TelText>
             {bestBurst > 0 && (
               <TelText variant="label" color="accent" tabular>
@@ -150,8 +181,48 @@ export default function GamesScreen() {
             )}
           </View>
           <TelButton label="Jugar ráfaga" variant="cream" iconRight="arrowRight" onPress={() => router.push('/burst')} />
+          <TelButton
+            label={dailyDone ? 'Desafío de hoy: completado' : `Desafío de hoy · bono +${DAILY_BONUS}`}
+            variant="outlineLight"
+            icon={dailyDone ? 'checkCircle' : 'calendar'}
+            onPress={() => router.push({ pathname: '/burst', params: { diario: '1' } })}
+          />
         </TelCard>
       </Animated.View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Desafíos sin reloj" subtitle="Rompecabezas por niveles: piensa con calma, Rutix te guía" />
+        {puzzles.map((puzzle, index) => {
+          const state = data?.puzzleProgress[puzzle.id];
+          const solved = state?.level ?? 0;
+          return (
+            <Animated.View key={puzzle.id} entering={entering.fadeUp(index)}>
+              <TelCard
+                onPress={() => router.push({ pathname: '/puzzle', params: { juego: puzzle.id } })}
+                accessibilityLabel={`${puzzle.title}. Nivel ${Math.min(solved + 1, puzzle.maxLevel)} de ${puzzle.maxLevel}`}
+                style={styles.puzzleCard}
+              >
+                <View style={[styles.stationIcon, { backgroundColor: puzzle.color }]}>
+                  <TelIcon name={puzzle.icon} size={24} color={colors.primary} />
+                </View>
+                <View style={styles.flex}>
+                  <TelText variant="subtitle" color="ink">
+                    {puzzle.title}
+                  </TelText>
+                  <TelText variant="caption" color="inkSoft">
+                    {puzzle.subtitle}
+                  </TelText>
+                  <ProgressBar progress={solved / puzzle.maxLevel} height={6} accessibilityLabel={`Niveles resueltos de ${puzzle.title}`} />
+                  <TelText variant="small" color={solved > 0 ? 'successInk' : 'inkAccent'}>
+                    {solved >= puzzle.maxLevel ? '¡Todos los niveles resueltos!' : solved > 0 ? `${solved}/${puzzle.maxLevel} niveles · sigue el ${solved + 1}` : `${puzzle.maxLevel} niveles · empieza por el 1`}
+                  </TelText>
+                </View>
+                <TelIcon name="chevronRight" size={20} color={colors.ink} />
+              </TelCard>
+            </Animated.View>
+          );
+        })}
+      </View>
 
       <View style={styles.section}>
         <SectionHeader title="Modos de juego" />
@@ -164,13 +235,13 @@ export default function GamesScreen() {
                   </View>
                   <View style={styles.flex}>
                     <Tag tone="sky" icon="clock" label={mode.duration} />
-                    <TelText variant="subtitle" color="primary">
+                    <TelText variant="subtitle" color="ink">
                       {mode.title}
                     </TelText>
-                    <TelText variant="caption" color="muted">
+                    <TelText variant="caption" color="inkSoft">
                       {mode.subtitle}
                     </TelText>
-                    <TelText variant="small" color="secondary">
+                    <TelText variant="small" color="inkAccent">
                       {mode.stat(data.results, data.chapters)}
                     </TelText>
                   </View>
@@ -184,10 +255,10 @@ export default function GamesScreen() {
           </View>
           <View style={styles.flex}>
             <Tag tone="warning" icon="heart" label="1 min al día" />
-            <TelText variant="subtitle" color="primary">
+            <TelText variant="subtitle" color="ink">
               Rutix, tu mascota
             </TelText>
-            <TelText variant="caption" color="muted">
+            <TelText variant="caption" color="inkSoft">
               Cuídalo cada día: su señal sube cuando juegas y baja si lo olvidas.
             </TelText>
           </View>
@@ -212,13 +283,13 @@ export default function GamesScreen() {
                   onPress={() => router.push({ pathname: '/burst', params: { focus: game.id } })}
                   style={[styles.micro, isWon && styles.microWon]}
                 >
-                  <View style={[styles.microIcon, { backgroundColor: isWon ? colors.primary : colors.surfaceAlt }]}>
-                    <TelIcon name={game.icon} size={24} color={isWon ? colors.cream : colors.secondary} />
+                  <View style={[styles.microIcon, { backgroundColor: isWon ? colors.action : colors.surfaceAlt }]}>
+                    <TelIcon name={game.icon} size={24} color={isWon ? colors.actionInk : colors.inkAccent} />
                   </View>
-                  <TelText variant="small" color="primary" align="center" numberOfLines={2}>
+                  <TelText variant="small" color="ink" align="center" numberOfLines={2}>
                     {game.title}
                   </TelText>
-                  <TelText variant="small" color={isWon ? 'successInk' : 'muted'} style={styles.microMeta}>
+                  <TelText variant="small" color={isWon ? 'successInk' : 'inkSoft'} style={styles.microMeta}>
                     {isWon ? 'Ganado' : game.mechanic}
                   </TelText>
                 </PressableScale>
@@ -232,6 +303,22 @@ export default function GamesScreen() {
 }
 
 const styles = StyleSheet.create({
+  runnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  runnerTag: {
+    alignSelf: 'flex-start',
+  },
+  runnerArt: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryDeep,
+  },
   featured: {
     gap: spacing.sm,
     overflow: 'hidden',
@@ -250,6 +337,11 @@ const styles = StyleSheet.create({
   section: {
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  puzzleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   modeCard: {
     flexDirection: 'row',
@@ -287,7 +379,7 @@ const styles = StyleSheet.create({
   },
   microWon: {
     borderColor: colors.accent,
-    backgroundColor: '#F4FAFE',
+    backgroundColor: colors.highlight,
   },
   microIcon: {
     width: 46,

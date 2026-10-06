@@ -144,10 +144,10 @@ export default function PracticeScreen() {
       }
     >
       <Animated.View key={question.id} entering={entering.fadeUp()} style={styles.prompt}>
-        <TelText variant="small" color="secondary" style={styles.kicker}>
+        <TelText variant="small" color="inkAccent" style={styles.kicker}>
           PREGUNTA {index + 1} DE {questions.length}
         </TelText>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           {question.prompt}
         </TelText>
       </Animated.View>

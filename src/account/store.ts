@@ -20,6 +20,10 @@ import {
 // teléfono con un código. El token y el código viven cifrados en el dispositivo (security/vault).
 
 const ACCOUNT_KEY = '@soytel/account';
+// Cuándo se descartó por última vez la invitación a crear cuenta.
+const OFFER_KEY = '@soytel/account-offer';
+// Tras un "ahora no", la invitación descansa medio día (aunque la app se cierre o se reinicie).
+export const OFFER_SNOOZE_MS = 12 * 60 * 60 * 1000;
 
 export type AccountStatus = 'loading' | 'guest' | 'registered' | 'expired';
 
@@ -41,7 +45,7 @@ export interface AccountView {
   lastSyncAt: string | null;
   syncing: boolean;
   syncError: string | null;
-  // La invitación a crear cuenta ya se descartó en esta sesión.
+  // La invitación a crear cuenta se descartó hace poco.
   offerDismissed: boolean;
 }
 
@@ -101,6 +105,10 @@ export function initAccount(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       stored = await vaultGet<StoredAccount>(ACCOUNT_KEY);
+      if (!stored) {
+        const dismissedAt = Number(await AsyncStorage.getItem(OFFER_KEY).catch(() => null));
+        gateDismissed = gateDismissed || isOfferSnoozed(dismissedAt);
+      }
       status = stored ? 'registered' : 'guest';
       emit();
       // Cada partida o logro nuevo se sube en segundo plano.
@@ -247,13 +255,19 @@ export async function syncNow(): Promise<void> {
   }
 }
 
-// Ventana "crea tu cuenta antes de jugar": se muestra a quien no tiene cuenta, una vez por sesión.
+// Ventana "crea tu cuenta antes de jugar": se muestra a quien no tiene cuenta; si responde
+// "ahora no", no vuelve a aparecer hasta medio día después.
+export function isOfferSnoozed(dismissedAt: number, at = Date.now()): boolean {
+  return dismissedAt > 0 && at - dismissedAt < OFFER_SNOOZE_MS;
+}
+
 export function shouldOfferAccount(): boolean {
   return status === 'guest' && !gateDismissed;
 }
 
 export function dismissAccountOffer(): void {
   gateDismissed = true;
+  void AsyncStorage.setItem(OFFER_KEY, String(Date.now())).catch(() => undefined);
   emit();
 }
 
@@ -263,4 +277,4 @@ export async function resetAccountLocal(): Promise<void> {
   await forgetAccount();
 }
 
-export const ACCOUNT_KEYS = [ACCOUNT_KEY];
+export const ACCOUNT_KEYS = [ACCOUNT_KEY, OFFER_KEY];

@@ -53,7 +53,7 @@ function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v
   return (
     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={label} onPress={() => onChange(!checked)} style={styles.checkRow}>
       <View style={[styles.checkBox, checked && styles.checkBoxOn]}>{checked && <TelIcon name="check" size={16} color={colors.white} strokeWidth={3.2} />}</View>
-      <TelText variant="caption" color="primary" style={styles.flex}>
+      <TelText variant="caption" color="ink" style={styles.flex}>
         {label}
       </TelText>
     </Pressable>
@@ -92,11 +92,11 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
   return (
     <View style={styles.form}>
       <TelCard style={styles.card}>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           Tu jugador
         </TelText>
         <AvatarPicker value={values.avatar} onChange={(avatar) => set('avatar', avatar)} level={level} achievements={achievements} size={48} />
-        <TelText variant="label" color="primary" nativeID="account-alias">
+        <TelText variant="label" color="ink" nativeID="account-alias">
           Alias
         </TelText>
         <TextInput
@@ -111,16 +111,16 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
           autoCorrect={false}
           style={[styles.input, font('bodySemi'), touched && aliasError && styles.inputError]}
         />
-        <TelText variant="small" color={touched && aliasError ? 'danger' : 'muted'}>
+        <TelText variant="small" color={touched && aliasError ? 'danger' : 'inkSoft'}>
           {touched && aliasError ? aliasError : 'Aparece en el ranking. Mejor un apodo que tu nombre completo.'}
         </TelText>
       </TelCard>
 
       <TelCard style={styles.card}>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           ¿En qué curso estás?
         </TelText>
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           Opcional. Nos ayuda a preparar actividades para tu nivel.
         </TelText>
         <View style={styles.wrap}>
@@ -131,7 +131,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
             onChange={(id) => set('grade', id === 'none' ? null : id)}
           />
         </View>
-        <TelText variant="label" color="primary" nativeID="account-school">
+        <TelText variant="label" color="ink" nativeID="account-school">
           Colegio (opcional)
         </TelText>
         <TextInput
@@ -155,10 +155,10 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
       <TelCard style={styles.card}>
         <View style={styles.switchRow}>
           <View style={styles.flex}>
-            <TelText variant="heading" color="primary">
+            <TelText variant="heading" color="ink">
               Invitaciones de Telemática
             </TelText>
-            <TelText variant="caption" color="muted">
+            <TelText variant="caption" color="inkSoft">
               Charlas, talleres y visitas al campus como premio a tu puntaje. Opcional.
             </TelText>
           </View>
@@ -189,7 +189,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
                 {contactError}
               </TelText>
             )}
-            <TelText variant="small" color="muted">
+            <TelText variant="small" color="inkSoft">
               Solo lo verá el equipo de Telemática USM para invitarte. Nunca aparece en el ranking ni se comparte. Puedes borrarlo cuando quieras.
             </TelText>
             {needsGuardianConsent(values.grade) && (
@@ -211,11 +211,11 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
       </TelCard>
 
       <Pressable accessibilityRole="link" onPress={() => router.push('/privacidad')} style={styles.privacy}>
-        <TelIcon name="shieldLock" size={18} color={colors.secondary} />
-        <TelText variant="label" color="secondary" style={styles.flex}>
+        <TelIcon name="shieldLock" size={18} color={colors.inkAccent} />
+        <TelText variant="label" color="inkAccent" style={styles.flex}>
           Cómo cuidamos tus datos
         </TelText>
-        <TelIcon name="chevronRight" size={18} color={colors.secondary} />
+        <TelIcon name="chevronRight" size={18} color={colors.inkAccent} />
       </Pressable>
 
       {(error || (touched && firstError)) && (
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.paper,
-    color: colors.primary,
+    color: colors.ink,
     paddingHorizontal: spacing.md,
     fontSize: 16,
   },
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: colors.secondary,
+    borderColor: colors.inkAccent,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',

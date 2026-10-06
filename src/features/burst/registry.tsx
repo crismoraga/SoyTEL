@@ -1,14 +1,17 @@
 import type { ComponentType } from 'react';
 import type { MicroGameId } from '@/types/game';
 import { microGameCatalog } from './catalog';
+import { BinaryBitsGame } from './games/BinaryBitsGame';
 import { CableConnectGame } from './games/CableConnectGame';
 import { CleanSignalGame } from './games/CleanSignalGame';
 import { ColorCodeGame } from './games/ColorCodeGame';
 import { ConnectNetworkGame } from './games/ConnectNetworkGame';
 import { FirewallGame } from './games/FirewallGame';
+import { LayerOrderGame, UnitOrderGame } from './games/OrderTapGame';
 import { PacketCatchGame } from './games/PacketCatchGame';
 import { PacketRushGame } from './games/PacketRushGame';
 import { PasswordStrongGame } from './games/PasswordStrongGame';
+import { FastRouteGame, IpValidGame, SafeUrlGame } from './games/PickOneGame';
 import { PingCheckGame } from './games/PingCheckGame';
 import { SequenceMemoryGame } from './games/SequenceMemoryGame';
 import { SignalTimingGame } from './games/SignalTimingGame';
@@ -28,6 +31,12 @@ const components: Record<MicroGameId, ComponentType<MicroGameProps>> = {
   'packet-catch': PacketCatchGame,
   'wifi-boost': WifiBoostGame,
   'password-strong': PasswordStrongGame,
+  'binary-bits': BinaryBitsGame,
+  'layer-order': LayerOrderGame,
+  'ip-valid': IpValidGame,
+  'fast-route': FastRouteGame,
+  'safe-url': SafeUrlGame,
+  'unit-order': UnitOrderGame,
 };
 
 export const microGameRegistry: MicroGameDefinition[] = microGameCatalog.map((info) => ({
@@ -48,8 +57,9 @@ export function getMicroGame(id: string): MicroGameDefinition | undefined {
   return microGameRegistry.find((game) => game.id === id);
 }
 
-// Duración de una ronda: la ráfaga acelera un 8% por ronda (mínimo 6 s).
-export function roundDuration(base: number, round: number, focus = false): number {
-  if (focus) return base;
-  return Math.max(6, Math.round(base * (1 - Math.min(round, 5) * 0.08)));
+// Duración de una ronda. `factor` es el ritmo elegido (más alto = más tiempo) y `acceleration` cuánto
+// se acorta cada ronda (0 en ritmo tranquilo; 8 % en el ritmo rápido original). Mínimo 6 s.
+export function roundDuration(base: number, round: number, focus = false, factor = 1, acceleration = 0.08): number {
+  if (focus) return Math.round(base * factor);
+  return Math.max(6, Math.round(base * factor * (1 - Math.min(round, 5) * acceleration)));
 }

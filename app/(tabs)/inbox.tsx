@@ -20,7 +20,7 @@ type Filter = 'all' | InboxKind;
 
 const kindStyle: Record<InboxKind, { label: string; icon: IconName; tint: [string, string] }> = {
   logro: { label: 'LOGRO', icon: 'trophy', tint: [colors.successSoft, colors.successInk] },
-  progreso: { label: 'PROGRESO', icon: 'rocket', tint: [colors.highlight, colors.secondary] },
+  progreso: { label: 'PROGRESO', icon: 'rocket', tint: [colors.highlight, colors.inkAccent] },
   rutix: { label: 'RUTIX', icon: 'robot', tint: [colors.cream, colors.warningInk] },
   dato: { label: 'DATO', icon: 'lightbulb', tint: [colors.primary, colors.cream] },
   aviso: { label: 'AVISO', icon: 'megaphone', tint: [colors.primary, colors.cream] },
@@ -99,7 +99,7 @@ export default function InboxScreen() {
       ) : (
         groups.map((group) => (
           <View key={group.title} style={styles.group}>
-            <TelText variant="small" color="muted" style={styles.groupTitle} accessibilityRole="header">
+            <TelText variant="small" color="inkSoft" style={styles.groupTitle} accessibilityRole="header">
               {group.title}
             </TelText>
             {group.items.map((item, index) => {
@@ -118,17 +118,17 @@ export default function InboxScreen() {
                     </View>
                     <View style={styles.flex}>
                       <View style={styles.metaRow}>
-                        <TelText variant="small" color="secondary" style={styles.tag}>
+                        <TelText variant="small" color="inkAccent" style={styles.tag}>
                           {style.label}
                         </TelText>
-                        <TelText variant="caption" color="muted" style={styles.time}>
+                        <TelText variant="caption" color="inkSoft" style={styles.time}>
                           {relativeTime(item.createdAt)}
                         </TelText>
                       </View>
-                      <TelText variant={item.read ? 'label' : 'subtitle'} color="primary" style={styles.title}>
+                      <TelText variant={item.read ? 'label' : 'subtitle'} color="ink" style={styles.title}>
                         {item.title}
                       </TelText>
-                      <TelText variant="caption" color="muted">
+                      <TelText variant="caption" color="inkSoft">
                         {item.body}
                       </TelText>
                     </View>

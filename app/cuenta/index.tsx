@@ -71,7 +71,7 @@ export default function AccountScreen() {
             Cuenta creada
           </TelText>
           <TelText variant="title" color="cream" align="center">
-            ¡Bienvenido/a, {player.alias}!
+            ¡Qué bueno tenerte aquí, {player.alias}!
           </TelText>
           <TelText variant="body" color="accentSoft" align="center">
             {account.rank ? `Partes en el lugar ${formatNumber(account.rank.rank)} de ${formatNumber(account.rank.total)} del ranking.` : 'Ya apareces en el ranking global.'}
@@ -91,7 +91,7 @@ export default function AccountScreen() {
     return (
       <Screen header={<AppHeader onBack={leave} kicker="Cuenta" title="Sesión cerrada" />}>
         <TelCard style={styles.gap}>
-          <TelText variant="body" color="primary">
+          <TelText variant="body" color="ink">
             Tu cuenta se abrió en otro teléfono con el código de recuperación, así que este dejó de estar conectado. Tu progreso local sigue aquí.
           </TelText>
           <TelButton label="Entrar con mi código" icon="key" onPress={() => router.replace('/cuenta/recuperar')} />
@@ -137,7 +137,7 @@ export default function AccountScreen() {
     >
       {!editing && (
         <TelCard tone="accent" style={styles.intro}>
-          <TelText variant="caption" color="primary">
+          <TelText variant="caption" color="ink">
             ¿Ya tienes cuenta en otro teléfono?
           </TelText>
           <TelButton label="Entrar con mi código" variant="outline" size="sm" icon="key" fullWidth={false} onPress={() => router.replace('/cuenta/recuperar')} />

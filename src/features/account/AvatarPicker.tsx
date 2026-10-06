@@ -40,7 +40,7 @@ export function AvatarPicker({ value, onChange, level, achievements, size = 52, 
                 <TelIcon name="lock" size={12} color={colors.white} strokeWidth={2.6} />
               </View>
             )}
-            <TelText variant="small" color={dark ? (selected ? 'cream' : 'accentSoft') : selected ? 'primary' : 'muted'} align="center" numberOfLines={1} style={styles.label}>
+            <TelText variant="small" color={dark ? (selected ? 'cream' : 'accentSoft') : selected ? 'ink' : 'inkSoft'} align="center" numberOfLines={1} style={styles.label}>
               {unlocked ? avatar.label : (avatar.unlock?.level ? `Nivel ${avatar.unlock.level}` : 'Logro')}
             </TelText>
           </PressableScale>

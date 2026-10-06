@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Alert, Platform, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { EmptyState, ListRow, SectionHeader, StatTile } from '@/components/Blocks';
-import { ChipGroup } from '@/components/Chips';
 import { ProgressRing } from '@/components/feedback/Progress';
 import { Skeleton } from '@/components/feedback/Skeleton';
 import { PressableScale } from '@/components/PressableScale';
@@ -22,15 +21,14 @@ import { setIdentity, syncNow, useAccount } from '@/account/store';
 import { achievements } from '@/data/achievements';
 import { areaLabels } from '@/data/questions';
 import { AvatarPicker } from '@/features/account/AvatarPicker';
+import { getPuzzle } from '@/features/puzzles/catalog';
 import { getStationGame } from '@/features/stations/registry';
 import { formatNumber, relativeTime } from '@/lib/format';
 import { LINKS, openLink } from '@/lib/links';
-import { suggestedMotionLevel, useEntering, useMotionLevel, type MotionLevel } from '@/lib/motion';
+import { useEntering } from '@/lib/motion';
 import { levelTitle, progressToNextLevel, xpToNextLevel } from '@/lib/progression';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadProfile, loadResults } from '@/storage/profile';
-import { resetAllData } from '@/storage/reset';
-import { updateSettings, useSettings, type MotionPreference } from '@/storage/settings';
 import { colors, font, radius, spacing } from '@/theme';
 import type { GameResult, KnowledgeArea } from '@/types/game';
 
@@ -55,39 +53,19 @@ function describeResult(result: GameResult): { title: string; icon: IconName } {
       return { title: getStationGame(String(result.metadata?.game ?? ''))?.title ?? 'Juego de la ruta', icon: getStationGame(String(result.metadata?.game ?? ''))?.icon ?? 'gamepad' };
     case 'story':
       return { title: `Historia · capítulo ${String(result.metadata?.chapter ?? '')}`, icon: 'book' };
+    case 'runner':
+      return { title: `TEL Runner · ${String(result.metadata?.distance ?? 0)} m`, icon: 'rocket' };
+    case 'puzzle': {
+      const puzzle = getPuzzle(String(result.metadata?.game ?? ''));
+      return { title: `${puzzle?.title ?? 'Desafío'} · nivel ${String(result.metadata?.level ?? '')}`, icon: puzzle?.icon ?? 'grid' };
+    }
     default:
       return { title: 'Actividad', icon: 'sparkle' };
   }
 }
 
-const MOTION_OPTIONS: { id: MotionPreference; label: string }[] = [
-  { id: 'auto', label: 'Automático' },
-  { id: 'full', label: 'Completas' },
-  { id: 'balanced', label: 'Equilibradas' },
-  { id: 'minimal', label: 'Mínimas' },
-];
-
-const motionCopy: Record<MotionLevel, string> = {
-  full: 'Todo en movimiento: estrellas que titilan, Rutix con ondas y confeti completo.',
-  balanced: 'Transiciones breves y Rutix flotando; sin adornos en bucle. Ideal para la mayoría de los teléfonos.',
-  minimal: 'Casi sin movimiento: lo más liviano para teléfonos de gama baja o si prefieres menos estímulos.',
-};
-
-function confirmAction(title: string, message: string, action: string, onConfirm: () => void) {
-  if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onConfirm();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: 'Cancelar', style: 'cancel' },
-    { text: action, style: 'destructive', onPress: onConfirm },
-  ]);
-}
-
 export default function ProfileScreen() {
   const entering = useEntering();
-  const settings = useSettings();
-  const motionLevel = useMotionLevel();
   const account = useAccount();
   const [aliasDraft, setAliasDraft] = useState<string | null>(null);
   const [aliasError, setAliasError] = useState<string | null>(null);
@@ -126,15 +104,6 @@ export default function ProfileScreen() {
     } finally {
       reload();
     }
-  }
-
-  function confirmReset() {
-    confirmAction(
-      'Borrar datos de este teléfono',
-      'Se reinician tu XP, logros, historial, avisos y ajustes en este teléfono, y se cierra tu cuenta aquí (sigue existiendo en el servidor y la recuperas con tu código). No se puede deshacer.',
-      'Borrar todo',
-      () => void resetAllData().then(() => router.replace('/home')),
-    );
   }
 
   return (
@@ -186,12 +155,12 @@ export default function ProfileScreen() {
         <TelCard style={styles.gap}>
           <View style={styles.rowCenter}>
             <TelIcon name="checkCircle" size={22} color={colors.success} />
-            <TelText variant="heading" color="primary" style={styles.flex}>
+            <TelText variant="heading" color="ink" style={styles.flex}>
               Cuenta conectada
             </TelText>
             <TelButton label={account.syncing ? 'Sincronizando' : 'Sincronizar'} variant="subtle" size="sm" icon="refresh" fullWidth={false} loading={account.syncing} onPress={() => void syncNow()} />
           </View>
-          <TelText variant="caption" color={account.syncError ? 'danger' : 'muted'}>
+          <TelText variant="caption" color={account.syncError ? 'danger' : 'inkSoft'}>
             {account.syncError ?? (account.lastSyncAt ? `Puntaje registrado ${relativeTime(account.lastSyncAt)}.` : 'Tu puntaje se registra cada vez que juegas.')}
           </TelText>
           <View style={styles.buttonRow}>
@@ -242,10 +211,10 @@ export default function ProfileScreen() {
       </View>
 
       <TelCard style={styles.settings}>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           Ajustes
         </TelText>
-        <TelText variant="label" color="primary" nativeID="alias-edit">
+        <TelText variant="label" color="ink" nativeID="alias-edit">
           Alias
         </TelText>
         <View style={styles.aliasRow}>
@@ -268,40 +237,22 @@ export default function ProfileScreen() {
             {aliasError}
           </TelText>
         )}
-        <SettingSwitch
-          label="Vibración y hápticos"
-          description="Pequeñas vibraciones al acertar, fallar o tocar botones."
-          value={settings.haptics}
-          onChange={(value) => void updateSettings({ haptics: value })}
-        />
-        <View style={styles.settingBlock}>
-          <TelText variant="label" color="primary">
-            Animaciones
-          </TelText>
-          <View style={styles.chips}>
-            <ChipGroup accessibilityLabel="Nivel de animaciones" options={MOTION_OPTIONS} value={settings.motion} onChange={(motion) => void updateSettings({ motion })} />
-          </View>
-          <TelText variant="caption" color="muted">
-            {settings.motion === 'auto' ? `Para este teléfono: ${MOTION_OPTIONS.find((option) => option.id === suggestedMotionLevel())?.label.toLowerCase()}. ` : ''}
-            {motionCopy[motionLevel]}
-          </TelText>
-        </View>
-        <ListRow icon="shieldLock" title="Privacidad" body="Qué datos guardamos y cómo los cuidamos." trailing={<TelIcon name="chevronRight" size={18} color={colors.primary} />} onPress={() => router.push('/privacidad')} />
-        <TelButton label="Borrar datos de este teléfono" variant="dangerOutline" icon="trash" onPress={confirmReset} style={styles.danger} />
+        <ListRow icon="settings" title="Ajustes" body="Tema claro u oscuro, ritmo de los juegos, animaciones y más." onPress={() => router.push('/ajustes')} />
+        <ListRow icon="shieldLock" title="Privacidad" body="Qué datos guardamos y cómo los cuidamos." onPress={() => router.push('/privacidad')} />
       </TelCard>
 
       <View style={styles.about}>
-        <TelText variant="caption" color="muted" align="center">
+        <TelText variant="caption" color="inkSoft" align="center">
           SoyTEL {version} · Ingeniería Civil Telemática USM
         </TelText>
         <TelButton label="La carrera en usm.cl" variant="ghost" size="sm" icon="external" fullWidth={false} onPress={() => void openLink(LINKS.career)} />
       </View>
 
       <Sheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} accessibilityLabel="Elige tu avatar" scroll>
-        <TelText variant="title" color="primary">
+        <TelText variant="title" color="ink">
           Elige tu avatar
         </TelText>
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           Los avatares con candado se desbloquean jugando.
         </TelText>
         {profile && (
@@ -315,28 +266,6 @@ export default function ProfileScreen() {
         <TelButton label="Listo" variant="outline" onPress={() => setAvatarOpen(false)} />
       </Sheet>
     </Screen>
-  );
-}
-
-function SettingSwitch({ label, description, value, onChange }: { label: string; description: string; value: boolean; onChange: (value: boolean) => void }) {
-  return (
-    <View style={styles.settingRow}>
-      <View style={styles.flex}>
-        <TelText variant="label" color="primary">
-          {label}
-        </TelText>
-        <TelText variant="caption" color="muted">
-          {description}
-        </TelText>
-      </View>
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: colors.border, true: colors.secondary }}
-        thumbColor={colors.white}
-      />
-    </View>
   );
 }
 
@@ -397,33 +326,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.paper,
-    color: colors.primary,
+    color: colors.ink,
     paddingHorizontal: spacing.md,
     fontSize: 16,
   },
   inputError: {
     borderColor: colors.danger,
-  },
-  settingRow: {
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingTop: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  settingBlock: {
-    gap: spacing.xs,
-    paddingTop: spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  chips: {
-    marginHorizontal: -spacing.xs,
-  },
-  danger: {
-    marginTop: spacing.xs,
   },
   about: {
     alignItems: 'center',

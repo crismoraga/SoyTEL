@@ -29,7 +29,7 @@ interface ProgressBarProps {
 export function ProgressBar({
   progress,
   height = 8,
-  color = colors.secondary,
+  color = colors.inkAccent,
   trackColor = colors.surfaceAlt,
   style,
   accessibilityLabel,

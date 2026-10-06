@@ -22,8 +22,8 @@ const toneStyles: Record<CardTone, ViewStyle> = {
   navy: { backgroundColor: colors.primary },
   accent: { backgroundColor: colors.highlight },
   cream: { backgroundColor: colors.cream },
-  success: { backgroundColor: colors.successSoft, borderColor: '#B7DCC8', borderWidth: 1 },
-  danger: { backgroundColor: colors.dangerSoft, borderColor: '#EFC4C4', borderWidth: 1 },
+  success: { backgroundColor: colors.successSoft, borderColor: colors.success, borderWidth: 1 },
+  danger: { backgroundColor: colors.dangerSoft, borderColor: colors.danger, borderWidth: 1 },
 };
 
 export function TelCard({

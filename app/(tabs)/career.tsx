@@ -82,7 +82,7 @@ export default function CareerScreen() {
                   style={[styles.areaButton, active && styles.areaActive]}
                 >
                   <Medallion glyph={area.glyph} size={60} />
-                  <TelText variant="small" color="primary" align="center">
+                  <TelText variant="small" color="ink" align="center">
                     {area.short}
                   </TelText>
                   {done ? (
@@ -98,7 +98,7 @@ export default function CareerScreen() {
           })}
         </View>
         <ProgressBar progress={mastered / careerAreas.length} accessibilityLabel="Áreas dominadas" />
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           Un área queda dominada cuando logras 3 de 5 correctas en su práctica.
         </TelText>
       </View>
@@ -108,19 +108,19 @@ export default function CareerScreen() {
           <View style={styles.detailHead}>
             <Medallion glyph={selected.glyph} size={56} />
             <View style={styles.flex}>
-              <TelText variant="heading" color="primary">
+              <TelText variant="heading" color="ink">
                 {selected.name}
               </TelText>
-              <TelText variant="label" color="secondary">
+              <TelText variant="label" color="inkAccent">
                 {selected.tagline}
               </TelText>
             </View>
           </View>
-          <TelText variant="body" color="muted">
+          <TelText variant="body" color="inkSoft">
             {selected.description}
           </TelText>
           <View style={styles.examples}>
-            <TelText variant="small" color="primary" style={styles.kicker}>
+            <TelText variant="small" color="ink" style={styles.kicker}>
               ¿QUÉ HACE UN TELEMÁTICO AQUÍ?
             </TelText>
             {selected.examples.map((example) => (
@@ -128,15 +128,15 @@ export default function CareerScreen() {
                 <View style={styles.exampleIcon}>
                   <TelIcon name="check" size={14} color={colors.successInk} strokeWidth={3} />
                 </View>
-                <TelText variant="caption" color="primary" style={styles.flex}>
+                <TelText variant="caption" color="ink" style={styles.flex}>
                   {example}
                 </TelText>
               </View>
             ))}
           </View>
           <View style={styles.progressRow}>
-            <TelIcon name={isAreaMastered(progress, selected.id) ? 'checkCircle' : 'target'} size={18} color={isAreaMastered(progress, selected.id) ? colors.success : colors.secondary} />
-            <TelText variant="caption" color={isAreaMastered(progress, selected.id) ? 'successInk' : 'secondary'} style={styles.flex}>
+            <TelIcon name={isAreaMastered(progress, selected.id) ? 'checkCircle' : 'target'} size={18} color={isAreaMastered(progress, selected.id) ? colors.success : colors.inkAccent} />
+            <TelText variant="caption" color={isAreaMastered(progress, selected.id) ? 'successInk' : 'inkAccent'} style={styles.flex}>
               {progressLine(selected, selectedProgress)}
             </TelText>
           </View>
@@ -160,21 +160,21 @@ export default function CareerScreen() {
           icon="grid"
           title="Malla interactiva"
           body="Los 10 semestres ramo por ramo: toca cada uno para ver qué aprenderás."
-          trailing={<TelIcon name="chevronRight" size={18} color={colors.primary} />}
+          trailing={<TelIcon name="chevronRight" size={18} color={colors.ink} />}
           onPress={() => router.push('/malla')}
         />
         <ListRow
           icon="school"
           title="La carrera en usm.cl"
           body="Malla oficial, perfil de egreso, campus y requisitos de Telemática."
-          trailing={<TelIcon name="external" size={18} color={colors.primary} />}
+          trailing={<TelIcon name="external" size={18} color={colors.ink} />}
           onPress={() => void openLink(LINKS.career)}
         />
         <ListRow
           icon="flag"
           title="Admisión USM"
           body="Fechas, vías de ingreso, becas y beneficios."
-          trailing={<TelIcon name="external" size={18} color={colors.primary} />}
+          trailing={<TelIcon name="external" size={18} color={colors.ink} />}
           onPress={() => void openLink(LINKS.admission)}
         />
       </View>
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   areaActive: {
     backgroundColor: colors.highlight,
     borderWidth: 2,
-    borderColor: colors.secondary,
+    borderColor: colors.inkAccent,
   },
   badge: {
     position: 'absolute',
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   detail: {
     borderWidth: 1.5,
-    borderColor: colors.secondary,
+    borderColor: colors.inkAccent,
     gap: 14,
     ...shadows.soft,
   },

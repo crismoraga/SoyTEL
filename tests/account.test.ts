@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   aliasProblem,
   allowedXp,
@@ -9,9 +10,12 @@ import {
   normalizeContact,
   schoolProblem,
 } from '@/account/rules';
+import { dismissAccountOffer, initAccount, isOfferSnoozed, OFFER_SNOOZE_MS, shouldOfferAccount } from '@/account/store';
 import { avatarCatalog, isAvatarUnlocked } from '@/data/avatars';
 import { detectDeviceMotion, particleBudget, resolveMotionLevel } from '@/lib/motion';
-import { parseSettings } from '@/storage/settings';
+import { roundDuration } from '@/features/burst/registry';
+import { PACE_ACCELERATION, paceFactor, paceFromFactor } from '@/lib/pace';
+import { defaultSettings, parseSettings } from '@/storage/settings';
 
 describe('account rules', () => {
   it('validates aliases and blocks insults (also with leetspeak)', () => {
@@ -92,8 +96,36 @@ describe('motion levels', () => {
   });
 
   it('migrates the old "reduce motion" switch', () => {
-    expect(parseSettings(JSON.stringify({ haptics: false, reducedMotion: true }))).toEqual({ haptics: false, motion: 'minimal' });
-    expect(parseSettings(JSON.stringify({ motion: 'full' }))).toEqual({ haptics: true, motion: 'full' });
-    expect(parseSettings('{oops')).toEqual({ haptics: true, motion: 'auto' });
+    expect(parseSettings(JSON.stringify({ haptics: false, reducedMotion: true }))).toMatchObject({ haptics: false, motion: 'minimal' });
+    expect(parseSettings(JSON.stringify({ motion: 'full' }))).toMatchObject({ haptics: true, motion: 'full' });
+    expect(parseSettings('{oops')).toEqual(defaultSettings);
+  });
+
+  it('defaults to a calm game pace and validates stored values', () => {
+    expect(defaultSettings.pace).toBe('calm');
+    expect(parseSettings(JSON.stringify({ pace: 'fast', theme: 'dark', coach: false }))).toMatchObject({ pace: 'fast', theme: 'dark', coach: false });
+    expect(parseSettings(JSON.stringify({ pace: 'turbo', theme: 'neon' }))).toMatchObject({ pace: 'calm', theme: 'system', coach: true });
+    expect(paceFactor('calm')).toBeGreaterThan(paceFactor('normal'));
+    expect(paceFactor('fast')).toBe(1);
+    expect(paceFromFactor(1.68)).toBe('calm');
+    // En ritmo tranquilo la Ráfaga no acelera y da más tiempo que el ritmo original.
+    expect(roundDuration(10, 4, false, paceFactor('calm'), PACE_ACCELERATION.calm)).toBe(17);
+    expect(roundDuration(10, 4, false, paceFactor('fast'), PACE_ACCELERATION.fast)).toBe(7);
+  });
+});
+
+describe('account invitation', () => {
+  it('rests for half a day after "ahora no"', async () => {
+    await AsyncStorage.clear();
+    await initAccount();
+    expect(shouldOfferAccount()).toBe(true);
+    dismissAccountOffer();
+    expect(shouldOfferAccount()).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // La hora del descarte queda guardada: al reiniciar la app se respeta el descanso.
+    const savedAt = Number(await AsyncStorage.getItem('@soytel/account-offer'));
+    expect(isOfferSnoozed(savedAt)).toBe(true);
+    expect(isOfferSnoozed(savedAt, savedAt + OFFER_SNOOZE_MS + 1)).toBe(false);
+    expect(isOfferSnoozed(0)).toBe(false);
   });
 });

@@ -63,10 +63,10 @@ export default function MallaScreen() {
       }
     >
       <TelCard style={styles.gap}>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           Ves de todo: los cinco pilares
         </TelText>
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           Ramos de la carrera ligados a cada pilar de Telemática, los mismos de la sala B213.
         </TelText>
         {pillars.map((item) => (
@@ -74,13 +74,13 @@ export default function MallaScreen() {
             <View style={[styles.pillarIcon, { backgroundColor: item.color }]}>
               <TelIcon name={item.icon} size={16} color={colors.primary} />
             </View>
-            <TelText variant="label" color="primary" numberOfLines={1} style={styles.pillarName}>
+            <TelText variant="label" color="ink" numberOfLines={1} style={styles.pillarName}>
               {item.pillar}
             </TelText>
             <View style={styles.pillarTrack}>
               <View style={[styles.pillarFill, { width: `${(coverage[item.id] / maxCoverage) * 100}%`, backgroundColor: item.color }]} />
             </View>
-            <TelText variant="label" color="secondary" tabular style={styles.pillarCount}>
+            <TelText variant="label" color="inkAccent" tabular style={styles.pillarCount}>
               {coverage[item.id]}
             </TelText>
           </View>
@@ -96,14 +96,14 @@ export default function MallaScreen() {
           <View key={semester.number} style={styles.semester}>
             <View style={styles.semesterHead}>
               <View style={styles.semesterBadge}>
-                <TelText variant="label" color="cream">
+                <TelText variant="label" color="actionInk">
                   {semester.roman}
                 </TelText>
               </View>
-              <TelText variant="heading" color="primary" style={styles.flex}>
+              <TelText variant="heading" color="ink" style={styles.flex}>
                 Semestre {semester.roman}
               </TelText>
-              <TelText variant="caption" color="muted">
+              <TelText variant="caption" color="inkSoft">
                 Año {semester.year}
               </TelText>
             </View>
@@ -120,7 +120,7 @@ export default function MallaScreen() {
                     scaleTo={0.97}
                     style={[styles.course, { backgroundColor: info.tint, borderLeftColor: info.color }, dimmed && styles.dimmed]}
                   >
-                    <TelText variant="small" color="primary" numberOfLines={3} style={[styles.courseName, { color: info.ink }]}>
+                    <TelText variant="small" color="ink" numberOfLines={3} style={[styles.courseName, { color: info.ink }]}>
                       {course.name}
                     </TelText>
                     {course.pillar && (
@@ -132,9 +132,9 @@ export default function MallaScreen() {
             </View>
             {cycle && (
               <View style={styles.cycle}>
-                <TelIcon name="flag" size={14} color={colors.secondary} />
-                <TelText variant="caption" color="secondary" style={styles.flex}>
-                  <TelText variant="caption" color="primary">
+                <TelIcon name="flag" size={14} color={colors.inkAccent} />
+                <TelText variant="caption" color="inkAccent" style={styles.flex}>
+                  <TelText variant="caption" color="ink">
                     {cycle.label}:{' '}
                   </TelText>
                   {cycle.summary}
@@ -157,7 +157,7 @@ export default function MallaScreen() {
         </View>
       </TelCard>
 
-      <TelText variant="caption" color="muted" align="center">
+      <TelText variant="caption" color="inkSoft" align="center">
         Información referencial basada en la malla 2026 publicada por la USM. Revisa la versión oficial antes de postular.
       </TelText>
       <TelButton label="Ver la carrera en usm.cl" icon="external" onPress={() => void openLink(LINKS.career)} />
@@ -175,10 +175,10 @@ export default function MallaScreen() {
                 </TelText>
               </View>
             </View>
-            <TelText variant="title" color="primary">
+            <TelText variant="title" color="ink">
               {selected.name}
             </TelText>
-            <TelText variant="body" color="muted">
+            <TelText variant="body" color="inkSoft">
               {selected.description}
             </TelText>
             {pillar && (
@@ -186,7 +186,7 @@ export default function MallaScreen() {
                 <View style={[styles.pillarIcon, { backgroundColor: pillar.color }]}>
                   <TelIcon name={pillar.icon} size={16} color={colors.primary} />
                 </View>
-                <TelText variant="caption" color="primary" style={styles.flex}>
+                <TelText variant="caption" color="ink" style={styles.flex}>
                   Pilar {pillar.pillar}: en la ruta lo juegas con «{pillar.game}» en la sala B213.
                 </TelText>
               </View>
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     height: 30,
     paddingHorizontal: 8,
     borderRadius: 15,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.action,
     alignItems: 'center',
     justifyContent: 'center',
   },

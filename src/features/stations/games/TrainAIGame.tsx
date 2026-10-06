@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   bestEpoch,
   EPOCHS,
@@ -75,6 +75,7 @@ const PixelGrid = memo(function PixelGrid({ pixels, size }: { pixels: string[]; 
 
 // B213 · Datos: etiquetar, filtrar, entrenar y probar un clasificador de imágenes.
 export function TrainAIGame({ seed, onComplete }: StationGameProps) {
+  const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0xda7a));
   const [dataset] = useState(() => makeDataset(LABEL_COUNT, random));
   const [testSet] = useState(() => makeDataset(TEST_COUNT, random, 100));
@@ -102,8 +103,8 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
-  }, [stageIndex]);
+    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+  }, [pace, stageIndex]);
 
   const askContinue = useAskContinue();
   // Mientras el jugador lee la explicación de la etapa, su reloj no la cierra.
@@ -176,7 +177,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
 
   return (
     <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stage.seconds} accent={ACCENT} />
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
       {endsAt && stage.key === 'label' && (
         <LabelStage
           images={dataset}
@@ -301,6 +302,7 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
   const [epoch, setEpoch] = useState(0);
   const [width, setWidth] = useState(0);
   const stoppedRef = useRef(false);
+  const pace = usePace();
   const onStopRef = useRef(onStop);
   useLayoutEffect(() => {
     onStopRef.current = onStop;
@@ -318,9 +320,9 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
         }
         return next;
       });
-    }, 300);
+    }, Math.round(300 * pace));
     return () => clearInterval(timer);
-  }, [running]);
+  }, [pace, running]);
 
   const shown = stopped ?? epoch;
   const x = (value: number) => 12 + (value / EPOCHS) * (width - 24);
