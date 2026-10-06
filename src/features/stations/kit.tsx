@@ -37,6 +37,33 @@ export function useNow(active: boolean, intervalMs = 250): number {
   return now;
 }
 
+// Entrega el resultado una sola vez, aunque el cierre forzado y el botón de enviar coincidan.
+export function useSubmitOnce(onComplete: (result: StationGameResult) => void): (result: StationGameResult) => void {
+  const done = useRef(false);
+  return useCallback(
+    (result: StationGameResult) => {
+      if (done.current) return;
+      done.current = true;
+      onComplete(result);
+    },
+    [onComplete],
+  );
+}
+
+// Cierra el juego a la hora indicada (hora local en ms). En la ruta en vivo la decide el stand: cuando
+// el grupo avanza, el juego abierto se cierra solo y entrega lo logrado hasta ese momento.
+export function useDeadline(deadline: number | null | undefined, onDeadline: () => void): void {
+  const callback = useRef(onDeadline);
+  useEffect(() => {
+    callback.current = onDeadline;
+  });
+  useEffect(() => {
+    if (!deadline) return;
+    const timer = setTimeout(() => callback.current(), Math.max(0, deadline - Date.now()));
+    return () => clearTimeout(timer);
+  }, [deadline]);
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

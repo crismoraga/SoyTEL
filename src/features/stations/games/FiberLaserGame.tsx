@@ -11,7 +11,7 @@ import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   acceptanceAngle,
   ANGLE_MAX,
@@ -50,7 +50,7 @@ const ACCENT = '#6FB3D9';
 const LASER_RED = '#FF5A5A';
 
 // B213 · Telecomunicaciones: fibra óptica, reflexión total interna y modulación on-off.
-export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
+export function FiberLaserGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [word] = useState(() => pickWord(mulberry32(seed ^ 0xf1be)));
   const [stageIndex, setStageIndex] = useState(0);
@@ -79,9 +79,11 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
   }, [stageIndex]);
 
   const total = anglePoints + pulse.points;
+  const accuracy = ((angleShots.total ? angleShots.ok / angleShots.total : 0) + (pulse.total ? pulse.correct / pulse.total : 0)) / 2;
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score: total, accuracy }));
 
   if (finished) {
-    const accuracy = ((angleShots.total ? angleShots.ok / angleShots.total : 0) + (pulse.total ? pulse.correct / pulse.total : 0)) / 2;
     return (
       <StationSummary
         title="Viaje de la luz"
@@ -93,7 +95,7 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
           { label: 'Bits transmitidos', value: pulse.points, max: PULSES_MAX, icon: 'fiber' },
         ]}
         learned="La fibra guía la luz porque su núcleo tiene mayor índice de refracción que el revestimiento: si el ángulo es pequeño, la luz rebota adentro. Los datos viajan como pulsos: luz = 1, sin luz = 0."
-        onSubmit={() => onComplete({ score: total, accuracy })}
+        onSubmit={() => submit({ score: total, accuracy })}
       />
     );
   }

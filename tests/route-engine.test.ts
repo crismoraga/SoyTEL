@@ -20,7 +20,7 @@ import type { RouteState } from '@/route/types';
 const T0 = 1_000_000;
 
 function join(state: RouteState, id: string, alias: string, at = T0): RouteState {
-  const result = addPlayer(state, { id, alias, avatar: 1, boxKey: `pk-${id}`, token: `tok-${id}` }, at);
+  const result = addPlayer(state, { id, alias, avatar: 1, boxKey: `pk-${id}` }, at);
   expect(result.ok).toBe(true);
   return result.state;
 }
@@ -197,7 +197,7 @@ describe('route engine', () => {
     expect(state.players.p2.alias).toBe('cris 2');
     state = applyPlayerAction(state, 'p1', { type: 'leave' }, T0);
     expect(state.order).toEqual(['p2']);
-    const taken = addPlayer(state, { id: 'p2', alias: 'X', avatar: 0, boxKey: 'otra', token: 't' }, T0);
+    const taken = addPlayer(state, { id: 'p2', alias: 'X', avatar: 0, boxKey: 'otra' }, T0);
     expect(taken.ok).toBe(false);
   });
 

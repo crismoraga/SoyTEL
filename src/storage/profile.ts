@@ -6,6 +6,7 @@ import { calculateGameXp, levelFromXp, levelTitle } from '@/lib/progression';
 import type { AchievementId, GameOutcome, GameResult, UserProfile } from '@/types/game';
 import { loadCareerProgress, masteredAreas, recordAreaPractice } from './career';
 import { pushInbox, type NewInboxItem } from './inbox';
+import { withLock } from './locks';
 import { loadMascotDays } from './story';
 
 const PROFILE_KEY = '@soytel/profile';
@@ -55,13 +56,19 @@ export async function loadProfile(): Promise<UserProfile> {
   return applyMascotDecay(profile);
 }
 
-// El ánimo de Rutix baja 6 puntos por cada día sin jugar (mínimo 10).
+const DAY_MS = 86_400_000;
+const APPLIED_RESULTS_LIMIT = 400;
+
+// El ánimo de Rutix baja 6 puntos por cada día sin jugar (mínimo 10). Cada día descontado adelanta
+// `moodAt`, así guardar el perfil (cambiar el alias, cuidar a Rutix) no vuelve a descontar los mismos días.
 export function applyMascotDecay(profile: UserProfile, now = Date.now()): UserProfile {
-  if (!profile.lastPlayedAt) {
+  const since = profile.moodAt ?? profile.lastPlayedAt;
+  if (!since) {
     return profile;
   }
 
-  const daysSince = Math.floor((now - new Date(profile.lastPlayedAt).getTime()) / 86_400_000);
+  const base = new Date(since).getTime();
+  const daysSince = Number.isFinite(base) ? Math.floor((now - base) / DAY_MS) : 0;
   if (daysSince <= 0) {
     return profile;
   }
@@ -69,6 +76,7 @@ export function applyMascotDecay(profile: UserProfile, now = Date.now()): UserPr
   return {
     ...profile,
     mascotMood: Math.max(10, profile.mascotMood - daysSince * 6),
+    moodAt: new Date(base + daysSince * DAY_MS).toISOString(),
   };
 }
 
@@ -122,11 +130,23 @@ function practicedArea(result: GameResult): string | null {
   return null;
 }
 
-export async function recordGameResult(result: GameResult): Promise<GameOutcome> {
+// Suma una partida al perfil. Las llamadas se atienden de a una (dos resultados seguidos no se pisan)
+// y, si el resultado trae `id`, repetirlo no vuelve a sumar: devuelve lo que entregó la primera vez.
+export function recordGameResult(result: GameResult): Promise<GameOutcome> {
+  return withLock('profile', () => applyGameResult(result));
+}
+
+async function applyGameResult(result: GameResult): Promise<GameOutcome> {
+  const [profile, results] = await Promise.all([loadProfile(), loadResults()]);
+  const applied = profile.appliedResults ?? [];
+  if (result.id && applied.includes(result.id)) {
+    const stored = results.find((item) => item.id === result.id);
+    return { profile, xpGained: stored?.xp ?? 0, leveledUp: false, newAchievements: [], alreadyRecorded: true };
+  }
+
   const area = practicedArea(result);
   if (area) await recordAreaPractice(area, result.accuracy, result.completedAt);
 
-  const [profile, results] = await Promise.all([loadProfile(), loadResults()]);
   const playedAt = new Date(result.completedAt);
   const previousPlayedAt = profile.lastPlayedAt ? new Date(profile.lastPlayedAt) : null;
   const streakDays = previousPlayedAt && isSameDay(previousPlayedAt, playedAt)
@@ -137,7 +157,7 @@ export async function recordGameResult(result: GameResult): Promise<GameOutcome>
   const xpGained = calculateGameXp(result.score, result.accuracy, result.durationSeconds);
   const xp = profile.xp + xpGained;
   const level = levelFromXp(xp);
-  const allResults = [result, ...results].slice(0, 200);
+  const allResults = [{ ...result, xp: xpGained }, ...results].slice(0, 200);
 
   const draft: UserProfile = {
     ...profile,
@@ -146,7 +166,9 @@ export async function recordGameResult(result: GameResult): Promise<GameOutcome>
     streakDays,
     lastPlayedAt: result.completedAt,
     mascotMood: Math.min(100, profile.mascotMood + 4),
+    moodAt: result.completedAt,
     gamesPlayed: Math.max(profile.gamesPlayed, results.length) + 1,
+    appliedResults: result.id ? [result.id, ...applied].slice(0, APPLIED_RESULTS_LIMIT) : applied,
   };
   const context = await loadAchievementContext(draft, allResults);
   const earned = evaluateAchievements(context);
@@ -156,9 +178,10 @@ export async function recordGameResult(result: GameResult): Promise<GameOutcome>
     unlockedAchievements: [...new Set([...profile.unlockedAchievements, ...earned])],
   };
 
-  await Promise.all([
-    saveProfile(updated),
-    AsyncStorage.setItem(RESULTS_KEY, JSON.stringify(allResults)),
+  // Perfil e historial en una sola escritura: o quedan ambos o ninguno (y el reintento no duplica).
+  await AsyncStorage.multiSet([
+    [PROFILE_KEY, JSON.stringify(updated)],
+    [RESULTS_KEY, JSON.stringify(allResults)],
   ]);
   const leveledUp = level > profile.level;
   await pushInbox(announce(newAchievements, leveledUp ? level : null));
@@ -168,7 +191,11 @@ export async function recordGameResult(result: GameResult): Promise<GameOutcome>
 }
 
 // Revisa logros que dependen de acciones sin partida (Rutix, Carrera) y los desbloquea.
-export async function syncAchievements(): Promise<AchievementId[]> {
+export function syncAchievements(): Promise<AchievementId[]> {
+  return withLock('profile', applyAchievements);
+}
+
+async function applyAchievements(): Promise<AchievementId[]> {
   const context = await loadAchievementContext();
   const earned = evaluateAchievements(context);
   const newAchievements = earned.filter((id) => !context.profile.unlockedAchievements.includes(id));
@@ -189,22 +216,26 @@ export async function updateAlias(alias: string): Promise<UserProfile> {
 }
 
 // Alias y avatar visibles (perfil, ruta y ranking).
-export async function updateIdentity(patch: { alias?: string; avatar?: number }): Promise<UserProfile> {
-  const profile = await loadProfile();
-  const updated: UserProfile = {
-    ...profile,
-    alias: patch.alias !== undefined ? patch.alias.trim().slice(0, 24) || DEFAULT_ALIAS : profile.alias,
-    avatar: patch.avatar !== undefined ? Math.max(0, Math.floor(patch.avatar)) : profile.avatar,
-  };
-  await saveProfile(updated);
-  return updated;
+export function updateIdentity(patch: { alias?: string; avatar?: number }): Promise<UserProfile> {
+  return withLock('profile', async () => {
+    const profile = await loadProfile();
+    const updated: UserProfile = {
+      ...profile,
+      alias: patch.alias !== undefined ? patch.alias.trim().slice(0, 24) || DEFAULT_ALIAS : profile.alias,
+      avatar: patch.avatar !== undefined ? Math.max(0, Math.floor(patch.avatar)) : profile.avatar,
+    };
+    await saveProfile(updated);
+    return updated;
+  });
 }
 
-export async function updateMascotMood(delta: number): Promise<UserProfile> {
-  const profile = await loadProfile();
-  const updated = { ...profile, mascotMood: Math.max(0, Math.min(100, profile.mascotMood + delta)) };
-  await saveProfile(updated);
-  return updated;
+export function updateMascotMood(delta: number): Promise<UserProfile> {
+  return withLock('profile', async () => {
+    const profile = await loadProfile();
+    const updated = { ...profile, mascotMood: Math.max(0, Math.min(100, profile.mascotMood + delta)) };
+    await saveProfile(updated);
+    return updated;
+  });
 }
 
 export interface ProgressSummary {
@@ -231,7 +262,11 @@ export async function loadProgressSummary(): Promise<ProgressSummary> {
 }
 
 // Al entrar a una cuenta existente se conserva lo mejor de ambos lados (nunca se pierde XP ni logros).
-export async function mergeAccountProgress(server: { alias: string; avatar: number; xp: number; games: number; achievements: string[] }): Promise<UserProfile> {
+export function mergeAccountProgress(server: { alias: string; avatar: number; xp: number; games: number; achievements: string[] }): Promise<UserProfile> {
+  return withLock('profile', () => applyAccountProgress(server));
+}
+
+async function applyAccountProgress(server: { alias: string; avatar: number; xp: number; games: number; achievements: string[] }): Promise<UserProfile> {
   const profile = await loadProfile();
   const xp = Math.max(profile.xp, server.xp);
   const updated: UserProfile = {

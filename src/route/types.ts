@@ -3,8 +3,25 @@
 export type RouteStop = 'stand' | 'b215' | 'b213' | 'hall';
 export type CheckinStop = Exclude<RouteStop, 'stand'>;
 
-export type PillarId = 'datos' | 'software' | 'redes' | 'teleco' | 'hardware';
-export type StationGameId = 'red-b215' | PillarId;
+// Listas cerradas: todo identificador que llega por la red se compara contra ellas.
+export const CHECKIN_STOPS = ['b215', 'b213', 'hall'] as const satisfies readonly CheckinStop[];
+export const PILLAR_IDS = ['datos', 'software', 'redes', 'teleco', 'hardware'] as const;
+export const STATION_GAME_IDS = ['red-b215', ...PILLAR_IDS] as const;
+
+export type PillarId = (typeof PILLAR_IDS)[number];
+export type StationGameId = (typeof STATION_GAME_IDS)[number];
+
+export function isCheckinStop(value: unknown): value is CheckinStop {
+  return typeof value === 'string' && (CHECKIN_STOPS as readonly string[]).includes(value);
+}
+
+export function isPillarId(value: unknown): value is PillarId {
+  return typeof value === 'string' && (PILLAR_IDS as readonly string[]).includes(value);
+}
+
+export function isStationGameId(value: unknown): value is StationGameId {
+  return typeof value === 'string' && (STATION_GAME_IDS as readonly string[]).includes(value);
+}
 
 export type RoutePhase = 'lobby' | 'checkin' | 'play' | 'results' | 'projects' | 'quiz' | 'podium';
 
@@ -43,7 +60,6 @@ export interface PlayerRecord {
   alias: string;
   avatar: number;
   boxKey: string;
-  token: string;
   joinedAt: number;
   lastSeen: number;
   kicked: boolean;
@@ -83,6 +99,8 @@ export interface RouteState {
   finishedAt: number | null;
   // Inicio de la fase de proyectos (B213), para validar los tiempos de cada juego.
   projectsAt?: number | null;
+  // Hasta cuándo se recibe el puntaje de un proyecto que quedó abierto al partir la trivia.
+  projectsCloseAt?: number | null;
   // true solo si la trivia terminó completa; false si el anfitrión cerró la ruta antes.
   completed?: boolean;
 }
@@ -137,8 +155,13 @@ export interface PublicQuiz {
 }
 
 export interface RouteSnapshot {
-  version: 1;
+  version: 2;
   code: string;
+  // Quién publica: época de conducción, instancia del stand y número de publicación. Los teléfonos
+  // solo aceptan un estado más nuevo que el último (época, instancia, publicación), sin mirar relojes.
+  epoch: number;
+  owner: string;
+  pub: number;
   rev: number;
   now: number;
   phase: RoutePhase;
@@ -150,6 +173,7 @@ export interface RouteSnapshot {
   quiz: PublicQuiz | null;
   settings: RouteSettings;
   finishedAt: number | null;
+  projectsCloseAt: number | null;
   completed: boolean;
   kicked: string[];
 }
@@ -168,8 +192,15 @@ export interface NewPlayer {
   alias: string;
   avatar: number;
   boxKey: string;
-  token: string;
 }
+
+// Respuesta del anfitrión a una acción: aplicada, todavía no (el teléfono reintenta) o rechazada.
+export type RejectCode = 'invalid' | 'phase' | 'closed' | 'duplicate' | 'kicked' | 'unknown';
+
+export type ActionVerdict =
+  | { status: 'accepted' }
+  | { status: 'retry'; reason: 'early' }
+  | { status: 'rejected'; reason: RejectCode };
 
 export interface StationResult {
   score: number;

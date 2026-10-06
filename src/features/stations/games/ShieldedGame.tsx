@@ -10,7 +10,7 @@ import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, Hint, StageBanner, StationHud, StationSummary, useNow, usePace, type StationGameProps } from '../kit';
+import { clamp, Hint, StageBanner, StationHud, StationSummary, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   CARD_SECONDS,
   channelInfo,
@@ -27,7 +27,7 @@ const ACCENT = '#E58A5A';
 const SWIPE = 90;
 
 // B213 · Software (Shielded): decide qué mensajes bloquear y detecta las señales de alerta.
-export function ShieldedGame({ seed, onComplete }: StationGameProps) {
+export function ShieldedGame({ seed, deadline, onComplete }: StationGameProps) {
   const [cards] = useState(() => pickCards(mulberry32(seed ^ 0x5e1d)));
   const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
@@ -46,6 +46,9 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
   const flagsFound = Object.values(found).reduce((sum, list) => sum + list.length, 0);
   const raw = results.filter((result) => result.ok).length * DECISION_POINTS + flagsFound * FLAG_POINTS;
   const score = Math.round((raw / maxScore(cards)) * 1000);
+  const accuracy = results.length ? results.filter((result) => result.ok).length / results.length : 0;
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score, accuracy }));
 
   const decide = useCallback(
     (block: boolean | null) => {
@@ -115,7 +118,7 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
           { label: 'Señales de alerta', value: flagsFound, max: totalFlags, icon: 'alert' },
         ]}
         learned="Como enseña Shielded: desconfía de la urgencia, los premios y los dominios raros; revisa permisos y nunca conectes un USB desconocido. Ante la duda, bloquea y verifica por otro canal."
-        onSubmit={() => onComplete({ score, accuracy: results.filter((result) => result.ok).length / results.length })}
+        onSubmit={() => submit({ score, accuracy })}
       />
     );
   }

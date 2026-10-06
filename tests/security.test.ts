@@ -6,6 +6,7 @@ import { isSealed, vaultGet, vaultSet } from '@/security/vault';
 
 function credentials(): MemberCredentials {
   return {
+    v: 3,
     code: 'ABC234',
     clientId: 'stp123456',
     boxKeys: newBoxKeys(),
@@ -16,9 +17,12 @@ function credentials(): MemberCredentials {
     hostBox: 'host-box',
     hostSign: 'host-sign',
     sessionKey: 'secreto-de-sesion',
-    token: 'token-privado',
+    keyId: 1,
     joinedAt: 1,
     solo: false,
+    seq: 64,
+    outbox: [{ key: 'score:datos', eventId: 'evento-privado-1', action: { type: 'score', game: 'datos', score: 700, accuracy: 0.8 }, since: 2, state: 'sent' }],
+    mark: { epoch: 2, owner: 'abcdefabcdef', pub: 9 },
   };
 }
 
@@ -56,7 +60,7 @@ describe('route storage', () => {
     await saveMember(member);
     const raw = await AsyncStorage.getItem('@soytel/route/member');
     expect(raw).not.toContain('secreto-de-sesion');
-    expect(raw).not.toContain('token-privado');
+    expect(raw).not.toContain('evento-privado-1');
     expect(raw).not.toContain(member.boxKeys.secretKey);
     expect(await loadMember()).toEqual(member);
   });
@@ -64,7 +68,7 @@ describe('route storage', () => {
   it('keeps host keys sealed and lists routes with their stop', async () => {
     const state = { ...createRoute('XYZ789', 1, 2), phase: 'checkin' as const, stop: 'b213' as const };
     const signKeys = { publicKey: 'pub', secretKey: 'clave-firma-secreta' };
-    await saveHost({ code: 'XYZ789', clientId: 'sth1', brokerIndex: 0, boxKeys: newBoxKeys(), signKeys, sessionKey: 'sesion-secreta', state, seqs: {}, savedAt: 5 });
+    await saveHost({ v: 3, code: 'XYZ789', clientId: 'sth1', brokerIndex: 0, boxKeys: newBoxKeys(), signKeys, sessionKey: 'sesion-secreta', keyId: 1, epoch: 1, owner: 'abcdefabcdef', state, seqs: {}, verdicts: {}, savedAt: 5 });
     const raw = await AsyncStorage.getItem('@soytel/route/host/XYZ789');
     expect(raw).not.toContain('clave-firma-secreta');
     expect(raw).not.toContain('sesion-secreta');

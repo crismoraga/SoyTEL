@@ -30,11 +30,13 @@ interface QuestionProps {
   answeredCount: number;
   playerCount: number;
   onAnswer?: (option: number) => void;
+  // Qué pasó con la respuesta propia (enviando, registrada, perdida). Sin texto en la pantalla del stand.
+  note?: string | null;
   large?: boolean;
 }
 
 // Pregunta en vivo estilo Kahoot: mientras más rápido respondes, más puntos.
-export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount, onAnswer, large = false }: QuestionProps) {
+export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount, onAnswer, note = null, large = false }: QuestionProps) {
   const waiting = hostNow < quiz.startsAt;
   const total = quiz.endsAt - quiz.startsAt;
   const left = Math.max(0, quiz.endsAt - hostNow);
@@ -90,8 +92,8 @@ export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount
           })}
         </View>
       )}
-      <TelText variant="caption" color="accentSoft" align="center">
-        {chosen !== null ? '¡Respuesta enviada! ' : ''}
+      <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+        {note ? `${note} ` : ''}
         {answeredCount} de {playerCount} respondieron
       </TelText>
     </View>

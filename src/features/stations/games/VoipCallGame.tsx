@@ -8,7 +8,7 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32, seededShuffle } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   DIAL_MAX,
   dialScore,
@@ -37,7 +37,7 @@ const STAGES: { key: StageKey; title: string; body: string; icon: IconName; seco
 const ACCENT = '#4FB38A';
 
 // B213 · Redes: una llamada por IP desde un teléfono fijo, de la marcación al audio.
-export function VoipCallGame({ seed, onComplete }: StationGameProps) {
+export function VoipCallGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0x7011));
   const [stageIndex, setStageIndex] = useState(0);
@@ -66,6 +66,8 @@ export function VoipCallGame({ seed, onComplete }: StationGameProps) {
   }, [stageIndex]);
 
   const setStagePoints = useCallback((value: number) => setPoints((current) => ({ ...current, [stage.key]: value })), [stage.key]);
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score: total, accuracy: delivered / PHRASE.length }));
 
   if (finished) {
     return (
@@ -80,7 +82,7 @@ export function VoipCallGame({ seed, onComplete }: StationGameProps) {
           { label: 'Voz sin cortes', value: points.jitter, max: JITTER_MAX, icon: 'sound' },
         ]}
         learned="En telefonía IP, SIP establece la llamada (INVITE, Ringing, OK, ACK) y la voz viaja en paquetes RTP. El jitter buffer los reordena para que escuches sin cortes."
-        onSubmit={() => onComplete({ score: total, accuracy: delivered / PHRASE.length })}
+        onSubmit={() => submit({ score: total, accuracy: delivered / PHRASE.length })}
       />
     );
   }

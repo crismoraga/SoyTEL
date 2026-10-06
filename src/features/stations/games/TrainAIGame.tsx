@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   bestEpoch,
   EPOCHS,
@@ -74,7 +74,7 @@ const PixelGrid = memo(function PixelGrid({ pixels, size }: { pixels: string[]; 
 });
 
 // B213 · Datos: etiquetar, filtrar, entrenar y probar un clasificador de imágenes.
-export function TrainAIGame({ seed, onComplete }: StationGameProps) {
+export function TrainAIGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0xda7a));
   const [dataset] = useState(() => makeDataset(LABEL_COUNT, random));
@@ -150,8 +150,12 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
     return () => clearTimeout(timer);
   }, [endsAt, nextStage, stage.key, stopEpoch, waiting]);
 
+  const accuracy = modelAccuracy(quality);
+  const submit = useSubmitOnce(onComplete);
+  // Si el stand cierra el proyecto antes, cuenta lo logrado en las etapas ya resueltas.
+  useDeadline(deadline, () => submit({ score: total, accuracy: stopEpoch === null ? labelAccuracy : accuracy }));
+
   if (finished) {
-    const accuracy = modelAccuracy(quality);
     return (
       <StationSummary
         title="Entrena la IA"
@@ -164,7 +168,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
           { label: 'Momento de detener', value: trainPoints, max: TRAIN_MAX, icon: 'neural' },
         ]}
         learned="Un modelo de machine learning aprende de datos etiquetados: si las etiquetas están mal, aprende mal. Filtros como la detección de bordes resaltan formas, y hay que detener el entrenamiento antes del sobreajuste."
-        onSubmit={() => onComplete({ score: labelPoints + filterPoints + trainPoints, accuracy })}
+        onSubmit={() => submit({ score: labelPoints + filterPoints + trainPoints, accuracy })}
       />
     );
   }
