@@ -31,7 +31,7 @@ const FLASH_MS = 520;
 const GAP_MS = 200;
 
 // Microjuego 7: memoriza la ruta que siguen los paquetes entre nodos y repítela.
-export function SequenceMemoryGame({ active, level, onAnswer }: MicroGameProps) {
+export function SequenceMemoryGame({ active, level, pace, onAnswer }: MicroGameProps) {
   const length = level >= 3 ? 4 : 3;
   const [sequence] = useState(() => {
     const result: string[] = [];
@@ -49,13 +49,15 @@ export function SequenceMemoryGame({ active, level, onAnswer }: MicroGameProps) 
   useEffect(() => {
     if (!active) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const flash = FLASH_MS * pace;
+    const step = (FLASH_MS + GAP_MS) * pace;
     sequence.forEach((id, index) => {
-      timers.push(setTimeout(() => setLit(id), 350 + index * (FLASH_MS + GAP_MS)));
-      timers.push(setTimeout(() => setLit(null), 350 + index * (FLASH_MS + GAP_MS) + FLASH_MS));
+      timers.push(setTimeout(() => setLit(id), 350 + index * step));
+      timers.push(setTimeout(() => setLit(null), 350 + index * step + flash));
     });
-    timers.push(setTimeout(() => setShowing(false), 350 + sequence.length * (FLASH_MS + GAP_MS)));
+    timers.push(setTimeout(() => setShowing(false), 350 + sequence.length * step));
     return () => timers.forEach(clearTimeout);
-  }, [active, sequence]);
+  }, [active, pace, sequence]);
 
   function tap(id: string) {
     if (!active || showing || answered.current) return;

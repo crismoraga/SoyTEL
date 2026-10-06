@@ -20,16 +20,29 @@ import type {
 
 // Motor autoritativo de la ruta. Lo ejecuta el dispositivo del stand; es puro y determinista.
 
+// Tiempos que dependen del ritmo elegido por el stand (1 = rápido original; 1.7 = tranquilo).
+// B215 suma sus tres etapas más un margen para leer las presentaciones; el tope es solo un seguro:
+// cada etapa termina apenas el jugador la resuelve.
+export function settingsForPace(pace: number): Pick<RouteSettings, 'pace' | 'b215GameSeconds' | 'questionSeconds' | 'revealSeconds'> {
+  const factor = Math.min(2.5, Math.max(1, pace));
+  return {
+    pace: factor,
+    b215GameSeconds: Math.round(35 * factor + 45 * Math.sqrt(factor) + 30 * factor + 50),
+    questionSeconds: Math.max(20, Math.round(18 * factor)),
+    revealSeconds: Math.round(8 + 3 * factor),
+  };
+}
+
+export const DEFAULT_PACE = 1.7;
+
 export const DEFAULT_SETTINGS: RouteSettings = {
   countdownSeconds: 5,
-  b215GameSeconds: 120,
   graceSeconds: 12,
   resultsSeconds: 14,
   projectsSeconds: 15 * 60,
   quizQuestions: 10,
-  questionSeconds: 20,
-  revealSeconds: 10,
   offlineAfterSeconds: 45,
+  ...settingsForPace(DEFAULT_PACE),
 };
 
 export const MAX_PLAYERS = 60;

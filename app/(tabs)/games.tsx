@@ -113,13 +113,13 @@ export default function GamesScreen() {
                     <TelIcon name={game.icon} size={24} color={colors.primary} />
                   </View>
                   <View style={styles.flex}>
-                    <TelText variant="small" color="secondary">
+                    <TelText variant="small" color="inkAccent">
                       {game.place.toUpperCase()} · {game.pillar}
                     </TelText>
-                    <TelText variant="label" color="primary" numberOfLines={1}>
+                    <TelText variant="label" color="ink" numberOfLines={1}>
                       {game.title}
                     </TelText>
-                    <TelText variant="small" color={best ? 'successInk' : 'muted'}>
+                    <TelText variant="small" color={best ? 'successInk' : 'inkSoft'}>
                       {best ? `Récord ${formatNumber(best)} pts` : game.minutes}
                     </TelText>
                   </View>
@@ -164,13 +164,13 @@ export default function GamesScreen() {
                   </View>
                   <View style={styles.flex}>
                     <Tag tone="sky" icon="clock" label={mode.duration} />
-                    <TelText variant="subtitle" color="primary">
+                    <TelText variant="subtitle" color="ink">
                       {mode.title}
                     </TelText>
-                    <TelText variant="caption" color="muted">
+                    <TelText variant="caption" color="inkSoft">
                       {mode.subtitle}
                     </TelText>
-                    <TelText variant="small" color="secondary">
+                    <TelText variant="small" color="inkAccent">
                       {mode.stat(data.results, data.chapters)}
                     </TelText>
                   </View>
@@ -184,10 +184,10 @@ export default function GamesScreen() {
           </View>
           <View style={styles.flex}>
             <Tag tone="warning" icon="heart" label="1 min al día" />
-            <TelText variant="subtitle" color="primary">
+            <TelText variant="subtitle" color="ink">
               Rutix, tu mascota
             </TelText>
-            <TelText variant="caption" color="muted">
+            <TelText variant="caption" color="inkSoft">
               Cuídalo cada día: su señal sube cuando juegas y baja si lo olvidas.
             </TelText>
           </View>
@@ -212,13 +212,13 @@ export default function GamesScreen() {
                   onPress={() => router.push({ pathname: '/burst', params: { focus: game.id } })}
                   style={[styles.micro, isWon && styles.microWon]}
                 >
-                  <View style={[styles.microIcon, { backgroundColor: isWon ? colors.primary : colors.surfaceAlt }]}>
-                    <TelIcon name={game.icon} size={24} color={isWon ? colors.cream : colors.secondary} />
+                  <View style={[styles.microIcon, { backgroundColor: isWon ? colors.action : colors.surfaceAlt }]}>
+                    <TelIcon name={game.icon} size={24} color={isWon ? colors.actionInk : colors.inkAccent} />
                   </View>
-                  <TelText variant="small" color="primary" align="center" numberOfLines={2}>
+                  <TelText variant="small" color="ink" align="center" numberOfLines={2}>
                     {game.title}
                   </TelText>
-                  <TelText variant="small" color={isWon ? 'successInk' : 'muted'} style={styles.microMeta}>
+                  <TelText variant="small" color={isWon ? 'successInk' : 'inkSoft'} style={styles.microMeta}>
                     {isWon ? 'Ganado' : game.mechanic}
                   </TelText>
                 </PressableScale>
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   },
   microWon: {
     borderColor: colors.accent,
-    backgroundColor: '#F4FAFE',
+    backgroundColor: colors.highlight,
   },
   microIcon: {
     width: 46,

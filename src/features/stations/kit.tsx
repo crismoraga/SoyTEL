@@ -15,6 +15,8 @@ export interface StationGameResult {
 }
 
 export interface StationGameProps {
+  // Ritmo de juego: multiplica los tiempos (1 = original). En la ruta en vivo lo fija el stand para todos.
+  pace?: number;
   seed: number;
   // Hora local (ms) en que el juego debe cerrarse sí o sí (B215 va sincronizado con el grupo).
   deadline?: number | null;
@@ -96,6 +98,13 @@ interface ContinueApi {
 
 const ContinueContext = createContext<ContinueApi>({ ask: (action) => action(), cancel: () => undefined });
 
+const PaceContext = createContext(1);
+
+// Multiplicador de tiempo del juego en curso (lo entrega withContinue desde la prop `pace`).
+export function usePace(): number {
+  return useContext(PaceContext);
+}
+
 export function useAskContinue(): AskContinue {
   return useContext(ContinueContext).ask;
 }
@@ -129,12 +138,14 @@ function ContinueHost({ children }: PropsWithChildren) {
 }
 
 // Envuelve un juego de estación con el botón "Continuar" compartido por sus etapas.
-export function withContinue<P extends object>(Game: ComponentType<P>): ComponentType<P> {
+export function withContinue<P extends { pace?: number }>(Game: ComponentType<P>): ComponentType<P> {
   function WithContinue(props: P) {
     return (
-      <ContinueHost>
-        <Game {...props} />
-      </ContinueHost>
+      <PaceContext.Provider value={props.pace && props.pace > 0 ? props.pace : 1}>
+        <ContinueHost>
+          <Game {...props} />
+        </ContinueHost>
+      </PaceContext.Provider>
     );
   }
   WithContinue.displayName = `WithContinue(${Game.displayName ?? Game.name ?? 'Game'})`;

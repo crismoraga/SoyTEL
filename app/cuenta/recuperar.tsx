@@ -71,11 +71,11 @@ export default function RecoverScreen() {
   return (
     <Screen keyboard header={<AppHeader onBack={leave} kicker="Ya tengo cuenta" title="Entra con tu código" subtitle="El código de recuperación que te mostró la app al crear tu cuenta." />}>
       <TelCard style={styles.card}>
-        <TelText variant="label" color="primary" nativeID="recovery-code">
+        <TelText variant="label" color="ink" nativeID="recovery-code">
           Código de recuperación
         </TelText>
         <View style={styles.inputRow}>
-          <TelText variant="heading" color="secondary" style={font('display')}>
+          <TelText variant="heading" color="inkAccent" style={font('display')}>
             TEL-
           </TelText>
           <TextInput
@@ -101,7 +101,7 @@ export default function RecoverScreen() {
           </View>
         )}
         <TelButton label="Entrar" icon="key" disabled={!valid} loading={loading} onPress={() => void submit()} />
-        <TelText variant="small" color="muted">
+        <TelText variant="small" color="inkSoft">
           Al entrar aquí, la cuenta se cierra en el teléfono donde estaba abierta. Tu progreso de este teléfono se suma a la cuenta.
         </TelText>
       </TelCard>
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.paper,
-    color: colors.primary,
+    color: colors.ink,
     paddingHorizontal: spacing.md,
     fontSize: 20,
     letterSpacing: 1.5,

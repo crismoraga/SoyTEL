@@ -84,7 +84,7 @@ describe('route sync over the local bus', () => {
       const reveal = ana.getView().snapshot!.quiz!.reveal!;
       expect(reveal.correct).toBe(answer);
       expect(reveal.gains[beto.getView().me!.id].rank).toBe(1);
-      await jest.advanceTimersByTimeAsync(11_000);
+      await jest.advanceTimersByTimeAsync(DEFAULT_SETTINGS.revealSeconds * 1000 + 1000);
     }
 
     expect(ana.getView().snapshot?.phase).toBe('podium');

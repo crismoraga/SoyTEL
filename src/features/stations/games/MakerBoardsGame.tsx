@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   boardInfo,
   CHOOSE_MAX,
@@ -42,6 +42,7 @@ const ACCENT = '#E0B84A';
 
 // B213 · Hardware: Arduino, ESP32 y Raspberry Pi en tres desafíos rápidos.
 export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
+  const pace = usePace();
   const [cases] = useState(() => pickScenarios(mulberry32(seed ^ 0xb0a4)));
   const [stageIndex, setStageIndex] = useState(0);
   const [banner, setBanner] = useState(true);
@@ -55,8 +56,8 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
-  }, [stageIndex]);
+    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+  }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
     setEndsAt(null);
@@ -92,7 +93,7 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
 
   return (
     <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stage.seconds} accent={ACCENT} />
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
       {endsAt && stage.key === 'choose' && (
         <ChooseStage
           cases={cases}

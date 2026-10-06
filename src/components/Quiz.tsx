@@ -20,12 +20,12 @@ interface OptionButtonProps {
 }
 
 const lightStates: Record<OptionState, { bg: string; border: string; badgeBg: string; badgeFg: ColorToken; fg: ColorToken }> = {
-  idle: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'secondary', fg: 'primary' },
-  selected: { bg: colors.surfaceAlt, border: colors.secondary, badgeBg: colors.secondary, badgeFg: 'white', fg: 'primary' },
-  correct: { bg: '#F1F9F5', border: colors.success, badgeBg: colors.success, badgeFg: 'white', fg: 'primary' },
-  wrong: { bg: '#FDF3F3', border: colors.danger, badgeBg: colors.danger, badgeFg: 'white', fg: 'primary' },
-  dimmed: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'muted', fg: 'muted' },
-  hidden: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'muted', fg: 'muted' },
+  idle: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'inkAccent', fg: 'ink' },
+  selected: { bg: colors.surfaceAlt, border: colors.inkAccent, badgeBg: colors.secondary, badgeFg: 'white', fg: 'ink' },
+  correct: { bg: colors.successSoft, border: colors.success, badgeBg: colors.success, badgeFg: 'white', fg: 'ink' },
+  wrong: { bg: colors.dangerSoft, border: colors.danger, badgeBg: colors.danger, badgeFg: 'white', fg: 'ink' },
+  dimmed: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'inkSoft', fg: 'inkSoft' },
+  hidden: { bg: colors.surface, border: colors.border, badgeBg: colors.surfaceAlt, badgeFg: 'inkSoft', fg: 'inkSoft' },
 };
 
 const darkStates: Record<OptionState, { bg: string; border: string; badgeBg: string; badgeFg: ColorToken; fg: ColorToken }> = {
@@ -88,10 +88,10 @@ interface FeedbackPanelProps {
 export function FeedbackPanel({ kind, title, body, children }: PropsWithChildren<FeedbackPanelProps>) {
   const entering = useEntering();
   const palette = kind === 'success'
-    ? { bg: colors.successSoft, border: '#B7DCC8', icon: colors.success, title: 'successInk' as ColorToken, body: '#1F4535' }
+    ? { bg: colors.successSoft, border: colors.success, icon: colors.success, title: 'successInk' as ColorToken, body: colors.successInk }
     : kind === 'error'
-      ? { bg: colors.dangerSoft, border: '#EFC4C4', icon: colors.danger, title: 'dangerInk' as ColorToken, body: '#5C2626' }
-      : { bg: colors.highlight, border: '#BCD7EA', icon: colors.secondary, title: 'primary' as ColorToken, body: colors.primary };
+      ? { bg: colors.dangerSoft, border: colors.danger, icon: colors.danger, title: 'dangerInk' as ColorToken, body: colors.dangerInk }
+      : { bg: colors.highlight, border: colors.borderStrong, icon: colors.inkAccent, title: 'ink' as ColorToken, body: colors.ink };
   return (
     <Animated.View
       entering={entering.fadeUp()}

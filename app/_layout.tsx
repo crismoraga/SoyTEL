@@ -71,6 +71,7 @@ export default function RootLayout() {
           <Stack.Screen name="ranking" />
           <Stack.Screen name="malla" />
           <Stack.Screen name="privacidad" />
+          <Stack.Screen name="ajustes" />
           <Stack.Screen name="cuenta/index" />
           <Stack.Screen name="cuenta/recuperar" />
         </Stack>

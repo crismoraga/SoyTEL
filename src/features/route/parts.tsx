@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
@@ -22,7 +22,7 @@ export function PlayerChip({ player, me, trailing, dark = true }: { player: Publ
   return (
     <View style={[styles.chip, dark ? styles.chipDark : styles.chipLight, me && styles.chipMe]}>
       <PlayerAvatar avatar={player.avatar} size={36} online={player.online} />
-      <TelText variant="label" color={dark ? 'cream' : 'primary'} style={styles.flex} numberOfLines={1}>
+      <TelText variant="label" color={dark ? 'cream' : 'ink'} style={styles.flex} numberOfLines={1}>
         {player.alias}
         {me ? ' (tú)' : ''}
       </TelText>
@@ -79,21 +79,26 @@ export function BigCountdown({ seconds, label }: { seconds: number; label: strin
   );
 }
 
-// Seis casillas para el código del stand (con teclado oculto, igual que en la app).
+// Seis casillas para el código del stand. El campo de texto real cubre todas las casillas (invisible),
+// así el toque llega directo al campo nativo y el teclado siempre aparece: un campo oculto de 1×1 px
+// no abría el teclado en Android.
 export function CodeBoxes({ value, onChange, autoFocus = false, onSubmit }: { value: string; onChange: (code: string) => void; autoFocus?: boolean; onSubmit?: () => void }) {
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   useEffect(() => {
-    if (autoFocus) input.current?.focus();
+    if (!autoFocus) return;
+    // Tras la transición de pantalla; el autoFocus nativo a veces llega antes de que la vista esté lista.
+    const timer = setTimeout(() => input.current?.focus(), 450);
+    return () => clearTimeout(timer);
   }, [autoFocus]);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Código de la ruta: ${value || 'vacío'}. Toca para escribir`} onPress={() => input.current?.focus()} style={styles.boxes}>
+    <View style={styles.boxes}>
       {Array.from({ length: 6 }, (_, index) => {
         const character = value[index];
         const active = focused && index === Math.min(value.length, 5);
         return (
           <View key={index} style={[styles.box, active && styles.boxActive, Boolean(character) && styles.boxFilled]}>
-            <TelText variant="title" color="primary" align="center">
+            <TelText variant="title" color="ink" align="center">
               {character ?? ''}
             </TelText>
           </View>
@@ -108,13 +113,21 @@ export function CodeBoxes({ value, onChange, autoFocus = false, onSubmit }: { va
         autoCapitalize="characters"
         autoCorrect={false}
         autoComplete="off"
+        importantForAutofill="no"
+        spellCheck={false}
+        // "visible-password" muestra en Android un teclado alfanumérico sin sugerencias.
+        keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
         maxLength={6}
         returnKeyType="go"
         onSubmitEditing={onSubmit}
-        accessibilityLabel="Código de la ruta"
-        style={[styles.hiddenInput, font('bodyBold')]}
+        caretHidden
+        contextMenuHidden
+        selectionColor="transparent"
+        underlineColorAndroid="transparent"
+        accessibilityLabel={`Código de la ruta, 6 caracteres. Escrito: ${value || 'nada'}`}
+        style={[styles.codeInput, font('bodyBold')]}
       />
-    </Pressable>
+    </View>
   );
 }
 
@@ -218,16 +231,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boxActive: {
-    borderColor: colors.secondary,
+    borderColor: colors.inkAccent,
     borderWidth: 2,
   },
   boxFilled: {
     backgroundColor: colors.highlight,
   },
-  hiddenInput: {
-    position: 'absolute',
-    opacity: 0,
-    height: 1,
-    width: 1,
+  codeInput: {
+    ...StyleSheet.absoluteFill,
+    color: 'transparent',
+    backgroundColor: 'transparent',
+    fontSize: 16,
+    textAlign: 'center',
+    padding: 0,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', caretColor: 'transparent' } as object) : null),
   },
 });

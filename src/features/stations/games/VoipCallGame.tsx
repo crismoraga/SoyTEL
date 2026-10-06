@@ -8,7 +8,7 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32, seededShuffle } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   DIAL_MAX,
   dialScore,
@@ -38,6 +38,7 @@ const ACCENT = '#4FB38A';
 
 // B213 · Redes: una llamada por IP desde un teléfono fijo, de la marcación al audio.
 export function VoipCallGame({ seed, onComplete }: StationGameProps) {
+  const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0x7011));
   const [stageIndex, setStageIndex] = useState(0);
   const [banner, setBanner] = useState(true);
@@ -51,8 +52,8 @@ export function VoipCallGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
-  }, [stageIndex]);
+    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+  }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
     setEndsAt(null);
@@ -88,7 +89,7 @@ export function VoipCallGame({ seed, onComplete }: StationGameProps) {
 
   return (
     <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stage.seconds} accent={ACCENT} />
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
       {endsAt && stage.key === 'dial' && <DialStage endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
       {endsAt && stage.key === 'sip' && <SipStage random={random} endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
       {endsAt && stage.key === 'jitter' && (
@@ -118,6 +119,7 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
   const [startedAt] = useState(() => Date.now());
   const done = useRef(false);
   const askContinue = useAskContinue();
+  const pace = usePace();
 
   const timeout = useCallback(() => {
     if (done.current) return;
@@ -132,7 +134,7 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     if (typed === EXTENSION) {
       done.current = true;
       setCalling(true);
-      onPoints(dialScore(clockNow() - startedAt, wrong));
+      onPoints(dialScore((clockNow() - startedAt) / pace, wrong));
       void feedbackSuccess();
       askContinue(onFinish);
     } else {
@@ -305,7 +307,8 @@ function JitterStage({
   onDelivered: (value: number) => void;
   onFinish: () => void;
 }) {
-  const [packets] = useState<VoicePacket[]>(() => schedulePackets(random, Date.now() + 900));
+  const pace = usePace();
+  const [packets] = useState<VoicePacket[]>(() => schedulePackets(random, Date.now() + 900, pace));
   const [expected, setExpected] = useState(1);
   const [played, setPlayed] = useState<Record<number, 'ok' | 'lost'>>({});
   const [wrong, setWrong] = useState(0);

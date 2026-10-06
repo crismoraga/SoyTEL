@@ -21,7 +21,9 @@ import { feedbackHeavy, feedbackSuccess, feedbackWarning } from '@/lib/feedback'
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
 import { useEntering, useMotionEnabled } from '@/lib/motion';
+import { PACE_ACCELERATION, paceFactor } from '@/lib/pace';
 import { loadResults, recordGameResult } from '@/storage/profile';
+import { useSettings } from '@/storage/settings';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome, MicroGameId } from '@/types/game';
 
@@ -101,7 +103,10 @@ export default function BurstScreen() {
   const recorded = useRef(false);
   const timer = useSharedValue(1);
   const current = state.games[state.round];
-  const duration = current ? roundDuration(current.durationSeconds, state.round, Boolean(focusGame)) : 0;
+  const { pace } = useSettings();
+  const factor = paceFactor(pace);
+  const acceleration = PACE_ACCELERATION[pace];
+  const duration = current ? roundDuration(current.durationSeconds, state.round, Boolean(focusGame), factor, acceleration) : 0;
 
   useEffect(() => {
     void loadResults().then((results) => setBest(results.filter((item) => item.gameId === 'burst').reduce((max, item) => Math.max(max, item.score), 0)));
@@ -201,7 +206,7 @@ export default function BurstScreen() {
         <View style={styles.pills}>
           <Pill icon="bolt" label={focusGame ? `${FOCUS_ROUNDS} rondas` : `${ROUNDS} microjuegos`} />
           <Pill icon="heart" label={`${LIVES} vidas`} />
-          <Pill icon="timer" label={focusGame ? 'Sin aceleración' : 'Cada vez más rápido'} />
+          <Pill icon="timer" label={focusGame || acceleration === 0 ? 'A tu ritmo' : 'Cada vez más rápido'} />
         </View>
         {best > 0 && !focusGame && (
           <TelText variant="label" color="accentSoft" align="center" tabular>
@@ -287,7 +292,7 @@ export default function BurstScreen() {
   }
 
   if (state.phase === 'ready') {
-    const faster = !focusGame && state.round >= 2;
+    const faster = !focusGame && acceleration > 0 && state.round >= 2;
     return (
       <Screen tone="dark" backdrop="signal" scroll={false} contentStyle={styles.readyContent}>
         <Lives lives={state.lives} />
@@ -344,7 +349,7 @@ export default function BurstScreen() {
         {current.instruction}
       </TelText>
       <View style={styles.gameArea}>
-        <Game key={`${state.round}-${current.id}`} durationSeconds={duration} level={focusGame ? 0 : state.round} active={state.phase === 'playing'} onAnswer={onAnswer} />
+        <Game key={`${state.round}-${current.id}`} durationSeconds={duration} level={focusGame ? 0 : state.round} pace={factor} active={state.phase === 'playing'} onAnswer={onAnswer} />
         {state.phase === 'feedback' && (
           <View style={styles.overlay} pointerEvents="box-none">
             <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} style={styles.overlayInner}>

@@ -20,7 +20,7 @@ const LANES = 4;
 const NEED = 5;
 
 // Microjuego 10: caen paquetes; atrapa los sanos y no toques los infectados.
-export function PacketCatchGame({ active, level, onAnswer }: MicroGameProps) {
+export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProps) {
   const [width, setWidth] = useState(300);
   const [packets, setPackets] = useState<Falling[]>([]);
   const [caught, setCaught] = useState(0);
@@ -34,7 +34,7 @@ export function PacketCatchGame({ active, level, onAnswer }: MicroGameProps) {
     const spawn = () => {
       nextId.current += 1;
       const id = nextId.current;
-      const duration = Math.max(1500, 2500 - level * 170);
+      const duration = Math.round(Math.max(1500, 2500 - level * 170) * pace);
       setPackets((items) => [...items, { id, lane: Math.floor(Math.random() * LANES), bad: Math.random() < 0.3 + level * 0.03, duration }]);
       const timer = setTimeout(() => {
         pending.delete(timer);
@@ -43,13 +43,13 @@ export function PacketCatchGame({ active, level, onAnswer }: MicroGameProps) {
       pending.add(timer);
     };
     spawn();
-    const interval = setInterval(spawn, Math.max(360, 600 - level * 40));
+    const interval = setInterval(spawn, Math.round(Math.max(360, 600 - level * 40) * pace));
     return () => {
       clearInterval(interval);
       pending.forEach(clearTimeout);
       pending.clear();
     };
-  }, [active, level]);
+  }, [active, level, pace]);
 
   function catchPacket(packet: Falling) {
     if (!active || done.current) return;

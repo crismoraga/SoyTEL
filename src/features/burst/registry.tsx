@@ -48,8 +48,9 @@ export function getMicroGame(id: string): MicroGameDefinition | undefined {
   return microGameRegistry.find((game) => game.id === id);
 }
 
-// Duración de una ronda: la ráfaga acelera un 8% por ronda (mínimo 6 s).
-export function roundDuration(base: number, round: number, focus = false): number {
-  if (focus) return base;
-  return Math.max(6, Math.round(base * (1 - Math.min(round, 5) * 0.08)));
+// Duración de una ronda. `factor` es el ritmo elegido (más alto = más tiempo) y `acceleration` cuánto
+// se acorta cada ronda (0 en ritmo tranquilo; 8 % en el ritmo rápido original). Mínimo 6 s.
+export function roundDuration(base: number, round: number, focus = false, factor = 1, acceleration = 0.08): number {
+  if (focus) return Math.round(base * factor);
+  return Math.max(6, Math.round(base * factor * (1 - Math.min(round, 5) * acceleration)));
 }

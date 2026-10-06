@@ -20,6 +20,8 @@ export interface RouteSettings {
   questionSeconds: number;
   revealSeconds: number;
   offlineAfterSeconds: number;
+  // Ritmo de los juegos para todo el grupo (multiplica sus tiempos; 1 = ritmo rápido original).
+  pace?: number;
 }
 
 export interface GameScore {

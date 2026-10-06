@@ -333,11 +333,11 @@ function CheckinView({ header, snapshot, me, pending }: PhaseProps & { pending: 
   );
 }
 
-function StationGameHost({ game, seed, deadline, onDone }: { game: StationGameId; seed: number; deadline?: number | null; onDone: (result: StationGameResult) => void }) {
+function StationGameHost({ game, seed, deadline, pace, onDone }: { game: StationGameId; seed: number; deadline?: number | null; pace: number; onDone: (result: StationGameResult) => void }) {
   const info = getStationGame(game);
   if (!info) return null;
   const Component = info.Component;
-  return <Component seed={seed} deadline={deadline} onComplete={onDone} />;
+  return <Component seed={seed} deadline={deadline} pace={pace} onComplete={onDone} />;
 }
 
 function seedFor(code: string, playerId: string, game: string): number {
@@ -396,6 +396,7 @@ function B215View({
     <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
       <StationGameHost
         game="red-b215"
+        pace={snapshot.settings.pace ?? 1}
         seed={seedFor(snapshot.code, me.id, 'red-b215')}
         deadline={forceFinish || snapshot.deadline === null ? 1 : snapshot.deadline - offset - 2500}
         onDone={(result) => {
@@ -505,6 +506,7 @@ function ProjectsView({
       <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
         <StationGameHost
           game={active}
+          pace={snapshot.settings.pace ?? 1}
           seed={seedFor(snapshot.code, me.id, active)}
           onDone={(result) => {
             setLocalDone((current) => ({ ...current, [active]: true }));
@@ -688,7 +690,7 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
             router.replace('/home');
           }}
         />
-        <TelButton label="Ver otros juegos" variant="ghost" size="sm" onPress={() => router.push('/games')} />
+        <TelButton label="Ver otros juegos" variant="ghostLight" size="sm" onPress={() => router.push('/games')} />
       </View>
       <View style={styles.footerSpace}>
         <TelText variant="caption" color="accentSoft" align="center">

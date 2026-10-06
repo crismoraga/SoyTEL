@@ -34,10 +34,11 @@ export interface VoicePacket {
 export const PACKET_LIFETIME_MS = 5600;
 
 // Llegadas con retardo variable (jitter): los paquetes se desordenan.
-export function schedulePackets(random: () => number, startAt: number): VoicePacket[] {
+// `pace` estira la llegada y la vida de los paquetes (1 = ritmo original).
+export function schedulePackets(random: () => number, startAt: number, pace = 1): VoicePacket[] {
   return PHRASE.map((word, index) => {
-    const arrivesAt = startAt + index * 1000 + Math.round((random() * 1.7 - 0.6) * 1000);
-    return { seq: index + 1, word, arrivesAt, expiresAt: arrivesAt + PACKET_LIFETIME_MS };
+    const arrivesAt = startAt + Math.round((index * 1000 + (random() * 1.7 - 0.6) * 1000) * pace);
+    return { seq: index + 1, word, arrivesAt, expiresAt: arrivesAt + Math.round(PACKET_LIFETIME_MS * pace) };
   });
 }
 

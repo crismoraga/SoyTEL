@@ -135,23 +135,23 @@ export default function HomeScreen() {
               <View style={styles.missionRow}>
                 <Medallion glyph={mission.glyph} size={58} />
                 <View style={styles.flex}>
-                  <TelText variant="small" color="secondary" style={styles.kicker}>
+                  <TelText variant="small" color="inkAccent" style={styles.kicker}>
                     {mission.kicker.toUpperCase()}
                   </TelText>
-                  <TelText variant="subtitle" color="primary">
+                  <TelText variant="subtitle" color="ink">
                     {mission.title}
                   </TelText>
-                  <TelText variant="caption" color="muted">
+                  <TelText variant="caption" color="inkSoft">
                     {mission.subtitle}
                   </TelText>
                 </View>
               </View>
               <View style={styles.progressBlock}>
                 <View style={styles.progressLabels}>
-                  <TelText variant="label" color="primary">
+                  <TelText variant="label" color="ink">
                     Nivel {profile.level}
                   </TelText>
-                  <TelText variant="label" color="muted" tabular>
+                  <TelText variant="label" color="inkSoft" tabular>
                     {formatNumber(profile.xp)} XP · faltan {formatNumber(xpToNextLevel(profile.xp))}
                   </TelText>
                 </View>
@@ -201,23 +201,23 @@ export default function HomeScreen() {
             <TelIcon name="trophy" size={24} color={colors.primary} />
           </View>
           <View style={styles.flex}>
-            <TelText variant="small" color="secondary" style={styles.kicker}>
+            <TelText variant="small" color="inkAccent" style={styles.kicker}>
               RANKING GLOBAL
             </TelText>
             {account.status === 'registered' && account.rank ? (
-              <TelText variant="subtitle" color="primary">
+              <TelText variant="subtitle" color="ink">
                 Lugar #{formatNumber(account.rank.rank)} de {formatNumber(account.rank.total)}
               </TelText>
             ) : (
-              <TelText variant="subtitle" color="primary">
+              <TelText variant="subtitle" color="ink">
                 {account.status === 'expired' ? 'Vuelve a entrar a tu cuenta' : 'Crea tu cuenta y entra al ranking'}
               </TelText>
             )}
-            <TelText variant="caption" color="muted">
+            <TelText variant="caption" color="inkSoft">
               {account.status === 'registered' ? 'Compara tu XP con todos los que juegan SoyTEL.' : 'Solo un alias: tus puntajes quedan registrados.'}
             </TelText>
           </View>
-          <TelIcon name="chevronRight" size={20} color={colors.primary} />
+          <TelIcon name="chevronRight" size={20} color={colors.ink} />
         </TelCard>
       </Animated.View>
 
@@ -234,7 +234,7 @@ export default function HomeScreen() {
                 style={styles.gridButton}
               >
                 <Medallion glyph={item.glyph} size={64} />
-                <TelText variant="small" color="primary" align="center">
+                <TelText variant="small" color="ink" align="center">
                   {item.label}
                 </TelText>
               </PressableScale>
@@ -321,10 +321,10 @@ function FeatureCard({
         <View style={styles.featureTag}>{tag}</View>
       </View>
       <View style={styles.featureBody}>
-        <TelText variant={compactTitle ? 'label' : 'subtitle'} color="primary" numberOfLines={compactTitle ? 3 : 2}>
+        <TelText variant={compactTitle ? 'label' : 'subtitle'} color="ink" numberOfLines={compactTitle ? 3 : 2}>
           {title}
         </TelText>
-        <TelText variant="caption" color="muted">
+        <TelText variant="caption" color="inkSoft">
           {meta}
         </TelText>
       </View>

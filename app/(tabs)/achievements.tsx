@@ -99,7 +99,7 @@ export default function AchievementsScreen() {
                 style={styles.card}
               >
                 <Medallion glyph={row.achievement.glyph} tier={row.achievement.tier} state={medalState[row.status]} progress={row.ratio} size={76} />
-                <TelText variant="small" color="primary" align="center" numberOfLines={2} style={styles.name}>
+                <TelText variant="small" color="ink" align="center" numberOfLines={2} style={styles.name}>
                   {row.achievement.title}
                 </TelText>
                 {row.status === 'done' && (
@@ -113,15 +113,15 @@ export default function AchievementsScreen() {
                 {row.status === 'prog' && (
                   <View style={styles.progress}>
                     <ProgressBar progress={row.ratio} height={5} style={styles.bar} />
-                    <TelText variant="small" color="secondary" style={styles.statusText} tabular>
+                    <TelText variant="small" color="inkAccent" style={styles.statusText} tabular>
                       {row.current} de {row.achievement.threshold}
                     </TelText>
                   </View>
                 )}
                 {row.status === 'lock' && (
                   <View style={styles.status}>
-                    <TelIcon name="lock" size={13} color={colors.muted} strokeWidth={2.4} />
-                    <TelText variant="small" color="muted" style={styles.statusText}>
+                    <TelIcon name="lock" size={13} color={colors.inkSoft} strokeWidth={2.4} />
+                    <TelText variant="small" color="inkSoft" style={styles.statusText}>
                       Bloqueado
                     </TelText>
                   </View>
@@ -135,14 +135,14 @@ export default function AchievementsScreen() {
       )}
 
       <View style={styles.legend}>
-        <TelText variant="heading" color="primary">
+        <TelText variant="heading" color="ink">
           Niveles de rareza
         </TelText>
         <View style={styles.legendRow}>
           {(['bronce', 'plata', 'oro', 'platino'] as Tier[]).map((tier) => (
             <View key={tier} style={styles.legendItem}>
               <Medallion glyph="star" tier={tier} size={52} />
-              <TelText variant="small" color="primary">
+              <TelText variant="small" color="ink">
                 {tierColors[tier].label}
               </TelText>
             </View>
@@ -161,19 +161,19 @@ export default function AchievementsScreen() {
               size={132}
               ribbon
             />
-            <TelText variant="small" color="secondary" style={styles.tier}>
+            <TelText variant="small" color="inkAccent" style={styles.tier}>
               LOGRO {tierColors[detail.achievement.tier].label.toUpperCase()}
             </TelText>
-            <TelText variant="title" color="primary" align="center">
+            <TelText variant="title" color="ink" align="center">
               {detail.achievement.title}
             </TelText>
-            <TelText variant="body" color="muted" align="center">
+            <TelText variant="body" color="inkSoft" align="center">
               {detail.achievement.description}
             </TelText>
             {detail.status !== 'done' && (
               <View style={styles.sheetProgress}>
                 <ProgressBar progress={detail.ratio} />
-                <TelText variant="caption" color="secondary" align="center">
+                <TelText variant="caption" color="inkAccent" align="center">
                   {detail.current} de {detail.achievement.threshold} · {detail.achievement.hint}
                 </TelText>
               </View>

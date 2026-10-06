@@ -11,7 +11,7 @@ import { useMotionEnabled } from '@/lib/motion';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, type StationGameProps } from '../kit';
+import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   deviceLabels,
   initialChannels,
@@ -70,7 +70,13 @@ interface StageProps {
 }
 
 // B215 · telecomunicaciones y redes: topología, enrutamiento y canales Wi-Fi en ~2 minutos.
+// El enrutamiento es una carrera contra el reloj: se alarga menos que las etapas de armar y ordenar.
+function stageSeconds(stage: (typeof STAGES)[number], pace: number): number {
+  return Math.round(stage.seconds * (stage.key === 'routing' ? Math.sqrt(pace) : pace));
+}
+
 export function NetworkOpsGame({ seed, deadline, onComplete }: StationGameProps) {
+  const pace = usePace();
   const [stageIndex, setStageIndex] = useState(0);
   const [banner, setBanner] = useState(true);
   const [endsAt, setEndsAt] = useState<number | null>(null);
@@ -95,8 +101,8 @@ export function NetworkOpsGame({ seed, deadline, onComplete }: StationGameProps)
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * 1000);
-  }, [stageIndex]);
+    setEndsAt(Date.now() + stageSeconds(STAGES[stageIndex], pace) * 1000);
+  }, [pace, stageIndex]);
 
   const finishStage = useCallback(() => {
     setEndsAt(null);
@@ -133,7 +139,7 @@ export function NetworkOpsGame({ seed, deadline, onComplete }: StationGameProps)
 
   return (
     <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stage.seconds} accent={ACCENT} />
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={stageSeconds(stage, pace)} accent={ACCENT} />
       {endsAt && stage.key === 'topology' && (
         <TopologyStage seed={seed} endsAt={endsAt} onPoints={setStagePoints} onAccuracy={setStageAccuracy} onFinish={finishStage} />
       )}
@@ -431,7 +437,8 @@ function RoutingStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StagePro
   const done = useRef(false);
   const askContinue = useAskContinue();
   const now = useNow(true, 100);
-  const ttl = packetTtlMs(stats.total);
+  const pace = usePace();
+  const ttl = packetTtlMs(stats.total) * pace;
   const remaining = clamp(1 - (now - spawnedAt) / ttl, 0, 1);
 
   const resolve = useCallback(

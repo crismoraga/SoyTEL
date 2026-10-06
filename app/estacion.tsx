@@ -11,6 +11,7 @@ import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getStationGame } from '@/features/stations/registry';
 import { now } from '@/lib/clock';
+import { usePaceFactor } from '@/lib/pace';
 import { formatNumber } from '@/lib/format';
 import { recordGameResult } from '@/storage/profile';
 import { spacing } from '@/theme';
@@ -20,6 +21,7 @@ import type { GameOutcome } from '@/types/game';
 export default function StationPracticeScreen() {
   const { juego } = useLocalSearchParams<{ juego?: string }>();
   const info = getStationGame(juego ?? '');
+  const pace = usePaceFactor();
   const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: 0 }));
   const [result, setResult] = useState<{ score: number; outcome: GameOutcome | null } | null>(null);
 
@@ -79,6 +81,7 @@ export default function StationPracticeScreen() {
       <Game
         key={run.key}
         seed={run.seed}
+        pace={pace}
         onComplete={(value) => {
           setResult({ score: value.score, outcome: null });
           void recordGameResult({

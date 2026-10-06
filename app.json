@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "soytel",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B2D45",
     "ios": {
       "supportsTablet": true,

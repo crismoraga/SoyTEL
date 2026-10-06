@@ -81,23 +81,23 @@ export default function PrivacyScreen() {
         <TelCard key={section.title} style={styles.card}>
           <View style={styles.head}>
             <View style={styles.icon}>
-              <TelIcon name={section.icon} size={18} color={colors.primary} />
+              <TelIcon name={section.icon} size={18} color={colors.ink} />
             </View>
-            <TelText variant="heading" color="primary">
+            <TelText variant="heading" color="ink">
               {section.title}
             </TelText>
           </View>
           {section.items.map((item) => (
             <View key={item} style={styles.item}>
               <View style={styles.bullet} />
-              <TelText variant="body" color="muted" style={styles.flex}>
+              <TelText variant="body" color="inkSoft" style={styles.flex}>
                 {item}
               </TelText>
             </View>
           ))}
         </TelCard>
       ))}
-      <TelText variant="caption" color="muted" align="center">
+      <TelText variant="caption" color="inkSoft" align="center">
         ¿Dudas? Acércate al stand de Telemática o escribe a admision@usm.cl.
       </TelText>
       {account.status === 'registered' ? (

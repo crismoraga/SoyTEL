@@ -10,12 +10,15 @@ import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { aliasProblem, cleanAlias } from '@/account/rules';
+import { useAccount } from '@/account/store';
 import { AccountGate } from '@/features/account/AccountGate';
 import { AvatarPicker } from '@/features/account/AvatarPicker';
 import { CodeBoxes, RouteProgress } from '@/features/route/parts';
 import { useEntering } from '@/lib/motion';
+import { currentPaceFactor } from '@/lib/pace';
 import { isValidJourneyCode, sanitizeJourneyCode } from '@/lib/progression';
 import { routeStops } from '@/route/content';
+import { settingsForPace } from '@/route/engine';
 import { useMemberView } from '@/route/hooks';
 import { routeMember } from '@/route/member';
 import { DEFAULT_ALIAS, loadProfile, updateIdentity } from '@/storage/profile';
@@ -33,6 +36,9 @@ export default function RouteLandingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const active = view.status !== 'idle' && view.code;
+  const account = useAccount();
+  // Mientras la invitación a crear cuenta está abierta no se pide el teclado (quedaría detrás de la hoja).
+  const gateOpen = !active && account.status === 'guest' && !account.offerDismissed;
 
   useEffect(() => {
     void loadProfile().then((profile) => {
@@ -64,7 +70,7 @@ export default function RouteLandingScreen() {
   }
 
   function playSolo() {
-    routeMember.startSolo({ alias: alias.trim() || 'Explorador', avatar });
+    routeMember.startSolo({ alias: alias.trim() || 'Explorador', avatar, settings: settingsForPace(currentPaceFactor()) });
     router.push('/ruta/juego');
   }
 
@@ -96,18 +102,18 @@ export default function RouteLandingScreen() {
       <Animated.View entering={entering.fadeUp(1)}>
         <TelCard style={styles.card}>
           <Tag tone="sky" icon="qr" label="ÚNETE AL GRUPO" />
-          <TelText variant="heading" color="primary">
+          <TelText variant="heading" color="ink">
             Código del stand
           </TelText>
-          <TelText variant="caption" color="muted">
+          <TelText variant="caption" color="inkSoft">
             Está en la pantalla del stand de Ingeniería Civil Telemática. También puedes escanear su QR con la cámara.
           </TelText>
           <CodeBoxes value={code} onChange={(value) => {
             setCode(value);
             setError(null);
-          }} autoFocus={!params.codigo} />
+          }} autoFocus={!params.codigo && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
 
-          <TelText variant="label" color="primary" style={styles.fieldLabel}>
+          <TelText variant="label" color="ink" style={styles.fieldLabel}>
             Tu alias para el ranking
           </TelText>
           <TextInput
@@ -120,14 +126,14 @@ export default function RouteLandingScreen() {
             placeholderTextColor={colors.slate}
             maxLength={18}
             autoCorrect={false}
-            autoFocus={Boolean(params.codigo)}
+            autoFocus={Boolean(params.codigo) && !gateOpen}
             returnKeyType="go"
             onSubmitEditing={() => void join()}
             accessibilityLabel="Tu alias"
             style={[styles.input, font('bodyBold')]}
           />
 
-          <TelText variant="label" color="primary" style={styles.fieldLabel}>
+          <TelText variant="label" color="ink" style={styles.fieldLabel}>
             Elige tu avatar
           </TelText>
           <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} />
@@ -145,13 +151,13 @@ export default function RouteLandingScreen() {
         {routeStops.slice(1).map((stop) => (
           <View key={stop.id} style={styles.stop}>
             <View style={styles.stopIcon}>
-              <TelIcon name={stop.icon} size={20} color={colors.secondary} />
+              <TelIcon name={stop.icon} size={20} color={colors.inkAccent} />
             </View>
             <View style={styles.flex}>
-              <TelText variant="label" color="primary">
+              <TelText variant="label" color="ink">
                 {stop.place} · {stop.title}
               </TelText>
-              <TelText variant="caption" color="muted">
+              <TelText variant="caption" color="inkSoft">
                 {stop.summary}
               </TelText>
             </View>
@@ -190,7 +196,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     paddingHorizontal: spacing.md,
     fontSize: 17,
-    color: colors.primary,
+    color: colors.ink,
   },
   stops: {
     gap: spacing.sm,

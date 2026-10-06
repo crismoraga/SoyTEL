@@ -105,10 +105,10 @@ export function TelTabBar({ state, navigation, descriptors, position }: TelTabBa
               style={styles.item}
             >
               <View>
-                <TelIcon name={config.icon} size={22} color={focused ? colors.cream : colors.muted} strokeWidth={focused ? 2.3 : 2} />
+                <TelIcon name={config.icon} size={22} color={focused ? colors.actionInk : colors.inkSoft} strokeWidth={focused ? 2.3 : 2} />
                 {showDot && <View style={[styles.dot, focused && styles.dotOnDark]} />}
               </View>
-              <TelText variant="small" color={focused ? 'cream' : 'muted'} style={styles.label} numberOfLines={1}>
+              <TelText variant="small" color={focused ? 'actionInk' : 'inkSoft'} style={styles.label} numberOfLines={1}>
                 {label}
               </TelText>
             </PressableScale>
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: INSET,
     borderRadius: 16,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.action,
   },
   item: {
     flex: 1,
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderColor: colors.surface,
   },
   dotOnDark: {
-    borderColor: colors.primary,
+    borderColor: colors.action,
   },
   label: {
     fontSize: 11,

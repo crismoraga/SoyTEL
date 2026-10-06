@@ -10,7 +10,7 @@ import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, Hint, StageBanner, StationHud, StationSummary, useNow, type StationGameProps } from '../kit';
+import { clamp, Hint, StageBanner, StationHud, StationSummary, useNow, usePace, type StationGameProps } from '../kit';
 import {
   CARD_SECONDS,
   channelInfo,
@@ -40,7 +40,8 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
   const busy = useRef(false);
   const card = cards[index];
   const now = useNow(started && !feedback && !finished, 200);
-  const remaining = started ? clamp(1 - (now - cardStartedAt) / (CARD_SECONDS * 1000), 0, 1) : 1;
+  const cardMs = CARD_SECONDS * usePace() * 1000;
+  const remaining = started ? clamp(1 - (now - cardStartedAt) / cardMs, 0, 1) : 1;
 
   const flagsFound = Object.values(found).reduce((sum, list) => sum + list.length, 0);
   const raw = results.filter((result) => result.ok).length * DECISION_POINTS + flagsFound * FLAG_POINTS;
@@ -84,9 +85,9 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
   // Tiempo límite por mensaje.
   useEffect(() => {
     if (!started || feedback || finished) return;
-    const timer = setTimeout(() => decide(null), Math.max(0, cardStartedAt + CARD_SECONDS * 1000 - Date.now()));
+    const timer = setTimeout(() => decide(null), Math.max(0, cardStartedAt + cardMs - Date.now()));
     return () => clearTimeout(timer);
-  }, [cardStartedAt, decide, feedback, finished, started]);
+  }, [cardMs, cardStartedAt, decide, feedback, finished, started]);
 
   function spot(flag: number) {
     if (feedback) return;
@@ -167,7 +168,7 @@ export function ShieldedGame({ seed, onComplete }: StationGameProps) {
         <StageBanner
           index={1}
           title="Escudo digital"
-          body="Te llegarán mensajes, redes y permisos. Toca lo sospechoso y decide: ¿bloquear o confiar? Tienes 9 segundos por tarjeta."
+          body={`Te llegarán mensajes, redes y permisos. Toca lo sospechoso y decide: ¿bloquear o confiar? Tienes ${Math.round(cardMs / 1000)} segundos por tarjeta.`}
           icon="shieldCheck"
           accent={ACCENT}
           onDone={beginCards}
@@ -223,7 +224,7 @@ function SwipeCard({
           </TelText>
         </View>
       </View>
-      <TelText variant="body" color="ink" style={styles.cardBody}>
+      <TelText variant="body" color="primary" style={styles.cardBody}>
         <FlagText segments={segments.body} found={found} onSpot={onSpot} variant="body" />
       </TelText>
       <View style={styles.swipeHints}>
@@ -244,14 +245,14 @@ function FlagText({ segments, found, onSpot, variant }: { segments: Segment[]; f
     <>
       {segments.map((segment, position) =>
         segment.flag === null ? (
-          <TelText key={position} variant={variant} color={variant === 'label' ? 'primary' : 'ink'}>
+          <TelText key={position} variant={variant} color="primary">
             {segment.text}
           </TelText>
         ) : (
           <TelText
             key={position}
             variant={variant === 'label' ? 'label' : 'bodyStrong'}
-            color={found.includes(segment.flag) ? 'white' : 'ink'}
+            color={found.includes(segment.flag) ? 'white' : 'primary'}
             onPress={() => onSpot(segment.flag as number)}
             accessibilityRole="button"
             accessibilityHint="Marcar como sospechoso"
@@ -289,7 +290,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing.md,
     gap: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     boxShadow: '0px 14px 30px rgba(0, 0, 0, 0.35)',
   },
   cardHead: {

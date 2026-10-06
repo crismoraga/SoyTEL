@@ -2,7 +2,7 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useEntering } from '@/lib/motion';
-import { colors, radius, spacing, type ColorToken } from '@/theme';
+import { colors, type ColorToken, isDarkTheme, radius, spacing } from '@/theme';
 import { Illustration, type IllustrationName } from './graphics/Illustration';
 import { PressableScale } from './PressableScale';
 import { TelButton } from './TelButton';
@@ -21,18 +21,18 @@ export function SectionHeader({ title, subtitle, actionLabel, onAction, tone = '
   return (
     <View style={styles.section}>
       <View style={styles.flex}>
-        <TelText variant="heading" color={tone === 'dark' ? 'cream' : 'primary'} accessibilityRole="header">
+        <TelText variant="heading" color={tone === 'dark' ? 'cream' : 'ink'} accessibilityRole="header">
           {title}
         </TelText>
         {subtitle && (
-          <TelText variant="caption" color={tone === 'dark' ? 'accentSoft' : 'muted'}>
+          <TelText variant="caption" color={tone === 'dark' ? 'accentSoft' : 'inkSoft'}>
             {subtitle}
           </TelText>
         )}
       </View>
       {actionLabel && onAction && (
         <PressableScale accessibilityRole="link" onPress={onAction} hitSlop={8}>
-          <TelText variant="label" color={tone === 'dark' ? 'accent' : 'secondary'}>
+          <TelText variant="label" color={tone === 'dark' ? 'accent' : 'inkAccent'}>
             {actionLabel}
           </TelText>
         </PressableScale>
@@ -54,11 +54,11 @@ export function EmptyState({ illustration, title, body, actionLabel, onAction, t
   const entering = useEntering();
   return (
     <Animated.View entering={entering.fade()} style={styles.empty}>
-      <Illustration name={illustration} width={180} tone={tone} />
-      <TelText variant="subtitle" color={tone === 'dark' ? 'cream' : 'primary'} align="center">
+      <Illustration name={illustration} width={180} tone={tone === 'dark' || isDarkTheme() ? 'dark' : 'light'} />
+      <TelText variant="subtitle" color={tone === 'dark' ? 'cream' : 'ink'} align="center">
         {title}
       </TelText>
-      <TelText variant="body" color={tone === 'dark' ? 'accentSoft' : 'muted'} align="center" style={styles.emptyBody}>
+      <TelText variant="body" color={tone === 'dark' ? 'accentSoft' : 'inkSoft'} align="center" style={styles.emptyBody}>
         {body}
       </TelText>
       {actionLabel && onAction && <TelButton label={actionLabel} variant={tone === 'dark' ? 'cream' : 'primary'} fullWidth={false} onPress={onAction} />}
@@ -75,17 +75,17 @@ interface StatTileProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export function StatTile({ icon, value, label, tone = 'light', accent = 'secondary', style }: StatTileProps) {
+export function StatTile({ icon, value, label, tone = 'light', accent = 'inkAccent', style }: StatTileProps) {
   const dark = tone === 'dark';
   return (
     <View style={[styles.stat, dark ? styles.statDark : styles.statLight, style]} accessible accessibilityLabel={`${label}: ${value}`}>
       <View style={[styles.statIcon, { backgroundColor: dark ? colors.primary : colors.highlight }]}>
         <TelIcon name={icon} size={18} color={dark ? colors.accent : colors[accent]} />
       </View>
-      <TelText variant={String(value).length >= 5 ? 'subtitle' : 'heading'} color={dark ? 'cream' : 'primary'} tabular numberOfLines={1} adjustsFontSizeToFit>
+      <TelText variant={String(value).length >= 5 ? 'subtitle' : 'heading'} color={dark ? 'cream' : 'ink'} tabular numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </TelText>
-      <TelText variant="small" color={dark ? 'accentSoft' : 'muted'} numberOfLines={1}>
+      <TelText variant="small" color={dark ? 'accentSoft' : 'inkSoft'} numberOfLines={1}>
         {label}
       </TelText>
     </View>
@@ -95,7 +95,7 @@ export function StatTile({ icon, value, label, tone = 'light', accent = 'seconda
 // Fila de lista con ícono en cuadro redondeado (avisos, historial, enlaces).
 export function ListRow({
   icon,
-  iconTint = [colors.highlight, colors.secondary],
+  iconTint = [colors.highlight, colors.inkAccent],
   title,
   body,
   meta,
@@ -120,21 +120,21 @@ export function ListRow({
       )}
       <View style={styles.flex}>
         {meta && (
-          <TelText variant="small" color="secondary" style={styles.meta}>
+          <TelText variant="small" color="inkAccent" style={styles.meta}>
             {meta}
           </TelText>
         )}
-        <TelText variant="subtitle" color="primary" style={styles.rowTitle}>
+        <TelText variant="subtitle" color="ink" style={styles.rowTitle}>
           {title}
         </TelText>
         {body && (
-          <TelText variant="caption" color="muted">
+          <TelText variant="caption" color="inkSoft">
             {body}
           </TelText>
         )}
         {children}
       </View>
-      {trailing ?? (onPress ? <TelIcon name="chevronRight" size={18} color={colors.primary} /> : null)}
+      {trailing ?? (onPress ? <TelIcon name="chevronRight" size={18} color={colors.ink} /> : null)}
     </>
   );
   if (onPress) {

@@ -3,7 +3,7 @@ import { StyleSheet, View, type DimensionValue, type LayoutChangeEvent, type Sty
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMotionEnabled } from '@/lib/motion';
-import { colors, radius, spacing } from '@/theme';
+import { colors, isDarkTheme, radius, spacing } from '@/theme';
 
 type Tone = 'light' | 'dark';
 
@@ -15,10 +15,11 @@ interface SkeletonProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const toneColors: Record<Tone, { base: string; shine: readonly [string, string, string] }> = {
-  light: { base: '#E4EDF5', shine: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0)'] },
-  dark: { base: 'rgba(167, 212, 237, 0.12)', shine: ['rgba(167,212,237,0)', 'rgba(167,212,237,0.22)', 'rgba(167,212,237,0)'] },
-};
+type ToneColors = { base: string; shine: readonly [string, string, string] };
+const onDark: ToneColors = { base: 'rgba(167, 212, 237, 0.12)', shine: ['rgba(167,212,237,0)', 'rgba(167,212,237,0.22)', 'rgba(167,212,237,0)'] };
+const onLight: ToneColors = { base: '#E4EDF5', shine: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0)'] };
+// Con el tema oscuro las superficies "claras" también son oscuras.
+const toneColors: Record<Tone, ToneColors> = { light: isDarkTheme() ? onDark : onLight, dark: onDark };
 
 // Bloque de carga con brillo que recorre la forma (shimmer).
 export function Skeleton({ width = '100%', height = 16, rounded = radius.xs, tone = 'light', style }: SkeletonProps) {
