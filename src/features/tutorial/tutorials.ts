@@ -14,15 +14,16 @@ export interface Tutorial {
   steps: TutorialStep[];
 }
 
-export type TutorialId = 'burst' | 'runner' | 'puzzle-red' | 'puzzle-binario' | 'puzzle-cifrado' | 'station' | 'ruta' | 'rutix';
+export type TutorialId = 'burst' | 'runner' | 'puzzle-red' | 'puzzle-memoria' | 'puzzle-binario' | 'puzzle-cifrado' | 'station' | 'ruta' | 'rutix';
 
 export const tutorials: Record<TutorialId, Tutorial> = {
   burst: {
     id: 'burst',
     title: 'Cómo se juega la Ráfaga',
     steps: [
-      { icon: 'bolt', title: 'Microjuegos de segundos', text: 'Son 6 microjuegos al azar. Cada uno te enseña algo de redes, señales o seguridad.' },
-      { icon: 'tap', title: 'Tú das la partida', text: 'Lee la misión y la pista de Rutix con calma. El reloj parte recién cuando tocas «Toca para jugar».' },
+      { icon: 'bolt', title: 'Ocho microjuegos', text: 'Son 8 microjuegos al azar. Cada uno te enseña algo de redes, señales o seguridad.' },
+      { icon: 'book', title: 'Primero, cómo se juega', text: 'Antes de cada ronda ves los pasos y una pista de Rutix. Léelos con calma: todavía no corre el reloj.' },
+      { icon: 'tap', title: 'Tú das la partida', text: 'El reloj parte recién cuando tocas «Toca para jugar». Al terminar, Rutix te explica la respuesta.' },
       { icon: 'heart', title: 'Cuida tus 3 vidas', text: 'Si fallas o se acaba el tiempo pierdes una vida. Rutix te explica por qué y sigues jugando.' },
       { icon: 'pause', title: 'Pausa cuando quieras', text: 'El botón de pausa detiene el reloj. Si va muy rápido o muy lento, cambia el ritmo en Ajustes.' },
     ],
@@ -46,6 +47,16 @@ export const tutorials: Record<TutorialId, Tutorial> = {
       { icon: 'refresh', title: 'Gira las piezas', text: 'Toca una pieza para girarla. Cuando un cable se enciende, ya está recibiendo señal.' },
       { icon: 'laptop', title: 'Conecta todos los equipos', text: 'Ganas cuando todos los notebooks quedan encendidos. No hay reloj: piensa tranquilo.' },
       { icon: 'lightbulb', title: 'Pide una pista', text: 'Si te trabas, Rutix acomoda una pieza por ti. Mientras menos giros uses, más puntos ganas.' },
+    ],
+  },
+  'puzzle-memoria': {
+    id: 'puzzle-memoria',
+    title: 'Cómo se juega Parejas TEL',
+    steps: [
+      { icon: 'grid', title: 'Cartas boca abajo', text: 'Toca una carta para darla vuelta. Algunas muestran un equipo o una idea; otras, lo que hace.' },
+      { icon: 'eye', title: 'Busca su pareja', text: 'Da vuelta otra carta. Si une el concepto con lo que hace, la pareja queda a la vista.' },
+      { icon: 'clock', title: 'Mira con calma', text: 'Si no calzan, se quedan un momento a la vista para que las memorices. No hay reloj.' },
+      { icon: 'star', title: 'Menos intentos, más puntos', text: 'Recuerda dónde estaba cada carta: mientras menos intentos uses, mejor puntaje.' },
     ],
   },
   'puzzle-binario': {
@@ -95,6 +106,7 @@ export const tutorials: Record<TutorialId, Tutorial> = {
       { icon: 'robot', title: 'Tu compañero', text: 'Rutix es un robot-antena. Te da pistas en los juegos y celebra contigo.' },
       { icon: 'signal', title: 'Su señal es su ánimo', text: 'Sube cuando juegas y cuando lo cuidas. Si pasan días sin jugar, le baja la señal.' },
       { icon: 'tap', title: 'Juega con él', text: 'Tócalo, chócale la mano, pídele un chiste, hazlo bailar o responde su «¿verdadero o falso?».' },
+      { icon: 'target', title: 'Misiones de cada día', text: 'Rutix propone tres metas diarias. Cúmplelas y te regala paquetes para TEL Runner.' },
       { icon: 'crown', title: 'Vístelo', text: 'En el guardarropa hay accesorios que se desbloquean jugando.' },
     ],
   },

@@ -13,7 +13,7 @@ export interface MicroGameInfo {
   mechanic: string;
 }
 
-// Metadatos de los 18 microjuegos (sin componentes, para listas y pruebas).
+// Metadatos de los 22 microjuegos (sin componentes, para listas y pruebas).
 export const microGameCatalog: MicroGameInfo[] = [
   { id: 'connect-network', title: 'Conecta la red', instruction: 'Toca el equipo que falta para llegar a Internet.', tip: 'El router es la puerta a Internet; el switch une los equipos de una misma red.', durationSeconds: 10, icon: 'router', area: 'redes', mechanic: 'Elige' },
   { id: 'clean-signal', title: 'Señal limpia', instruction: 'Elige el medio con menos interferencia.', tip: 'La fibra casi no sufre interferencia. Más oscilaciones en el mismo tiempo = más frecuencia.', durationSeconds: 10, icon: 'wave', area: 'teleco', mechanic: 'Compara' },
@@ -33,6 +33,10 @@ export const microGameCatalog: MicroGameInfo[] = [
   { id: 'fast-route', title: 'Ruta más rápida', instruction: 'Elige la ruta con menos latencia total.', tip: 'Suma los milisegundos de cada salto: gana el total más bajo.', durationSeconds: 15, icon: 'route', area: 'redes', mechanic: 'Calcula' },
   { id: 'safe-url', title: 'Sitio verdadero', instruction: 'Elige la dirección web oficial.', tip: 'Mira el final del dominio: usm.cl.algo.ru no es de la USM.', durationSeconds: 14, icon: 'shieldLock', area: 'seguridad', mechanic: 'Detecta' },
   { id: 'unit-order', title: 'De bit a giga', instruction: 'Ordena las unidades de menor a mayor.', tip: 'bit → byte → kilo → mega → giga. Cada paso es mil veces más (salvo el primero: 8 bits).', durationSeconds: 12, icon: 'database', area: 'software', mechanic: 'Ordena' },
+  { id: 'port-match', title: 'Puerto correcto', instruction: 'Elige el puerto que usa el servicio.', tip: 'La web segura va por el 443; la web sin candado, por el 80.', durationSeconds: 14, icon: 'door', area: 'redes', mechanic: 'Elige' },
+  { id: 'device-role', title: '¿Qué equipo es?', instruction: 'Lee la pista y elige el equipo de red.', tip: 'Router = Internet. Switch = cables. Access point = Wi-Fi.', durationSeconds: 15, icon: 'lanSwitch', area: 'hardware', mechanic: 'Identifica' },
+  { id: 'wifi-safe', title: 'Wi-Fi seguro', instruction: 'Elige la red Wi-Fi mejor protegida.', tip: 'Mira el tipo de seguridad de cada red: WPA3 le gana a todas.', durationSeconds: 14, icon: 'accessPoint', area: 'seguridad', mechanic: 'Protege' },
+  { id: 'acronym', title: 'Sigla TEL', instruction: 'Elige qué significa la sigla.', tip: 'Casi todas vienen del inglés: piensa en Network, Protocol, System…', durationSeconds: 15, icon: 'book', area: 'software', mechanic: 'Vocabulario' },
 ];
 
 export function getMicroGameInfo(id: string): MicroGameInfo | undefined {

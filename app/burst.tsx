@@ -37,7 +37,7 @@ import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome, MicroGameId } from '@/types/game';
 
-const ROUNDS = 6;
+const ROUNDS = 8;
 const FOCUS_ROUNDS = 3;
 const LIVES = 3;
 const READY_GUARD_MS = 350;
@@ -47,6 +47,7 @@ const HURRY_SECONDS = 5;
 
 // Lo que dice Rutix antes de partir, según el ritmo elegido en Ajustes.
 const introLines: Record<GamePace, string> = {
+  relaxed: 'Sin apuro: cada ronda parte cuando tú tocas y hay tiempo de sobra para leer y pensar.',
   calm: 'Lee con calma: cada ronda parte cuando tú tocas y el reloj va tranquilo.',
   normal: 'Cada ronda parte cuando tú tocas. ¡Concéntrate y a jugar!',
   fast: 'Elegiste el ritmo rápido: reloj corto y cada vez más veloz. ¡A volar!',

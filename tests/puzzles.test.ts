@@ -30,9 +30,9 @@ import { loadPuzzleProgress, recordPuzzleSolved } from '@/storage/puzzles';
 import type { GameResult } from '@/types/game';
 
 describe('micro games catalog', () => {
-  it('has 18 unique micro games, each with a component and a Rutix tip', () => {
-    expect(microGameCatalog).toHaveLength(18);
-    expect(new Set(microGameCatalog.map((game) => game.id)).size).toBe(18);
+  it('has 22 unique micro games, each with a component and a Rutix tip', () => {
+    expect(microGameCatalog).toHaveLength(22);
+    expect(new Set(microGameCatalog.map((game) => game.id)).size).toBe(22);
     microGameRegistry.forEach((game) => {
       expect(game.Component).toBeDefined();
       expect(game.tip.length).toBeGreaterThan(15);

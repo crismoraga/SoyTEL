@@ -80,6 +80,22 @@ export const microGameGuides: Record<MicroGameId, MicroGameGuide> = {
     steps: ['Lee las unidades que aparecen.', 'Tócalas de la más chica a la más grande.'],
     learn: 'Ocho bits forman un byte; mil bytes, un kilobyte; después vienen el mega y el giga.',
   },
+  'port-match': {
+    steps: ['Lee qué servicio se pide.', 'Toca el número de puerto que le corresponde.'],
+    learn: 'Un mismo equipo ofrece varios servicios a la vez: cada uno atiende en su propio puerto.',
+  },
+  'device-role': {
+    steps: ['Lee la pista entre comillas.', 'Toca el equipo de red que hace esa tarea.'],
+    learn: 'Router, switch, access point y firewall trabajan juntos, pero cada uno cumple una tarea distinta.',
+  },
+  'wifi-safe': {
+    steps: ['Mira el tipo de seguridad bajo cada red.', 'Toca la que está mejor protegida.'],
+    learn: 'Una red abierta no cifra nada. WPA2 y WPA3 protegen lo que envías con una clave.',
+  },
+  acronym: {
+    steps: ['Lee la sigla.', 'Toca lo que significa de verdad.'],
+    learn: 'Las siglas de redes resumen nombres en inglés: saber qué significan ayuda a entender qué hacen.',
+  },
 };
 
 export function getMicroGameGuide(id: MicroGameId): MicroGameGuide {

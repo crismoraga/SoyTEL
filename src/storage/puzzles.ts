@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Avance en los desafíos sin reloj (Conecta la red, Binario, Mensaje cifrado).
+// Avance en los desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado).
 const PUZZLES_KEY = '@soytel/puzzles';
 
-export type PuzzleId = 'red' | 'binario' | 'cifrado';
-export const puzzleIds: PuzzleId[] = ['red', 'binario', 'cifrado'];
+export type PuzzleId = 'red' | 'memoria' | 'binario' | 'cifrado';
+export const puzzleIds: PuzzleId[] = ['red', 'memoria', 'binario', 'cifrado'];
 
 export interface PuzzleProgress {
   // Nivel más alto resuelto (0 = ninguno).
@@ -17,6 +17,7 @@ export type PuzzleProgressMap = Record<PuzzleId, PuzzleProgress>;
 
 const empty = (): PuzzleProgressMap => ({
   red: { level: 0, best: 0, solved: 0 },
+  memoria: { level: 0, best: 0, solved: 0 },
   binario: { level: 0, best: 0, solved: 0 },
   cifrado: { level: 0, best: 0, solved: 0 },
 });

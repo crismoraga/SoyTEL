@@ -11,7 +11,7 @@ import { LayerOrderGame, UnitOrderGame } from './games/OrderTapGame';
 import { PacketCatchGame } from './games/PacketCatchGame';
 import { PacketRushGame } from './games/PacketRushGame';
 import { PasswordStrongGame } from './games/PasswordStrongGame';
-import { FastRouteGame, IpValidGame, SafeUrlGame } from './games/PickOneGame';
+import { AcronymGame, DeviceRoleGame, FastRouteGame, IpValidGame, PortMatchGame, SafeUrlGame, WifiSafeGame } from './games/PickOneGame';
 import { PingCheckGame } from './games/PingCheckGame';
 import { SequenceMemoryGame } from './games/SequenceMemoryGame';
 import { SignalTimingGame } from './games/SignalTimingGame';
@@ -37,6 +37,10 @@ const components: Record<MicroGameId, ComponentType<MicroGameProps>> = {
   'fast-route': FastRouteGame,
   'safe-url': SafeUrlGame,
   'unit-order': UnitOrderGame,
+  'port-match': PortMatchGame,
+  'device-role': DeviceRoleGame,
+  'wifi-safe': WifiSafeGame,
+  acronym: AcronymGame,
 };
 
 export const microGameRegistry: MicroGameDefinition[] = microGameCatalog.map((info) => ({

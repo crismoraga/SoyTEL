@@ -31,14 +31,14 @@ const slides: Slide[] = [
     body: 'Juegos cortos de redes, señales, software, hardware y ciberseguridad para conocer Ingeniería Civil Telemática.',
   },
   {
-    kicker: 'Juega en ráfagas',
-    title: '12 microjuegos, segundos para cada uno',
-    body: 'Sesiones de 15 a 20 minutos: ráfagas frenéticas, un concurso de preguntas, una historia en el campus y recorridos en grupo.',
+    kicker: 'Juega a tu ritmo',
+    title: 'Microjuegos, carreras y desafíos',
+    body: 'Ráfagas de microjuegos, TEL Runner, desafíos sin reloj, un concurso y una historia en el campus. Cada juego te explica cómo se juega y tú eliges el ritmo.',
   },
   {
     kicker: 'Tu compañero Rutix',
-    title: 'Cuida a Rutix y colecciona medallas',
-    body: 'Cada partida sube su señal. Si lo dejas solo, se desanima. Sin cuentas ni correos: tu progreso vive en este teléfono.',
+    title: 'Juega con Rutix y colecciona medallas',
+    body: 'Rutix te da pistas, celebra contigo y te propone misiones cada día. Tu progreso vive en este teléfono; si quieres, crea una cuenta para entrar al ranking.',
   },
 ];
 

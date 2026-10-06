@@ -172,7 +172,7 @@ export default function GamesScreen() {
               Ráfaga TEL
             </TelText>
             <TelText variant="caption" color="accentSoft">
-              6 microjuegos al azar y 3 vidas. Cada ronda parte cuando tú tocas.
+              8 microjuegos al azar y 3 vidas. Cada ronda parte cuando tú tocas y explica cómo se juega.
             </TelText>
             {bestBurst > 0 && (
               <TelText variant="label" color="accent" tabular>

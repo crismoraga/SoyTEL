@@ -27,6 +27,17 @@ export const puzzles: PuzzleInfo[] = [
     levelName: (level) => (level <= 1 ? '3×3' : level <= 3 ? '4×4' : level <= 6 ? '5×5' : '6×6'),
   },
   {
+    id: 'memoria',
+    title: 'Parejas TEL',
+    subtitle: 'Encuentra las parejas: cada equipo o idea con lo que hace.',
+    how: 'Toca dos cartas. Si una es el concepto y la otra lo que hace, forman pareja.',
+    learned: 'Cada pieza de una red tiene una tarea: el router elige caminos, el switch une equipos, el firewall protege y el DNS traduce nombres.',
+    icon: 'grid',
+    color: '#F2CE63',
+    maxLevel: 5,
+    levelName: (level) => `${4 + 2 * (Math.min(5, Math.max(1, level)) - 1)} parejas`,
+  },
+  {
     id: 'binario',
     title: 'Binario',
     subtitle: 'Convierte números entre decimal y binario encendiendo bits.',

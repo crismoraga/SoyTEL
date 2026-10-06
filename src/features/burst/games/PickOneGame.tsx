@@ -4,6 +4,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { colors, monoFamily, radius, spacing } from '@/theme';
+import { acronymRound, deviceRound, portRound, wifiRound, type ConceptRound } from '../concepts';
 import { fastRouteRound, ipRound, urlRound } from '../logic';
 import type { MicroGameProps } from '../types';
 
@@ -139,6 +140,18 @@ export function SafeUrlGame(props: MicroGameProps) {
     />
   );
 }
+
+// Microjuegos 19 a 22: conceptos con explicación en cada alternativa.
+function conceptGame(build: () => ConceptRound) {
+  return function ConceptGame(props: MicroGameProps) {
+    return <PickOneGame {...props} build={build} />;
+  };
+}
+
+export const PortMatchGame = conceptGame(() => portRound());
+export const DeviceRoleGame = conceptGame(() => deviceRound());
+export const WifiSafeGame = conceptGame(() => wifiRound());
+export const AcronymGame = conceptGame(() => acronymRound());
 
 const styles = StyleSheet.create({
   container: {

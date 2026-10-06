@@ -27,6 +27,7 @@ import { TipSheet } from '@/features/tips/TipSheet';
 import { useMemberView } from '@/route/hooks';
 import { expressionForMood, signalForMood } from '@/graphics/rutix';
 import { formatNumber, greeting } from '@/lib/format';
+import { missionStates } from '@/lib/dailyMissions';
 import { guideProgress, starterGuide } from '@/lib/guide';
 import { nextMission } from '@/lib/missions';
 import { useEntering } from '@/lib/motion';
@@ -87,6 +88,8 @@ export default function HomeScreen() {
   const guideSteps = data ? starterGuide(data) : [];
   const guide = guideProgress(guideSteps);
   const nextStep = guide.next;
+  const missions = data ? missionStates(data.results) : [];
+  const missionsDone = missions.filter((state) => state.done).length;
 
   return (
     <Screen
@@ -316,7 +319,7 @@ export default function HomeScreen() {
             <Rutix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
             <View style={styles.flex}>
               <TelText variant="small" color="accent" style={styles.kicker}>
-                TU COMPAÑERO
+                TU COMPAÑERO · MISIONES {missionsDone} DE {missions.length}
               </TelText>
               <TelText variant="subtitle" color="cream">
                 Rutix está {moodLabel(profile.mascotMood)}
@@ -340,7 +343,7 @@ export default function HomeScreen() {
             image={brandImages.spotLabs}
             tag={<Tag tone="navy" live label="EN VIVO" />}
             title="Ráfaga relámpago"
-            meta="6 microjuegos · 3 min"
+            meta="8 microjuegos · a tu ritmo"
             onPress={() => router.push('/burst')}
           />
           <FeatureCard

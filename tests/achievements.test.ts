@@ -20,9 +20,9 @@ function context(partial: Partial<AchievementContext> = {}): AchievementContext 
 }
 
 describe('achievement data', () => {
-  it('has 26 unique achievements with valid glyphs and thresholds', () => {
-    expect(achievements).toHaveLength(26);
-    expect(new Set(achievements.map((item) => item.id)).size).toBe(26);
+  it('has 31 unique achievements with valid glyphs and thresholds', () => {
+    expect(achievements).toHaveLength(31);
+    expect(new Set(achievements.map((item) => item.id)).size).toBe(31);
     for (const achievement of achievements) {
       expect(achievement.threshold).toBeGreaterThan(0);
       expect(medallionGlyphs[achievement.glyph]).toBeDefined();
