@@ -1,10 +1,11 @@
-import type { PropsWithChildren, ReactElement, ReactNode, RefObject } from 'react';
+import { useRef, useState, type PropsWithChildren, type ReactElement, type ReactNode, type RefObject } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type RefreshControlProps,
   type StyleProp,
   type ViewStyle,
@@ -39,7 +40,7 @@ export function Screen({
   footer,
   backdrop,
   padded = true,
-  keyboard = false,
+  keyboard = true,
   inTabs = false,
   contentStyle,
   refreshControl,
@@ -50,6 +51,17 @@ export function Screen({
   const isDark = (tone ?? (dark ? 'dark' : 'light')) === 'dark';
   const topInset = header ? 0 : insets.top;
   const bottomInset = footer || inTabs ? 0 : insets.bottom;
+  // Al desplazar, el contenido pasaría por debajo de la barra de estado (la app dibuja de borde a
+  // borde): una franja azul noche la mantiene legible en ambos temas.
+  const [scrolled, setScrolled] = useState(false);
+  const scrolledRef = useRef(false);
+
+  function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const next = event.nativeEvent.contentOffset.y > 6;
+    if (next === scrolledRef.current) return;
+    scrolledRef.current = next;
+    setScrolled(next);
+  }
 
   const content = (
     <View
@@ -72,6 +84,8 @@ export function Screen({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
+      onScroll={insets.top > 0 ? onScroll : undefined}
+      scrollEventThrottle={48}
     >
       {header}
       {content}
@@ -83,8 +97,10 @@ export function Screen({
     </View>
   );
 
+  // En Android de borde a borde la ventana ya no se encoge con el teclado: el relleno deja a la
+  // vista el campo que se está escribiendo (y no agrega nada si la ventana sí se encogió).
   const wrapped = keyboard ? (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.flex} behavior="padding">
       {body}
       {footer}
     </KeyboardAvoidingView>
@@ -94,17 +110,24 @@ export function Screen({
       {footer}
     </>
   );
+  const scrim = scroll && scrolled ? <View pointerEvents="none" style={[styles.statusScrim, { height: insets.top }]} /> : null;
 
   if (isDark) {
     return (
       <LinearGradient colors={[colors.primary, colors.primarySoft]} style={styles.flex}>
         <BrandBackdrop variant={backdrop ?? 'stars'} />
         {wrapped}
+        {scrim}
       </LinearGradient>
     );
   }
 
-  return <View style={[styles.flex, styles.light]}>{wrapped}</View>;
+  return (
+    <View style={[styles.flex, styles.light]}>
+      {wrapped}
+      {scrim}
+    </View>
+  );
 }
 
 // Barra inferior fija (acciones principales), como la de "Reto de estación".
@@ -132,6 +155,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  statusScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.primary,
   },
   content: {
     flexGrow: 1,

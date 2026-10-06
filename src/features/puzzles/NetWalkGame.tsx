@@ -9,7 +9,7 @@ import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { createNetPuzzle, currentMasks, EAST, minimalMoves, netScore, NORTH, portCount, poweredCells, SOUTH, turnsToSolve, WEST } from './netwalk';
+import { createNetPuzzle, currentMasks, EAST, hintOrder, minimalMoves, netScore, NORTH, portCount, poweredCells, SOUTH, turnsToSolve, WEST } from './netwalk';
 import type { PuzzleGameProps } from './types';
 
 const LIT = colors.accent;
@@ -120,17 +120,15 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
 
   function hint() {
     if (done.current) return;
-    const pending = turns.map((value, index) => (turnsToSolve(puzzle.solved[index], value) > 0 ? index : -1)).filter((index) => index >= 0);
-    if (pending.length === 0) return;
-    // Primero las piezas pegadas a la zona con señal: es por donde conviene avanzar.
-    const near = pending.filter((index) => powered[index]);
-    const target = (near.length ? near : pending)[0];
+    // La pista avanza desde el servidor hacia afuera: acomoda la primera pieza mal girada del camino.
+    const target = hintOrder(puzzle).find((index) => turnsToSolve(puzzle.solved[index], turns[index]) > 0);
+    if (target === undefined) return;
     const next = turns.map((value, index) => (index === target ? value + turnsToSolve(puzzle.solved[index], value) : value));
     const usedHints = hints + 1;
     setTurns(next);
     setHints(usedHints);
     setHinted(target);
-    say('Te acomodé esa pieza. Sigue el cable encendido desde el servidor.', 'tip');
+    say(target === puzzle.server ? 'Giré el servidor hacia su cable. Desde ahí parte la señal.' : 'Te acomodé esa pieza. Sigue el cable encendido desde el servidor.', 'tip');
     finish(next, moves, usedHints);
   }
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "SoyTEL",
     "slug": "soytel",
-    "version": "2.1.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon.png",
     "scheme": "soytel",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cl.diftel.soytel",
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "package": "cl.diftel.soytel",
@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/brand/adaptive-icon.png",
         "backgroundColor": "#0B2D45"
       },
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "favicon": "./assets/brand/favicon.png",
@@ -44,6 +44,7 @@
       ],
       "expo-status-bar",
       "./plugins/withAndroidReleaseSigning",
+      "./plugins/withAndroidTextLayout",
       "expo-secure-store",
       "expo-web-browser"
     ],

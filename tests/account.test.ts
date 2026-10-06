@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   aliasProblem,
   allowedXp,
@@ -9,6 +10,7 @@ import {
   normalizeContact,
   schoolProblem,
 } from '@/account/rules';
+import { dismissAccountOffer, initAccount, isOfferSnoozed, OFFER_SNOOZE_MS, shouldOfferAccount } from '@/account/store';
 import { avatarCatalog, isAvatarUnlocked } from '@/data/avatars';
 import { detectDeviceMotion, particleBudget, resolveMotionLevel } from '@/lib/motion';
 import { roundDuration } from '@/features/burst/registry';
@@ -109,5 +111,21 @@ describe('motion levels', () => {
     // En ritmo tranquilo la Ráfaga no acelera y da más tiempo que el ritmo original.
     expect(roundDuration(10, 4, false, paceFactor('calm'), PACE_ACCELERATION.calm)).toBe(17);
     expect(roundDuration(10, 4, false, paceFactor('fast'), PACE_ACCELERATION.fast)).toBe(7);
+  });
+});
+
+describe('account invitation', () => {
+  it('rests for half a day after "ahora no"', async () => {
+    await AsyncStorage.clear();
+    await initAccount();
+    expect(shouldOfferAccount()).toBe(true);
+    dismissAccountOffer();
+    expect(shouldOfferAccount()).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // La hora del descarte queda guardada: al reiniciar la app se respeta el descanso.
+    const savedAt = Number(await AsyncStorage.getItem('@soytel/account-offer'));
+    expect(isOfferSnoozed(savedAt)).toBe(true);
+    expect(isOfferSnoozed(savedAt, savedAt + OFFER_SNOOZE_MS + 1)).toBe(false);
+    expect(isOfferSnoozed(0)).toBe(false);
   });
 });

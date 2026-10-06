@@ -1,4 +1,4 @@
-SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjuegos, un concurso, una historia en el campus, recorridos en grupo y Rutix, una mascota que se cuida jugando. La identidad es la de Telemática USM: azul noche, crema y celeste, estrellas de cuatro puntas y ondas de señal. Todo lo de este sistema sale del código de la app (`src/theme`, `src/graphics`, `src/components`).
+SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjuegos, desafíos sin reloj, un concurso, una historia en el campus, la Ruta Telemática en vivo y Rutix, una mascota que acompaña y se cuida jugando. La identidad es la de Telemática USM: azul noche, crema y celeste, estrellas de cuatro puntas y ondas de señal. Tiene tema claro y tema oscuro. Todo lo de este sistema sale del código de la app (`src/theme`, `src/graphics`, `src/components`).
 
 ## Voz y contenido
 
@@ -11,9 +11,13 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 
 ## Color
 
-- La base es `primary` (#0B2D45) con texto `cream`: cabeceras, botón principal, pantallas inmersivas. Sobre `primary`, el texto secundario es `accentSoft` y el cuerpo largo `onDark`.
-- Las pantallas claras usan fondo `paper`, tarjetas `surface` con borde `border`, texto `ink` y secundario `muted`.
-- Las pantallas oscuras (juegos, historia, Rutix) usan un degradado `primary` → `primarySoft` con un fondo de patrón (ver Patrones).
+- Hay dos familias de color. Las de marca no cambian con el tema: `primary` (#0B2D45), `secondary`, `accent`, `cream` y los estados. Las de superficie sí cambian: `paper`, `surface`, `surfaceAlt`, `border`, `highlight`, el texto `ink`, `inkSoft`, `inkAccent` y la acción `action` con `actionInk`.
+- Regla de texto: sobre una superficie del tema se escribe con `ink` (principal), `inkSoft` (secundario) o `inkAccent` (enlaces, kickers, íconos). Sobre un relleno de marca (`cream`, `accent`, color de pilar) se escribe con `primary` o `secondary`. Nunca `primary` sobre `surface`: en el tema oscuro no se lee.
+- La acción principal de una pantalla (botón primario, pestaña activa, chip seleccionado) usa `action` con `actionInk`: azul noche con texto crema en claro, celeste con texto azul noche en oscuro.
+- Las cabeceras son `primary` con texto `cream` en los dos temas. Sobre `primary`, el texto secundario es `accentSoft` y el cuerpo largo `onDark`.
+- Las pantallas de lectura usan fondo `paper` y tarjetas `surface` con borde `border`.
+- Las pantallas inmersivas (juegos, historia, Rutix) usan un degradado `primary` → `primarySoft` con un fondo de patrón (ver Patrones), igual en ambos temas.
+- El tema se elige en Ajustes («Del teléfono», «Claro», «Oscuro»); por defecto sigue al del sistema. La vista `Themes` muestra ambos lado a lado.
 - `accent` es el celeste de la señal: arcos de medalla, barras de tiempo, progreso activo. Como texto, solo sobre `primary`.
 - `cream` es la acción principal sobre fondos azules («Comenzar», «¡Empezar!») y el anillo de las medallas.
 - Estados: `success`/`successSoft`/`successInk` para aciertos, `danger`/`dangerSoft`/`dangerInk` para errores y vidas perdidas. Acompáñalos siempre con ícono (✓/✕) o palabra, nunca solo con color.
@@ -34,14 +38,14 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 
 ## Iconografía
 
-- Usa los 95 íconos propios (`TelIcon`, grupo Íconos): grilla 24, trazo 2, extremos redondeados, color por `currentColor`. No mezcles otras familias de íconos ni emoji.
+- Usa los íconos propios (`TelIcon`, grupo Íconos): grilla 24, trazo 2, extremos redondeados, color por `currentColor`. No mezcles otras familias de íconos ni emoji.
 - Íconos de red para contenido técnico (`router`, `server`, `antenna`, `fiber`, `packet`, `terminal`, `shieldCheck`); íconos de interfaz para navegación (`home`, `gamepad`, `school`, `trophy`, `bell`, `chevronLeft`).
 - Un ícono solo, sin texto, necesita nombre accesible.
 
 ## Medallas, Rutix e ilustraciones
 
 - Las medallas (grupo Medallas) representan logros, áreas de la carrera, estaciones de la ruta y accesos de Inicio. Estado bloqueado en gris con candado; en progreso con arco parcial; la rareza cambia el anillo y suma estrellas.
-- Rutix (grupo Rutix) acompaña, reacciona y celebra. Su ánimo se ve en las barras del pecho (0–4). Un solo Rutix por pantalla.
+- Rutix (grupo Rutix) acompaña, reacciona y celebra: 15 expresiones, 7 poses y un guardarropa de accesorios que se desbloquean jugando. Su ánimo se ve en las barras del pecho (0–4). Sus colores son fijos, por eso va sobre fondos azul noche. Un solo Rutix por pantalla.
 - Las ilustraciones (grupo Ilustraciones) abren estados vacíos, errores, onboarding y tarjetas de modos. Versión clara sobre `paper`, versión `-oscuro` sobre `primary`.
 - El arte rasterizado de la marca (grupo Marca) se usa en la bienvenida, el primer paso del onboarding y las tarjetas de carrusel; nunca se redibuja el logo.
 
@@ -55,7 +59,7 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 - Presionar encoge a 0,96 con resorte; las entradas de contenido suben y aparecen escalonadas cada 60 ms (`duration-slow`).
 - Movimiento ambiental (Rutix flota y parpadea, estrellas titilan) en `duration-ambient`.
 - Las celebraciones (confeti de estrellas) marcan logros reales, no navegación.
-- Todo se detiene con «Reducir animaciones» en Perfil o con el ajuste del sistema.
+- El nivel de animación se elige en Ajustes: completas, equilibradas o mínimas (automático según el teléfono). Con el nivel mínimo, o con el ajuste del sistema para reducir movimiento, se apaga todo lo decorativo.
 
 ## Carga, vacío y error
 
@@ -69,6 +73,15 @@ SoyTEL es la app de juegos cortos de Ingeniería Civil Telemática USM: microjue
 - Cada respuesta muestra `FeedbackPanel` con la explicación; la vista se desplaza hasta él.
 - Logros y subidas de nivel aparecen como `Toast` arriba y quedan registrados en Avisos.
 
+## Juegos
+
+- Nadie juega contra el apuro: cada ronda y cada etapa parten cuando la persona toca («Toca para jugar», «Toca para empezar») y, tras cada respuesta, la explicación espera un «Continuar».
+- El ritmo se elige en Ajustes: tranquilo (por defecto, tiempos ×1,7), normal (×1,35) o rápido (×1, y la Ráfaga acelera). En la ruta en vivo lo fija el stand para todo el grupo.
+- Rutix acompaña la partida (`CoachBubble`): da una pista antes de cada microjuego, mira el reloj contigo, celebra los aciertos y anima tras un error. Se puede apagar en Ajustes; entonces las pistas se muestran como texto.
+- Todo juego con reloj tiene pausa (`PauseSheet`); salir de una partida en curso siempre pide confirmación.
+- Los desafíos sin reloj («Conecta la red», «Binario», «Mensaje cifrado») avanzan por niveles y premian resolver con pocos movimientos, no la velocidad.
+- El color nunca es la única señal: acierto y error llevan ícono y palabra; los cables con señal cambian también de relleno.
+
 ## Pantallas de referencia
 
-Las pantallas de Claude Design del proyecto (Bienvenida, Onboarding, Inicio, Centro de avisos, Mi ruta, Reto de estación, Mis logros y Conoce la carrera) definen la composición: cabecera `primary` con kicker, título y subtítulo; tarjetas `surface` con borde; barra inferior de cinco pestañas con píldora `highlight` en la activa.
+Las pantallas de Claude Design del proyecto (Bienvenida, Onboarding, Inicio, Centro de avisos, Mi ruta, Reto de estación, Mis logros y Conoce la carrera) definen la composición: cabecera `primary` con kicker, título y subtítulo; tarjetas `surface` con borde; barra inferior de cinco pestañas con la activa marcada completa en `action`. Las secciones de la barra también se cambian deslizando hacia los lados.

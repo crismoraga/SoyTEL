@@ -48,6 +48,8 @@ export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProp
       clearInterval(interval);
       pending.forEach(clearTimeout);
       pending.clear();
+      // Al pausar o terminar no quedan paquetes a medio caer.
+      setPackets([]);
     };
   }, [active, level, pace]);
 

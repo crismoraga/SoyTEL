@@ -20,7 +20,7 @@ export const coachLines: Record<CoachMood, string[]> = {
   tip: ['Te doy una pista…', 'Mira bien antes de tocar.', 'Fíjate en los detalles.'],
   good: ['¡Bien ahí!', '¡Eso es!', '¡Buena conexión!', '¡Así se hace!', '¡Vas súper!', '¡Paquete entregado!'],
   great: ['¡Señal completa!', '¡Brillante!', '¡Nivel ingeniero!', '¡Impecable!'],
-  bad: ['Casi. ¡Probemos de nuevo!', 'No pasa nada: de los errores se aprende.', 'Uy, se cayó un paquete. ¡Sigamos!', 'Tranquilo, a mí también me pasa.', 'Buen intento. La próxima sale.'],
+  bad: ['Casi. ¡Probemos de nuevo!', 'No pasa nada: de los errores se aprende.', 'Uy, se cayó un paquete. ¡Sigamos!', 'Calma, a mí también me pasa.', 'Buen intento. La próxima sale.'],
   hurry: ['¡Queda poco tiempo!', '¡Último tramo!', '¡Tú puedes, falta poco!'],
   win: ['¡Lo lograste!', '¡Misión cumplida!', '¡Estoy orgulloso de ti!', '¡Qué gran partida!'],
   lose: ['Esta vez no salió, pero ya sabes más que antes.', '¿Otra ronda? Yo me apunto.', 'Cada intento te deja más cerca.'],

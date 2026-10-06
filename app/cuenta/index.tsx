@@ -71,7 +71,7 @@ export default function AccountScreen() {
             Cuenta creada
           </TelText>
           <TelText variant="title" color="cream" align="center">
-            ¡Bienvenido/a, {player.alias}!
+            ¡Qué bueno tenerte aquí, {player.alias}!
           </TelText>
           <TelText variant="body" color="accentSoft" align="center">
             {account.rank ? `Partes en el lugar ${formatNumber(account.rank.rank)} de ${formatNumber(account.rank.total)} del ranking.` : 'Ya apareces en el ranking global.'}

@@ -7,6 +7,7 @@ import { Celebration } from '@/components/feedback/Celebration';
 import { Rutix } from '@/components/graphics/Rutix';
 import { Screen } from '@/components/Screen';
 import { AccountGate } from '@/features/account/AccountGate';
+import { PauseSheet, useBackToPause } from '@/features/coach/PauseSheet';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { getStationGame } from '@/features/stations/registry';
@@ -24,6 +25,9 @@ export default function StationPracticeScreen() {
   const pace = usePaceFactor();
   const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: 0 }));
   const [result, setResult] = useState<{ score: number; outcome: GameOutcome | null } | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  // Con una partida en curso, volver atrás pregunta antes de salir.
+  useBackToPause(Boolean(info) && !result && !leaving, () => setLeaving(true));
 
   if (!info) return <Redirect href="/games" />;
   const Game = info.Component;
@@ -46,7 +50,7 @@ export default function StationPracticeScreen() {
             {result.outcome && <Tag tone="cream" icon="sparkle" label={`+${result.outcome.xpGained} XP`} />}
           </View>
           <TelText variant="body" color="accentSoft" align="center">
-            {great ? '¡Listo para la ruta en vivo!' : 'Practica otra vez: en la ruta cada punto cuenta.'}
+            {great ? '¡Con esto brillas en la ruta en vivo!' : 'Practica otra vez: en la ruta cada punto cuenta.'}
           </TelText>
         </View>
         <View style={styles.actions}>
@@ -71,7 +75,7 @@ export default function StationPracticeScreen() {
       backdrop="stars"
       scroll={false}
       header={
-        <AppHeader compact onBack={() => router.back()} right={<Tag tone="glass" icon="pin" label={info.place} />}>
+        <AppHeader compact onBack={() => setLeaving(true)} right={<Tag tone="glass" icon="pin" label={info.place} />}>
           <TelText variant="heading" color="cream">
             {info.title}
           </TelText>
@@ -95,6 +99,17 @@ export default function StationPracticeScreen() {
         }}
       />
       <AccountGate />
+      <PauseSheet
+        visible={leaving}
+        title="¿Salir del juego?"
+        body="El reloj sigue corriendo mientras decides. Si sales ahora, esta práctica no suma puntos."
+        leaveLabel="Salir"
+        onStay={() => setLeaving(false)}
+        onLeave={() => {
+          setLeaving(false);
+          router.back();
+        }}
+      />
     </Screen>
   );
 }

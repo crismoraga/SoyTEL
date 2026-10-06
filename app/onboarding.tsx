@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated from 'react-native-reanimated';
@@ -61,19 +61,22 @@ export default function OnboardingScreen() {
       await pushInbox([
         {
           kind: 'aviso',
-          title: `¡Bienvenido a SoyTEL, ${profile.alias}!`,
+          title: `¡Te damos la bienvenida, ${profile.alias}!`,
           body: 'Tu ruta por Telemática USM está lista. Explora, aprende y conecta.',
           route: '/games',
         },
       ]);
-      router.replace(next === 'ruta' ? '/ruta' : '/home');
+      // La bienvenida no queda debajo de Inicio: volver atrás desde ahí sale de la app.
+      if (router.canDismiss()) router.dismissAll();
+      router.replace('/home');
+      if (next === 'ruta') router.push('/ruta');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior="padding">
       <View style={styles.art}>
         {step === 0 ? (
           <Image source={brandImages.onboardingHero} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Laptop, libros y logo de Telemática USM sobre el campus" />

@@ -82,6 +82,10 @@ export function BigCountdown({ seconds, label }: { seconds: number; label: strin
 // Seis casillas para el código del stand. El campo de texto real cubre todas las casillas (invisible),
 // así el toque llega directo al campo nativo y el teclado siempre aparece: un campo oculto de 1×1 px
 // no abría el teclado en Android.
+// Tinta invisible del campo real. No se usa 'transparent': en Android ese valor equivale a
+// "sin color" y el texto se dibujaba encima de las casillas.
+const HIDDEN_INK = 'rgba(255, 255, 255, 0)';
+
 export function CodeBoxes({ value, onChange, autoFocus = false, onSubmit }: { value: string; onChange: (code: string) => void; autoFocus?: boolean; onSubmit?: () => void }) {
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
@@ -122,7 +126,7 @@ export function CodeBoxes({ value, onChange, autoFocus = false, onSubmit }: { va
         onSubmitEditing={onSubmit}
         caretHidden
         contextMenuHidden
-        selectionColor="transparent"
+        selectionColor={HIDDEN_INK}
         underlineColorAndroid="transparent"
         accessibilityLabel={`Código de la ruta, 6 caracteres. Escrito: ${value || 'nada'}`}
         style={[styles.codeInput, font('bodyBold')]}
@@ -239,9 +243,10 @@ const styles = StyleSheet.create({
   },
   codeInput: {
     ...StyleSheet.absoluteFill,
-    color: 'transparent',
+    color: HIDDEN_INK,
     backgroundColor: 'transparent',
-    fontSize: 16,
+    // En la web 16 px evita el zoom de Safari al enfocar; en Android el texto se achica al mínimo.
+    fontSize: Platform.OS === 'android' ? 1 : 16,
     textAlign: 'center',
     padding: 0,
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', caretColor: 'transparent' } as object) : null),

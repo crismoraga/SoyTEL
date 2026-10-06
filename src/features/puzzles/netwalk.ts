@@ -76,6 +76,34 @@ export function generateNet(size: number, random: () => number = Math.random): {
   return { size, server, solved };
 }
 
+// Equipos de la red: las puntas del árbol (una sola conexión) que no son el servidor.
+export function terminalCount(net: { server: number; solved: number[] }): number {
+  return net.solved.filter((mask, index) => index !== net.server && portCount(mask) === 1).length;
+}
+
+// Mínimo de equipos por tablero: con uno solo el desafío sería un único cable largo.
+export function minTerminals(size: number): number {
+  return size - 1;
+}
+
+// Orden para las pistas: desde el servidor hacia afuera, siguiendo los cables de la solución.
+export function hintOrder(net: { size: number; server: number; solved: number[] }): number[] {
+  const order: number[] = [net.server];
+  const seen = new Set<number>(order);
+  for (let head = 0; head < order.length; head += 1) {
+    const cell = order[head];
+    const x = cell % net.size;
+    const y = Math.floor(cell / net.size);
+    DIRECTIONS.forEach(({ bit, dx, dy }) => {
+      const next = (y + dy) * net.size + (x + dx);
+      if (!(net.solved[cell] & bit) || seen.has(next)) return;
+      seen.add(next);
+      order.push(next);
+    });
+  }
+  return order;
+}
+
 // Giros mínimos para volver una pieza a una orientación equivalente a la resuelta.
 export function turnsToSolve(solvedMask: number, turns: number): number {
   const current = rotateMask(solvedMask, turns);
@@ -87,8 +115,10 @@ export function turnsToSolve(solvedMask: number, turns: number): number {
 
 export function createNetPuzzle(level: number, random: () => number = Math.random): NetPuzzle {
   const size = netSizeForLevel(level);
-  for (;;) {
+  for (let attempt = 0; ; attempt += 1) {
     const net = generateNet(size, random);
+    // Se prefieren redes con varias ramas; tras muchos intentos se acepta la que salga.
+    if (attempt < 60 && terminalCount(net) < minTerminals(size)) continue;
     const turns = net.solved.map(() => Math.floor(random() * 4));
     const puzzle = { ...net, turns };
     // Al menos un tercio de las piezas debe necesitar giro (y nunca se entrega resuelto).

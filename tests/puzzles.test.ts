@@ -9,14 +9,17 @@ import {
   currentMasks,
   EAST,
   generateNet,
+  hintOrder,
   isNetSolved,
   minimalMoves,
+  minTerminals,
   netScore,
   netSizeForLevel,
   NORTH,
   portCount,
   rotateMask,
   SOUTH,
+  terminalCount,
   turnsToSolve,
   WEST,
 } from '@/features/puzzles/netwalk';
@@ -150,6 +153,32 @@ describe('netwalk puzzle', () => {
     }
     expect(netScore(10, 10)).toBe(1000);
     expect(netScore(10, 20)).toBe(800);
+  });
+
+  it('builds branching networks and hints outward from the server', () => {
+    for (let level = 1; level <= 8; level += 1) {
+      for (let seed = 1; seed <= 12; seed += 1) {
+        const puzzle = createNetPuzzle(level, mulberry32(level * 97 + seed));
+        expect(terminalCount(puzzle)).toBeGreaterThanOrEqual(minTerminals(puzzle.size));
+        const order = hintOrder(puzzle);
+        // El orden recorre todas las piezas una vez, parte por el servidor y nunca salta a una
+        // pieza que no esté unida (en la solución) a alguna anterior.
+        expect(order[0]).toBe(puzzle.server);
+        expect([...order].sort((a, b) => a - b)).toEqual(puzzle.solved.map((_, index) => index));
+        order.slice(1).forEach((cell, position) => {
+          const earlier = order.slice(0, position + 1);
+          const linked = earlier.some((other) => {
+            const delta = cell - other;
+            if (delta === 1 && cell % puzzle.size !== 0) return Boolean(puzzle.solved[other] & EAST);
+            if (delta === -1 && other % puzzle.size !== 0) return Boolean(puzzle.solved[other] & WEST);
+            if (delta === puzzle.size) return Boolean(puzzle.solved[other] & SOUTH);
+            if (delta === -puzzle.size) return Boolean(puzzle.solved[other] & NORTH);
+            return false;
+          });
+          expect(linked).toBe(true);
+        });
+      }
+    }
   });
 });
 

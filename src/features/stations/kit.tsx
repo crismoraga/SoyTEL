@@ -204,7 +204,7 @@ export function StageBanner({ index, title, body, icon, accent = colors.accent, 
         <View style={[styles.bannerCta, { borderColor: accent }]}>
           <TelIcon name="tap" size={18} color={colors.cream} />
           <TelText variant="label" color="cream">
-            Toca cuando estés listo
+            Toca para empezar
           </TelText>
         </View>
       </Pressable>
