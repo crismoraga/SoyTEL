@@ -19,11 +19,11 @@ import { tutorials } from '@/features/tutorial/tutorials';
 import { expressionForMood, isAccessoryUnlocked, rutixWardrobe, signalForMood } from '@/graphics/rutix';
 import { now } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
-import { useEntering } from '@/lib/motion';
+import { useEntering, useMotionLevel } from '@/lib/motion';
 import { useFocusData } from '@/lib/useFocusData';
-import { loadProfile, loadResults, saveProfile, syncAchievements } from '@/storage/profile';
+import { loadProfile, loadResults, syncAchievements, updateMascotMood } from '@/storage/profile';
 import { updateSettings, useSettings } from '@/storage/settings';
-import { loadMascotDays, loadMascotLog, logMascotDay, saveMascotLog } from '@/storage/story';
+import { countMascotCare, loadMascotDays, loadMascotLog, logMascotDay } from '@/storage/story';
 import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
 
@@ -74,7 +74,10 @@ export default function MascotScreen() {
   const [reactKey, setReactKey] = useState(0);
   const [burst, setBurst] = useState<number | null>(null);
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tutorial = useTutorial('rutix');
+  // Esta pantalla no muestra la invitación a crear cuenta: el tutorial no tiene que esperarla.
+  const tutorial = useTutorial('rutix', { waitForAccountOffer: false });
+  const motion = useMotionLevel();
+  const caring = useRef(false);
   // Pregunta de verdadero o falso en curso (índice en rutixTrueFalse).
   const [quiz, setQuiz] = useState<number | null>(null);
   const tickle = useRef({ level: 0, at: 0 });
@@ -90,7 +93,17 @@ export default function MascotScreen() {
   useEffect(() => () => {
     if (reactionTimer.current) clearTimeout(reactionTimer.current);
     if (danceTimer.current) clearInterval(danceTimer.current);
-  }, []);
+    cancelAnimation(wiggle);
+  }, [wiggle]);
+
+  // Si se pide menos movimiento mientras Rutix baila, el baile se detiene.
+  useEffect(() => {
+    if (motion !== 'minimal') return;
+    if (danceTimer.current) clearInterval(danceTimer.current);
+    danceTimer.current = null;
+    cancelAnimation(wiggle);
+    wiggle.set(0);
+  }, [motion, wiggle]);
 
   function stopDance() {
     if (danceTimer.current) clearInterval(danceTimer.current);
@@ -107,21 +120,30 @@ export default function MascotScreen() {
   }
 
   async function interact(kind: Interaction) {
-    if (!data) return;
-    if (data.log.count >= MAX_DAILY_INTERACTIONS) {
-      setMessage('Estoy procesando todo lo que aprendimos hoy. Vuelve mañana o juega una partida para motivarme.');
-      react('sleepy');
-      await feedbackWarning();
+    // Un cuidado a la vez: dos toques seguidos no cuentan doble.
+    if (!data || caring.current) return;
+    caring.current = true;
+    try {
+      // El cupo del día y el ánimo se actualizan sobre lo guardado, no sobre lo que muestra la pantalla.
+      const care = await countMascotCare(MAX_DAILY_INTERACTIONS);
+      if (!care.counted) {
+        setData({ ...data, log: care.log });
+        setMessage('Estoy procesando todo lo que aprendimos hoy. Vuelve mañana o juega una partida para motivarme.');
+        react('sleepy');
+        await feedbackWarning();
+        return;
+      }
+      const option = interactions.find((item) => item.id === kind);
+      const profile = await updateMascotMood(option?.delta ?? 4);
+      const days = await logMascotDay();
+      setData({ profile, log: care.log, days: days.length, results: data.results });
+    } catch {
+      setMessage('No pude guardar eso en el teléfono. Inténtalo de nuevo en un momento.');
+      react('worried');
       return;
+    } finally {
+      caring.current = false;
     }
-
-    const option = interactions.find((item) => item.id === kind);
-    const mood = Math.min(100, data.profile.mascotMood + (option?.delta ?? 4));
-    const profile = { ...data.profile, mascotMood: mood };
-    const log = { date: data.log.date, count: data.log.count + 1 };
-    const days = await logMascotDay(new Date().toISOString());
-    await Promise.all([saveProfile(profile), saveMascotLog(log)]);
-    setData({ profile, log, days: days.length, results: data.results });
 
     if (kind === 'feed') {
       setMessage('¡Datos frescos! Mi batería de conocimiento está al máximo.');
@@ -171,6 +193,11 @@ export default function MascotScreen() {
       picks.current.dance = pickDifferent(danceLines, picks.current.dance);
       setMessage(danceLines[picks.current.dance]);
       void feedbackSuccess();
+      // Con animaciones mínimas, Rutix celebra con una pose en vez de moverse.
+      if (motion === 'minimal') {
+        react('celebrate', 'celebrate', 2200);
+        return;
+      }
       let frame = 0;
       react(danceFrames[0][0], danceFrames[0][1], 1400);
       wiggle.set(withRepeat(withSequence(withTiming(1, { duration: 210 }), withTiming(-1, { duration: 210 })), 8, true));

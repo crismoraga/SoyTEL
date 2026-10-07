@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRunnerCharacter, runnerCharacters } from '@/features/runner/characters';
+import { withLock } from './locks';
 
 // Progreso de TEL Runner: paquetes de datos guardados, récords y personajes desbloqueados.
 const RUNNER_KEY = '@soytel/runner';
@@ -14,9 +15,12 @@ export interface RunnerSave {
   runs: number;
   unlocked: string[];
   selected: string;
+  // Regalos ya entregados (por id): pedir dos veces el mismo no lo suma dos veces.
+  grants?: string[];
 }
 
 export const defaultRunnerSave: RunnerSave = { data: 0, totalData: 0, best: 0, bestDistance: 0, runs: 0, unlocked: ['rutix'], selected: 'rutix' };
+const GRANTS_LIMIT = 120;
 
 const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
 
@@ -35,6 +39,7 @@ export function parseRunnerSave(raw: unknown): RunnerSave {
     runs: count(source.runs),
     unlocked,
     selected,
+    grants: Array.isArray(source.grants) ? source.grants.filter((id): id is string => typeof id === 'string').slice(0, GRANTS_LIMIT) : [],
   };
 }
 
@@ -79,24 +84,32 @@ async function store(save: RunnerSave): Promise<RunnerSave> {
   return save;
 }
 
-export async function recordRun(run: RunSummary): Promise<RunnerSave> {
-  return store(applyRun(await loadRunnerSave(), run));
+// Los cambios a la partida guardada corren de a uno: una carrera y un regalo simultáneos no se pisan.
+export function recordRun(run: RunSummary): Promise<RunnerSave> {
+  return withLock('runner', async () => store(applyRun(await loadRunnerSave(), run)));
 }
 
 // Paquetes de regalo (misiones de Rutix): van a la billetera sin contar como carrera.
-export async function addRunnerData(amount: number): Promise<RunnerSave> {
-  const save = await loadRunnerSave();
-  const extra = count(amount);
-  return store({ ...save, data: save.data + extra, totalData: save.totalData + extra });
+// Con `grantId`, el mismo regalo se entrega una sola vez.
+export function addRunnerData(amount: number, grantId?: string): Promise<RunnerSave> {
+  return withLock('runner', async () => {
+    const save = await loadRunnerSave();
+    const grants = save.grants ?? [];
+    if (grantId && grants.includes(grantId)) return save;
+    const extra = count(amount);
+    return store({ ...save, data: save.data + extra, totalData: save.totalData + extra, grants: grantId ? [grantId, ...grants].slice(0, GRANTS_LIMIT) : grants });
+  });
 }
 
-export async function unlockRunnerCharacter(id: string): Promise<RunnerSave> {
-  return store(applyUnlock(await loadRunnerSave(), id));
+export function unlockRunnerCharacter(id: string): Promise<RunnerSave> {
+  return withLock('runner', async () => store(applyUnlock(await loadRunnerSave(), id)));
 }
 
-export async function selectRunnerCharacter(id: string): Promise<RunnerSave> {
-  const save = await loadRunnerSave();
-  return save.unlocked.includes(id) ? store({ ...save, selected: id }) : save;
+export function selectRunnerCharacter(id: string): Promise<RunnerSave> {
+  return withLock('runner', async () => {
+    const save = await loadRunnerSave();
+    return save.unlocked.includes(id) ? store({ ...save, selected: id }) : save;
+  });
 }
 
 export const RUNNER_KEYS = [RUNNER_KEY];

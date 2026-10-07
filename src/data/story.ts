@@ -25,6 +25,7 @@ export interface StoryChapter {
   dialogue: StoryLine[];
   challenge: StoryChallenge;
   outro: string;
+  // Puntos del capítulo. La XP que entrega sale de la fórmula común (lib/progression) a partir de ellos.
   rewardXp: number;
   // Posición del capítulo en el mapa del campus (porcentajes).
   map: { x: number; y: number };

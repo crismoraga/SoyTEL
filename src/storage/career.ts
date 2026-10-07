@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { withLock } from './locks';
 
 // Avance real en las áreas de la carrera: se registra al terminar una práctica (no al leer el área).
 // Un área queda "dominada" con al menos 3 de 5 respuestas correctas (60 %) en una práctica.
@@ -21,26 +22,41 @@ export async function loadCareerProgress(): Promise<CareerProgress> {
   try {
     const [raw, legacy] = await Promise.all([AsyncStorage.getItem(PROGRESS_KEY), AsyncStorage.getItem(LEGACY_VIEWED_KEY)]);
     if (legacy !== null) await AsyncStorage.removeItem(LEGACY_VIEWED_KEY);
-    const parsed = raw ? (JSON.parse(raw) as CareerProgress) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    return parseCareerProgress(raw ? JSON.parse(raw) : {});
   } catch {
     return {};
   }
 }
 
-export async function recordAreaPractice(area: string, accuracy: number, at: string): Promise<CareerProgress> {
-  const progress = await loadCareerProgress();
-  const previous = progress[area];
-  const updated: CareerProgress = {
-    ...progress,
-    [area]: {
-      sessions: (previous?.sessions ?? 0) + 1,
-      best: Math.max(previous?.best ?? 0, Math.min(1, Math.max(0, accuracy))),
-      lastAt: at,
-    },
-  };
-  await AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(updated));
-  return updated;
+// Conserva solo las áreas con datos bien formados.
+export function parseCareerProgress(raw: unknown): CareerProgress {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const progress: CareerProgress = {};
+  Object.entries(raw as Record<string, unknown>).forEach(([area, value]) => {
+    if (typeof value !== 'object' || value === null) return;
+    const item = value as Record<string, unknown>;
+    const sessions = typeof item.sessions === 'number' && Number.isFinite(item.sessions) ? Math.max(0, Math.floor(item.sessions)) : 0;
+    const best = typeof item.best === 'number' && Number.isFinite(item.best) ? Math.min(1, Math.max(0, item.best)) : 0;
+    progress[area] = { sessions, best, lastAt: typeof item.lastAt === 'string' ? item.lastAt : '' };
+  });
+  return progress;
+}
+
+export function recordAreaPractice(area: string, accuracy: number, at: string): Promise<CareerProgress> {
+  return withLock('career', async () => {
+    const progress = await loadCareerProgress();
+    const previous = progress[area];
+    const updated: CareerProgress = {
+      ...progress,
+      [area]: {
+        sessions: (previous?.sessions ?? 0) + 1,
+        best: Math.max(previous?.best ?? 0, Math.min(1, Math.max(0, Number.isFinite(accuracy) ? accuracy : 0))),
+        lastAt: at,
+      },
+    };
+    await AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(updated));
+    return updated;
+  });
 }
 
 export function isAreaMastered(progress: CareerProgress | null | undefined, area: string): boolean {

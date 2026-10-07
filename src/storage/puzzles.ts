@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { withLock } from './locks';
 
 // Avance en los desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado).
 const PUZZLES_KEY = '@soytel/puzzles';
@@ -37,12 +38,14 @@ export async function loadPuzzleProgress(): Promise<PuzzleProgressMap> {
   return base;
 }
 
-export async function recordPuzzleSolved(id: PuzzleId, level: number, score: number): Promise<PuzzleProgressMap> {
-  const progress = await loadPuzzleProgress();
-  const previous = progress[id];
-  progress[id] = { level: Math.max(previous.level, level), best: Math.max(previous.best, score), solved: previous.solved + 1 };
-  await AsyncStorage.setItem(PUZZLES_KEY, JSON.stringify(progress));
-  return progress;
+export function recordPuzzleSolved(id: PuzzleId, level: number, score: number): Promise<PuzzleProgressMap> {
+  return withLock('puzzles', async () => {
+    const progress = await loadPuzzleProgress();
+    const previous = progress[id];
+    progress[id] = { level: Math.max(previous.level, level), best: Math.max(previous.best, score), solved: previous.solved + 1 };
+    await AsyncStorage.setItem(PUZZLES_KEY, JSON.stringify(progress));
+    return progress;
+  });
 }
 
 export const PUZZLE_KEYS = [PUZZLES_KEY];

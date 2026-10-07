@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Alert, Platform, StyleSheet, Switch, View } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -92,9 +93,28 @@ export default function SettingsScreen() {
   const motionLevel = useMotionLevel();
   const version = Constants.expoConfig?.version ?? '';
 
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
   async function chooseTheme(theme: ThemePreference) {
     await updateSettings({ theme });
     await setThemePreference(theme);
+  }
+
+  async function runReset() {
+    if (resetting) return;
+    setResetting(true);
+    setResetError(null);
+    try {
+      await resetAllData();
+      await setThemePreference('system');
+      router.replace('/home');
+    } catch {
+      // Lo que se pudo borrar ya se borró y la app quedó como recién instalada en memoria.
+      setResetError('No se pudo borrar todo. Cierra y vuelve a abrir la app, y toca "Borrar datos" otra vez para terminar.');
+    } finally {
+      setResetting(false);
+    }
   }
 
   function confirmReset() {
@@ -102,10 +122,7 @@ export default function SettingsScreen() {
       'Borrar datos de este teléfono',
       'Se reinician tu XP, logros, historial, avisos y ajustes en este teléfono, y se cierra tu cuenta aquí (sigue existiendo en el servidor y la recuperas con tu código). No se puede deshacer.',
       'Borrar todo',
-      () =>
-        void resetAllData()
-          .then(() => setThemePreference('system'))
-          .then(() => router.replace('/home')),
+      () => void runReset(),
     );
   }
 
@@ -162,7 +179,12 @@ export default function SettingsScreen() {
         <ListRow icon="shieldLock" title="Privacidad" body="Qué datos guardamos y cómo los cuidamos." onPress={() => router.push('/privacidad')} />
       </View>
 
-      <TelButton label="Borrar datos de este teléfono" variant="dangerOutline" icon="trash" onPress={confirmReset} />
+      <TelButton label="Borrar datos de este teléfono" variant="dangerOutline" icon="trash" loading={resetting} onPress={confirmReset} />
+      {resetError && (
+        <TelText variant="caption" color="dangerInk" align="center" accessibilityLiveRegion="polite">
+          {resetError}
+        </TelText>
+      )}
       <TelText variant="caption" color="inkSoft" align="center">
         SoyTEL {version} · Ingeniería Civil Telemática USM
       </TelText>

@@ -10,6 +10,7 @@ import { loadProfile, loadResults, recordGameResult } from '@/storage/profile';
 import { resetAllData } from '@/storage/reset';
 import type { GameResult } from '@/types/game';
 import { SimNet } from './support/routeHarness';
+import { failStorage, restoreStorage } from './support/storageFaults';
 
 beforeEach(async () => {
   await AsyncStorage.clear();
@@ -17,6 +18,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  restoreStorage();
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
@@ -118,7 +120,7 @@ describe('recompensa del podio (RT-13)', () => {
   };
 
   it('18 · el podio se abre dos veces y el primer guardado falla: la XP se suma una sola vez', async () => {
-    jest.spyOn(AsyncStorage, 'multiSet').mockRejectedValueOnce(new Error('disco lleno'));
+    failStorage('multiSet', { key: '@soytel/profile', error: new Error('disco lleno') });
     await expect(recordGameResult(result)).rejects.toThrow('disco lleno');
     // Nada quedó a medias: se puede reintentar.
     expect((await loadProfile()).xp).toBe(0);

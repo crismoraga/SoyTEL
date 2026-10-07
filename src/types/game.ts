@@ -100,6 +100,8 @@ export interface UserProfile {
   gamesPlayed: number;
   // Resultados ya sumados al perfil, por id: el mismo resultado nunca cuenta dos veces.
   appliedResults?: string[];
+  // Resumen de las partidas que ya salieron del historial (ver lib/progressStats).
+  archive?: unknown;
 }
 
 export interface GameResult {
@@ -123,5 +125,7 @@ export interface GameOutcome {
   newAchievements: AchievementId[];
   // El resultado ya estaba guardado: no sumó de nuevo.
   alreadyRecorded?: boolean;
+  // Se entregó el bono pedido (por ejemplo, el del desafío diario).
+  bonusGranted?: boolean;
 }
 

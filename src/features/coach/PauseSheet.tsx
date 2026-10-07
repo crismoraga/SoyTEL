@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, StyleSheet, View } from 'react-native';
 import { Rutix } from '@/components/graphics/Rutix';
 import { Sheet } from '@/components/Sheet';
 import { TelButton } from '@/components/TelButton';
@@ -40,6 +40,18 @@ export function PauseSheet({ visible, title, body, stayLabel = 'Seguir jugando',
       </View>
     </Sheet>
   );
+}
+
+// Al salir de la app (o cambiar de pestaña en la web) durante una partida individual, se pausa sola:
+// el reloj no corre mientras nadie la está mirando.
+export function useAutoPause(enabled: boolean, onPause: () => void): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') onPause();
+    });
+    return () => subscription.remove();
+  }, [enabled, onPause]);
 }
 
 // Botón "atrás" de Android durante una partida: abre la pausa en vez de salir de golpe.

@@ -25,7 +25,7 @@ import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
 import { useFocusData } from '@/lib/useFocusData';
 import { now } from '@/lib/clock';
-import { recordGameResult } from '@/storage/profile';
+import { newRunId, useResultSaver } from '@/lib/resultSaver';
 import { completeChapter, loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome } from '@/types/game';
@@ -64,6 +64,9 @@ export default function StoryScreen() {
   const [attempts, setAttempts] = useState(0);
   const [startedAt, setStartedAt] = useState(0);
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
+  const saver = useResultSaver();
+  // Identidad de este intento del capítulo: completarlo dos veces seguidas suma una sola vez.
+  const [runId, setRunId] = useState('');
   const map = useMemo(() => campusMapDrawing(), []);
   const scroller = useScrollToEnd();
 
@@ -81,6 +84,8 @@ export default function StoryScreen() {
     setAnswered(false);
     setAttempts(0);
     setOutcome(null);
+    saver.reset();
+    setRunId(newRunId(`story-${target.id}`));
     setStartedAt(now());
     setPhase('dialogue');
   }
@@ -99,9 +104,9 @@ export default function StoryScreen() {
 
   async function complete() {
     if (!chapter) return;
-    const updated = await completeChapter(chapter.id);
-    setProgress(updated);
-    const result = await recordGameResult({
+    // Mientras se guarda, otro toque no hace nada (el guardado ya en curso devuelve null al segundo).
+    const result = await saver.save({
+      id: runId,
       gameId: 'story',
       score: chapter.rewardXp,
       accuracy: attempts <= 1 ? 1 : 0.6,
@@ -109,6 +114,13 @@ export default function StoryScreen() {
       completedAt: new Date().toISOString(),
       metadata: { chapter: chapter.number },
     });
+    if (!result) return;
+    try {
+      setProgress(await completeChapter(chapter.id));
+    } catch {
+      // El capítulo se vuelve a marcar al completar de nuevo (el resultado ya quedó y no se duplica).
+      return;
+    }
     setOutcome(result);
     setPhase('done');
   }
@@ -128,7 +140,9 @@ export default function StoryScreen() {
         footer={
           <ScreenFooter tone="dark">
             {!answered && <TelButton label="Responder" variant="cream" disabled={picked === null} onPress={() => void submit()} />}
-            {answered && correct && <TelButton label="Completar capítulo" variant="cream" iconRight="arrowRight" onPress={() => void complete()} />}
+            {answered && correct && (
+              <TelButton label={saver.status === 'failed' ? 'Reintentar' : 'Completar capítulo'} variant="cream" iconRight="arrowRight" loading={saver.status === 'saving'} onPress={() => void complete()} />
+            )}
             {answered && !correct && (
               <TelButton
                 label="Intentar de nuevo"
@@ -169,7 +183,8 @@ export default function StoryScreen() {
             );
           })}
         </View>
-        {answered && correct && <FeedbackPanel kind="success" title={`¡Exacto! +${chapter.rewardXp} XP`} body={chapter.challenge.explanation} />}
+        {answered && correct && <FeedbackPanel kind="success" title={`¡Exacto! +${chapter.rewardXp} puntos`} body={chapter.challenge.explanation} />}
+        {answered && correct && saver.status === 'failed' && <FeedbackPanel kind="error" title="No se pudo guardar el capítulo" body="Revisa el espacio del teléfono y toca Reintentar. No se sumará dos veces." />}
         {answered && !correct && (
           <FeedbackPanel kind="error" title="Casi… inténtalo otra vez" body={attempts >= 2 ? `Pista: ${chapter.challenge.hint}` : 'Piensa como telemático en terreno.'} />
         )}
@@ -289,7 +304,7 @@ export default function StoryScreen() {
                       {item.title}
                     </TelText>
                     <TelText variant="caption" color="accentSoft">
-                      {item.location} · +{item.rewardXp} XP
+                      {item.location} · +{item.rewardXp} pts
                     </TelText>
                   </View>
                   {done ? (

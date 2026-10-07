@@ -65,9 +65,11 @@ describe('game results', () => {
   });
 
   it('counts distinct Rutix care days', async () => {
-    await logMascotDay('2026-09-01T10:00:00.000Z');
-    const days = await logMascotDay('2026-09-01T18:00:00.000Z');
-    expect(days).toHaveLength(1);
+    // Dos cuidados el mismo día local (aunque en UTC el segundo ya sea "mañana") cuentan un día.
+    await logMascotDay(new Date(2026, 8, 1, 10, 0));
+    const days = await logMascotDay(new Date(2026, 8, 1, 23, 30));
+    expect(days).toEqual(['2026-09-01']);
+    expect(await logMascotDay(new Date(2026, 8, 2, 0, 10))).toEqual(['2026-09-01', '2026-09-02']);
   });
 });
 
