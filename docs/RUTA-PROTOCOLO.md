@@ -14,7 +14,8 @@ Código: `src/route/` (anfitrión, participante, motor, protocolo, almacenamient
 | Lo confirmado es durable | El stand solo publica y confirma el último estado que ya quedó guardado. El teléfono guarda sus acciones sin respuesta y las reenvía al reabrir la app. |
 | Unión auténtica y reciente | La solicitud va sellada hacia la llave del stand y repite el id del participante, la época y el **desafío** del saludo vigente (vale ~45 s). Una copia vieja, o publicada en el tópico de otro, no sirve. |
 | Errores acotados | Buscar la ruta, esperar la bienvenida y las suscripciones tienen plazo. Al vencer se informa (`not-found`, `unreachable`, `incompatible`) y se ofrece reintentar o jugar la ruta sin grupo. |
-| Varios caminos hasta el stand | El stand se conecta a **todos** los servidores a la vez: publica y escucha en todos. Cada teléfono entra por el primero que su red alcance y cambia a otro si el suyo se cae. |
+| Varios caminos hasta el stand | El stand se conecta a **todos** los servidores a la vez: publica y escucha en todos. Cada teléfono entra por el primero que le trae la ruta y cambia a otro si el suyo se cae. |
+| Una conexión por pantalla | Cada pantalla o pestaña abierta usa su propio identificador de conexión MQTT. La identidad (quién es el stand, quién es cada participante) está en las llaves y los tópicos, no en ese identificador. |
 
 Objetivos medidos (ver `docs/audits/hermes-9eeda63/RESULTADOS.md`): una actualización llega a todas las pantallas en menos de 500 ms (p95) y, tras recuperar el transporte o la autoridad, todo converge en menos de 2 s.
 
@@ -42,10 +43,18 @@ La **llave del par** es la que comparten el stand y un participante (X25519). Ni
 
 Todo mensaje entrante se reconstruye campo por campo (`protocol.ts`): otros tipos, claves extra, `__proto__`, arreglos o `null` no llegan al estado. Hay topes de tamaño por mensaje y por paquete MQTT (256 kB).
 
+## Conexiones
+
+- **Identificador de conexión.** Es aleatorio y propio de cada enlace (`connectionId` en `link.ts`, 23 caracteres). Un servidor MQTT cierra la conexión anterior cuando entra otra con el mismo identificador: si dos pantallas del stand, o dos pestañas del mismo teléfono, lo compartieran, se desconectarían una a otra sin parar.
+- **Sesión limpia.** Ninguna conexión deja una sesión guardada en el servidor. Al reconectar, el servidor entrega el saludo y el estado retenidos, y lo demás lo recupera el protocolo. Así no quedan sesiones huérfanas ni colas de mensajes viejos en los servidores que un teléfono dejó de usar.
+- **Carrera entre servidores.** El teléfono conecta a todos a la vez y se queda con el primero por el que llega algo de la ruta (el saludo o el estado que el stand deja en cada servidor donde está), no con el primero que conecta: un servidor rápido donde el stand no está no gana. Si en 2,5 s ninguno trae nada, sigue con el primero que conectó y la búsqueda continúa de a uno.
+- **Reenvío con señal de vida.** Una acción sin respuesta se reenvía: al reconectar el teléfono, cuando el stand se anuncia en vivo (lo hace al recuperar un servidor), cuando llega un estado que aún no la muestra y fue enviada hace más de 1 s, y por tiempo (2,5 s, 5 s, 8 s). Los duplicados no hacen daño: el stand repite la misma respuesta.
+- **Una pestaña por participante.** En la web, la última pestaña que abre la ruta es la que juega; la anterior se desconecta, deja de guardar y ofrece "Seguir en esta pestaña" (`tabs.ts`).
+
 ## Durabilidad y confirmaciones
 
 1. Llega una acción válida con contador mayor al último del participante.
-2. Si su id de evento ya tiene respuesta, se repite esa respuesta y no se aplica otra vez.
+2. Si su id de evento ya tiene respuesta, se repite esa respuesta y no se aplica otra vez. Si esa respuesta todavía se está guardando, la repetición también espera al guardado.
 3. Se aplica al motor (`submitPlayerAction`) y se guarda el estado.
 4. Solo después del guardado salen la confirmación y el estado nuevo.
 
@@ -58,11 +67,14 @@ Si el guardado del stand falla, reintenta y mientras tanto no confirma ni public
 | Situación | Qué pasa |
 | --- | --- |
 | El stand se cierra o reinicia | Al reabrir toma una época nueva y parte de lo guardado. Los plazos en curso se corren el tiempo que estuvo detenido y todos reciben señal de vida fresca. Lo que no alcanzó a guardarse no se había confirmado: los teléfonos lo reenvían. |
-| Dos pantallas abren la misma ruta | En la web, Web Locks deja a una en solo lectura. Sin Web Locks ambas toman la conducción y gana la época mayor: la otra pasa a solo lectura al ver su estado y no puede guardar. |
+| Dos pantallas abren la misma ruta | En la web, Web Locks deja a una en solo lectura. Sin Web Locks ambas toman la conducción y gana la época mayor: la otra pasa a solo lectura al ver su estado y no puede guardar. Cada una tiene su propia conexión, así que conviven sin desconectarse. |
 | "Tomar el control" | La pantalla nueva sube la época; la anterior queda en solo lectura y sigue mostrando la ruta en vivo. |
-| Se cae un servidor | El stand sigue por los demás (está en todos). El teléfono que estaba en el caído se pasa a otro a los 4 s y continúa; quien aún no entraba busca al stand en los demás **sin soltar las llaves** que ya verificó. |
-| El teléfono no alcanza un servidor | Al unirse conecta a todos a la vez y se queda con el primero que responde, así no paga la espera de uno bloqueado. |
+| Se cae un servidor | El stand sigue por los demás (está en todos). El teléfono que estaba en el caído espera 3 s por si vuelve y luego prueba todos a la vez: sigue por el primero que le trae la ruta. Quien aún no entraba busca al stand en los demás **sin soltar las llaves** que ya verificó. |
+| El teléfono no alcanza un servidor | Al unirse conecta a todos a la vez, así no paga la espera de uno bloqueado ni se queda en uno donde el stand no está. |
 | El teléfono pierde la red o se suspende | Las acciones quedan en cola en el teléfono. Al volver recibe el estado vigente; lo pendiente sale de inmediato y lo que ya no aplica se marca vencido. |
+| Se recarga la página o se reabre la app | Se retoma la sesión guardada y se muestra de inmediato el estado donde quedó (el que conserva el servidor), sin esperar el siguiente latido del stand. |
+| La ruta se abre en otra pestaña | La nueva sigue jugando con la misma identidad. La anterior muestra "La ruta sigue en otra pestaña" y puede retomarla con un toque; salir desde ella no borra la ruta de la otra. |
+| La conexión del stand parpadea | Lo que los teléfonos enviaron en ese instante no llegó. Al volver, el stand se anuncia y publica su estado; los teléfonos reenvían lo pendiente en el acto. |
 | El stand no conoce al participante | Si el estado no lo incluye (o cambió la llave mientras no estaba), el teléfono vuelve a pedir su lugar con la misma identidad. |
 | Se quita a un participante | El stand cambia la llave de sesión y la reparte a los demás. El quitado no puede actuar ni leer lo que sigue ni volver con la misma identidad. |
 | Sale un participante | Con conexión, el stand lo confirma y libera el lugar. Sin conexión, el lugar se libera solo: en el lobby tras 2 min sin señales; después deja de contar para el cupo a los 10 min (su registro y su puntaje se conservan). |
@@ -93,8 +105,9 @@ Publicar la web y repartir el APK en el mismo momento evita mezclar versiones en
 | --- | --- | --- |
 | Regresiones de los defectos reproducidos (RT-01, RT-02, RT-05) | `tests/route-regressions.test.ts` | `npx jest tests/route-regressions.test.ts` |
 | 20 escenarios con fallos, sobre red simulada | `tests/route-multiplayer-a.test.ts`, `tests/route-multiplayer-b.test.ts` | `npx jest tests/route-multiplayer` |
+| Pestañas, conexiones y reenvíos (casos encontrados en navegadores reales) | `tests/route-multiplayer-c.test.ts` | `npx jest tests/route-multiplayer-c.test.ts` |
 | Protocolo, transporte, candados, enlaces | `tests/route-protocol.test.ts` | `npx jest tests/route-protocol.test.ts` |
-| MQTT real contra un broker local | `tests/route-mqtt-local.test.ts` | `npx jest tests/route-mqtt-local.test.ts` |
-| Web con varias sesiones y la política de seguridad real | `scripts/e2e-web.js` | `npm run e2e:web` |
+| MQTT real contra brokers locales (dos pantallas del stand, carrera, caída de un servidor) | `tests/route-mqtt-local.test.ts` | `npx jest tests/route-mqtt-local.test.ts` |
+| Web en Chrome: stand, segunda pantalla y cuatro teléfonos con la política de seguridad real | `scripts/e2e-web.js` | `npm run e2e:web` |
 
 El banco de pruebas (`tests/support/routeHarness.ts`) usa el anfitrión y los participantes reales, con su cifrado y sus firmas. Solo la red, el reloj y el almacenamiento son simulados, para poder perder, demorar, duplicar y reordenar mensajes por destinatario.

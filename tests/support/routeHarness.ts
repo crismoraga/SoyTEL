@@ -520,7 +520,7 @@ export async function createWorld(
   const locks = options.locks ?? new MemoryLocks();
   const brokerIndex = options.hostBroker ?? 0;
   const code = generateRouteCode(brokerIndex, net.brokers.length);
-  const record = newHostRecord(code, `sth${code.toLowerCase()}`, brokerIndex, { quizQuestions: 3, ...options.settings }, Date.now(), 'a00000000000');
+  const record = newHostRecord(code, brokerIndex, { quizQuestions: 3, ...options.settings }, Date.now(), 'a00000000000');
   const { host, link } = openHost({ net, hostStore, locks }, record, options.hostOptions);
   await host.start();
   await advance(50);

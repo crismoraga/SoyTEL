@@ -138,7 +138,7 @@ describe('route sync over the local bus', () => {
     const host = HostController.createWithLink(new LocalRouteLink(bus), {}, { solo: true });
     await host.start();
     // Un impostor con el mismo código pero llaves propias.
-    const impostor = new HostController(newHostRecord(host.code, 'impostor1', 0, {}, Date.now(), 'aaaaaaaaaaaa'), new LocalRouteLink(bus), { solo: true });
+    const impostor = new HostController(newHostRecord(host.code, 0, {}, Date.now(), 'aaaaaaaaaaaa'), new LocalRouteLink(bus), { solo: true });
     await impostor.start();
     await jest.advanceTimersByTimeAsync(300);
     expect(host.getView().impostor).toBe(true);

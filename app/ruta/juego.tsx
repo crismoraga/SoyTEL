@@ -47,8 +47,30 @@ export default function RouteGameScreen() {
   useKeepAwake();
   useRouteForeground();
   const view = useMemberView();
+  // Al recargar la página (o reabrir la app) en medio de la ruta, primero se recupera lo guardado:
+  // recién entonces se sabe si hay una ruta que seguir o hay que volver al inicio.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void routeMember.restore().finally(() => {
+      if (active) setRestored(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  if (view.status === 'idle') return <Redirect href="/ruta" />;
+  if (view.status === 'idle') {
+    if (restored) return <Redirect href="/ruta" />;
+    return (
+      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent compact />}>
+        <View style={styles.center}>
+          <SignalSpinner size={96} />
+        </View>
+      </Screen>
+    );
+  }
+  if (view.status === 'elsewhere') return <ElsewhereView view={view} />;
   if (PROBLEMS.includes(view.status)) return <ProblemView view={view} />;
   if (!view.snapshot || !view.me) return <ConnectingView view={view} />;
   return <LiveRoute view={view} snapshot={view.snapshot} me={view.me} />;
@@ -113,6 +135,36 @@ function ConnectingView({ view }: { view: MemberView }) {
           />
         )}
         {!view.solo && <DiagnosticsButton />}
+      </View>
+    </Screen>
+  );
+}
+
+// La ruta quedó abierta en otra pestaña del mismo navegador (por ejemplo, al escanear el QR otra vez).
+// Solo una puede estar conectada; esta ofrece volver a tomarla con un toque.
+function ElsewhereView({ view }: { view: MemberView }) {
+  const [resuming, setResuming] = useState(false);
+  return (
+    <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={() => router.replace('/home')} />}>
+      <View style={styles.center}>
+        <Rutix size={150} expression="think" />
+        <TelText variant="title" color="cream" align="center">
+          La ruta sigue en otra pestaña
+        </TelText>
+        <TelText variant="body" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+          Abriste SoyTEL en otra pestaña de este navegador y la ruta {view.code} continúa ahí. Tu lugar y tus puntos están a salvo: puedes seguir jugando aquí cuando quieras.
+        </TelText>
+        <TelButton
+          label="Seguir en esta pestaña"
+          variant="cream"
+          icon="refresh"
+          loading={resuming}
+          onPress={() => {
+            setResuming(true);
+            void routeMember.resumeHere().finally(() => setResuming(false));
+          }}
+        />
+        <TelButton label="Ir al inicio" variant="outlineLight" onPress={() => router.replace('/home')} />
       </View>
     </Screen>
   );
@@ -224,6 +276,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
           </TelText>
           <TelButton label="Seguir jugando" variant="cream" onPress={() => setConfirmLeave(false)} />
           <TelButton label="Salir de la ruta" variant="dangerOutline" onPress={exit} />
+          {!view.solo && <DiagnosticsButton />}
         </View>
       </Screen>
     );

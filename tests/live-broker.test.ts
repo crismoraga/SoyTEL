@@ -29,13 +29,13 @@ live('route over public MQTT brokers', () => {
 
   it.each(brokerUrls.map((url, index) => [url, index]))('joins and syncs through %s', async (url, index) => {
     const urls = [String(url)];
-    const host = HostController.createWithLink(new MqttRouteLink(`stt${Date.now().toString(36)}`, 0, false, urls), { quizQuestions: 1 }, { store: null, locks: null });
+    const host = HostController.createWithLink(new MqttRouteLink(0, urls, { idPrefix: 'stt' }), { quizQuestions: 1 }, { store: null, locks: null });
     const member = new MemberController({ store: null });
     try {
       await host.start();
       await waitFor(() => host.getView().link === 'online', 15_000, 'stand en línea');
       const joinedAt = Date.now();
-      await member.join({ code: host.code, alias: 'Prueba', avatar: 0, fingerprint: host.fingerprint, link: new MqttRouteLink(`stm${Date.now().toString(36)}`, 0, false, urls) });
+      await member.join({ code: host.code, alias: 'Prueba', avatar: 0, fingerprint: host.fingerprint, link: new MqttRouteLink(0, urls, { idPrefix: 'stm' }) });
       await waitFor(() => member.getView().status === 'joined' && Boolean(member.getView().me), 20_000, 'unión');
       const joinMs = Date.now() - joinedAt;
       host.dispatch({ type: 'start' });

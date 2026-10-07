@@ -58,7 +58,6 @@ export interface MemberCredentials {
 export interface HostRecord {
   v: typeof ROUTE_RECORD_VERSION;
   code: string;
-  clientId: string;
   brokerIndex: number;
   boxKeys: KeyPair;
   signKeys: KeyPair;

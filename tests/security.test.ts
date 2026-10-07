@@ -68,7 +68,7 @@ describe('route storage', () => {
   it('keeps host keys sealed and lists routes with their stop', async () => {
     const state = { ...createRoute('XYZ789', 1, 2), phase: 'checkin' as const, stop: 'b213' as const };
     const signKeys = { publicKey: 'pub', secretKey: 'clave-firma-secreta' };
-    await saveHost({ v: 3, code: 'XYZ789', clientId: 'sth1', brokerIndex: 0, boxKeys: newBoxKeys(), signKeys, sessionKey: 'sesion-secreta', keyId: 1, epoch: 1, owner: 'abcdefabcdef', state, seqs: {}, verdicts: {}, savedAt: 5 });
+    await saveHost({ v: 3, code: 'XYZ789', brokerIndex: 0, boxKeys: newBoxKeys(), signKeys, sessionKey: 'sesion-secreta', keyId: 1, epoch: 1, owner: 'abcdefabcdef', state, seqs: {}, verdicts: {}, savedAt: 5 });
     const raw = await AsyncStorage.getItem('@soytel/route/host/XYZ789');
     expect(raw).not.toContain('clave-firma-secreta');
     expect(raw).not.toContain('sesion-secreta');

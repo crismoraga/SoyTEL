@@ -5,6 +5,7 @@ import { HostController } from './host';
 import { LocalBus, LocalRouteLink, MqttRouteLink, type LinkStatus, type RouteLink } from './link';
 import {
   brokerIndexForCode,
+  compareAuthority,
   isNewerStamp,
   isRouteCode,
   openHello,
@@ -24,11 +25,13 @@ import {
   type Stamp,
 } from './protocol';
 import { deviceMemberStore, ROUTE_RECORD_VERSION, type MemberCredentials, type MemberStore, type OutboxRecord, type OutboxState } from './storage';
+import { deviceTabs, type TabClaim, type TabGuard } from './tabs';
 import type { CheckinStop, PlayerAction, PublicPlayer, RouteSettings, RouteSnapshot, StationGameId } from './types';
 
 // 'unreachable': se conoce al stand pero no responde en ningún servidor.
 // 'incompatible': el stand o este teléfono usan otra versión de la app.
-export type MemberStatus = 'idle' | 'connecting' | 'joining' | 'joined' | 'rejected' | 'not-found' | 'kicked' | 'conflict' | 'unreachable' | 'incompatible';
+// 'elsewhere': la ruta sigue en otra pestaña de este navegador; esta quedó desconectada.
+export type MemberStatus = 'idle' | 'connecting' | 'joining' | 'joined' | 'rejected' | 'not-found' | 'kicked' | 'conflict' | 'unreachable' | 'incompatible' | 'elsewhere';
 
 export interface OutboxView {
   state: OutboxState;
@@ -87,6 +90,8 @@ export interface MemberOptions {
   clock?: RouteClock;
   // null: nada se guarda (pruebas).
   store?: MemberStore | null;
+  // Coordinación entre pestañas del navegador (null: no hay otras, como en Android/iOS).
+  tabs?: TabGuard | null;
 }
 
 const JOIN_RETRY_MS = 3000;
@@ -107,6 +112,12 @@ const STALE_MS = 20_000;
 const HEARTBEAT_MS = 10_000;
 const RETRY_MS = 2500;
 const RETRY_MAX_MS = 8000;
+// Llega un estado del stand que aún no muestra una acción enviada hace más que esto: se reenvía ya.
+// El stand está vivo, así que lo más probable es que el envío se perdió (su conexión o la del teléfono
+// parpadeó). Es lo que antes hacía una sesión guardada en el servidor, sin depender de él.
+const RESEND_ON_STATE_MS = 1000;
+// El stand se anuncia en vivo (lo hace al reconectar con un servidor): lo pendiente se reenvía enseguida.
+const RESEND_ON_HELLO_MS = 300;
 const REJOIN_GAP_MS = 3000;
 // Un estado sellado con una llave nueva: se espera este rato el mensaje que la trae antes de pedirla.
 const UNKNOWN_KEY_GRACE_MS = 1500;
@@ -114,9 +125,9 @@ const LEAVE_WAIT_MS = 1500;
 // Si entre dos estados pasó más que esto, se perdió al menos un latido del stand (publica cada 5 s):
 // hubo un corte, así que lo pendiente se reenvía de inmediato en vez de esperar el próximo reintento.
 const STATE_GAP_MS = 7000;
-// Ya dentro de la ruta: si la conexión con el servidor lleva este tiempo caída, se pasa al siguiente
+// Ya dentro de la ruta: si la conexión con el servidor lleva este tiempo caída, se busca por los demás
 // (el stand está en todos, así que cambiar es barato y no se pierde nada).
-const OFFLINE_ROTATE_MS = 4000;
+const OFFLINE_ROTATE_MS = 3000;
 const DENIED_MOVE_MS = 1500;
 const MARK_SAVE_MS = 30_000;
 const SEQ_BLOCK = 64;
@@ -130,6 +141,8 @@ const LATE_SCORE_SLACK_MS = 3000;
 interface OutboxEntry extends OutboxRecord {
   lastSentMono: number;
   attempts: number;
+  // El stand pidió esperar (aún no corresponde): se reintenta solo por tiempo, sin apurar.
+  deferred?: boolean;
 }
 
 function pendingKey(action: PlayerAction): string | null {
@@ -189,6 +202,9 @@ const isOpen = (entry: { state: OutboxState }) => entry.state === 'queued' || en
 export class MemberController {
   private clock: RouteClock;
   private store: MemberStore | null;
+  private tabs: TabGuard | null;
+  // Esta pestaña es la que juega la ruta (ver tabs.ts).
+  private claim: TabClaim | null = null;
   private credentials: MemberCredentials | null = null;
   private link: RouteLink | null = null;
   // Enlace entregado desde fuera (ruta individual, pruebas): se reutiliza al reintentar.
@@ -212,6 +228,7 @@ export class MemberController {
   private cleanups: (() => void)[] = [];
   private soloHost: HostController | null = null;
   private restored = false;
+  private restoring: Promise<void> | null = null;
   // Cambia con cada conexión o salida: lo que quedó esperando de una sesión anterior se descarta.
   private session = 0;
 
@@ -254,6 +271,7 @@ export class MemberController {
   constructor(options: MemberOptions = {}) {
     this.clock = options.clock ?? systemClock;
     this.store = options.store === undefined ? deviceMemberStore : options.store;
+    this.tabs = options.tabs === undefined ? deviceTabs : options.tabs;
     this.verifications = new Budget(VERIFY_BURST, VERIFY_PER_SECOND, this.clock);
   }
 
@@ -314,12 +332,38 @@ export class MemberController {
     return this.anchor ? Math.round(this.anchor.host + (this.clock.mono() - this.anchor.mono)) : this.clock.now();
   }
 
-  async restore(link?: RouteLink): Promise<void> {
-    if (this.restored || this.credentials || !this.store) return;
+  // Retoma la ruta guardada (al abrir la app o recargar la página). Quien llama mientras está en curso
+  // espera el mismo intento: así una pantalla sabe cuándo ya se puede decidir que no hay ruta.
+  restore(link?: RouteLink): Promise<void> {
+    if (this.restoring) return this.restoring;
+    if (this.restored || this.credentials || !this.store) return Promise.resolve();
     this.restored = true;
     const store = this.store;
-    const saved = await store.load().catch(() => null);
-    if (!saved || saved.solo || this.credentials) return;
+    this.restoring = (async () => {
+      const saved = await store.load().catch(() => null);
+      if (!this.credentials) await this.resume(saved, link);
+    })().finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  // Vuelve a jugar en esta pestaña una ruta que siguió en otra: se parte de lo guardado (la otra pudo
+  // avanzar) y la otra pasa a ser la desconectada.
+  async resumeHere(link?: RouteLink): Promise<void> {
+    if (this.status !== 'elsewhere' || !this.store) return;
+    const saved = await this.store.load().catch(() => null);
+    if (this.status !== 'elsewhere') return;
+    this.teardown();
+    this.restored = true;
+    await this.resume(saved, link);
+    // Sin ruta guardada, la otra pestaña ya salió: aquí tampoco queda nada que retomar.
+    this.refresh();
+  }
+
+  private async resume(saved: MemberCredentials | null, link?: RouteLink): Promise<void> {
+    const store = this.store;
+    if (!saved || saved.solo || !store) return;
     if (!isRouteCode(saved.code) || this.clock.now() - saved.joinedAt > SESSION_MAX_AGE_MS) {
       await store.clear().catch(() => undefined);
       return;
@@ -367,10 +411,12 @@ export class MemberController {
 
   startSolo(options: { alias: string; avatar: number; settings?: Partial<RouteSettings> }): void {
     const previous = this.credentials;
+    // Una ruta que sigue en otra pestaña es de esa pestaña: aquí no se toca lo guardado.
+    const elsewhere = this.status === 'elsewhere';
     this.teardown();
     // Si había una ruta en grupo guardada (por ejemplo, una que no conectó), se descarta: no debe
     // reaparecer al reabrir la app.
-    if (previous && !previous.solo) void this.store?.clear().catch(() => undefined);
+    if (previous && !previous.solo && !elsewhere) void this.store?.clear().catch(() => undefined);
     const bus = new LocalBus();
     const host = HostController.createSolo(bus, { projectsSeconds: 60 * 60, ...options.settings });
     this.soloHost = host;
@@ -404,6 +450,12 @@ export class MemberController {
   async leave(notify = true): Promise<void> {
     const credentials = this.credentials;
     if (!credentials) return;
+    if (this.status === 'elsewhere') {
+      // La ruta sigue en otra pestaña: aquí solo se suelta, sin borrar lo guardado ni avisar al stand.
+      this.teardown();
+      this.refresh();
+      return;
+    }
     const session = this.session;
     if (notify && credentials.sessionKey && this.status === 'joined' && this.link?.status === 'online') {
       await new Promise<void>((resolve) => {
@@ -437,6 +489,7 @@ export class MemberController {
   }
 
   nudge(): void {
+    if (this.yieldIfSuperseded()) return;
     this.link?.nudge();
   }
 
@@ -462,6 +515,10 @@ export class MemberController {
 
   retryJoin(): void {
     if (!this.credentials) return;
+    if (this.status === 'elsewhere') {
+      void this.resumeHere();
+      return;
+    }
     this.session += 1;
     this.disconnect();
     this.brokerAttempts = 0;
@@ -513,7 +570,7 @@ export class MemberController {
     this.topics = routeTopics(this.secrets.roomId);
     this.givenLink = localLink ?? null;
     // El stand está en todos los servidores: el teléfono parte por el primero que le responda.
-    this.link = localLink ?? new MqttRouteLink(credentials.clientId, credentials.brokerIndex, false, brokerUrls, { race: true });
+    this.link = localLink ?? new MqttRouteLink(credentials.brokerIndex, brokerUrls, { race: true });
     const link = this.link;
     const topics = this.topics;
     const mono = this.clock.mono();
@@ -539,12 +596,40 @@ export class MemberController {
     link.subscribe(topics.state);
     link.subscribe(topics.dm(credentials.clientId));
     link.start();
+    if (!credentials.solo && this.tabs) {
+      // Desde ahora esta es la pestaña que juega; si otra toma la ruta, esta se desconecta.
+      const session = this.session;
+      this.claim = this.tabs.claim(() => {
+        if (this.session === session) this.yieldToOtherTab();
+      });
+    }
     this.timers.push(setInterval(() => this.loop(), 1000));
     this.timers.push(setInterval(() => this.heartbeat(), HEARTBEAT_MS));
     this.refresh();
   }
 
+  // ¿Otra pestaña tomó la ruta sin que llegara el aviso? (Por ejemplo, mientras esta estaba suspendida.)
+  private yieldIfSuperseded(): boolean {
+    if (!this.claim || this.claim.held()) return false;
+    this.yieldToOtherTab();
+    return true;
+  }
+
+  // La ruta sigue en otra pestaña: esta deja de enviar, de escuchar y de guardar (lo guardado ya es de
+  // la otra). Conserva lo que mostraba para poder ofrecer "seguir aquí".
+  private yieldToOtherTab() {
+    if (!this.credentials || this.credentials.solo || this.status === 'elsewhere') return;
+    this.session += 1;
+    this.disconnect();
+    this.waiters.forEach((done) => done());
+    this.waiters.clear();
+    this.status = 'elsewhere';
+    this.refresh();
+  }
+
   private disconnect() {
+    this.claim?.release();
+    this.claim = null;
     this.timers.forEach((timer) => clearInterval(timer));
     this.timers = [];
     if (this.settleTimer) clearTimeout(this.settleTimer);
@@ -577,7 +662,7 @@ export class MemberController {
   private loop() {
     const credentials = this.credentials;
     const link = this.link;
-    if (!credentials || !link) return;
+    if (!credentials || !link || this.yieldIfSuperseded()) return;
     const mono = this.clock.mono();
     const joined = Boolean(credentials.sessionKey);
 
@@ -636,10 +721,11 @@ export class MemberController {
 
     if (joined && this.status !== 'kicked') {
       if (this.snapshot?.phase !== 'podium' && link.brokerCount > 1 && this.offlineMono !== null && mono - this.offlineMono > OFFLINE_ROTATE_MS) {
-        // Se cayó la conexión con este servidor y no vuelve: se sigue por otro.
+        // Se cayó la conexión con este servidor y no vuelve: se sigue por el primero que responda.
         this.offlineMono = mono;
         this.lastStateMono = mono;
-        link.moveToNextBroker();
+        if (link.reconnectAny) link.reconnectAny();
+        else link.moveToNextBroker();
         return;
       }
       if (this.snapshot?.phase !== 'podium' && mono - this.lastStateMono > STALE_MS) {
@@ -715,7 +801,10 @@ export class MemberController {
         return;
       }
       this.keepHello(result.hello);
-      if (!retained) this.hostLiveMono = this.clock.mono();
+      if (!retained) {
+        this.hostLiveMono = this.clock.mono();
+        this.resendOpen(RESEND_ON_HELLO_MS);
+      }
       if ((!credentials.sessionKey || this.rejoining) && this.clock.mono() - this.lastJoinMono > JOIN_MIN_GAP_MS) this.sendJoin();
       return;
     }
@@ -877,6 +966,7 @@ export class MemberController {
       // Todavía no se puede (por ejemplo, un puntaje antes del tiempo mínimo): se reintenta sin apurar.
       entry.lastSentMono = this.clock.mono();
       entry.attempts = 1;
+      entry.deferred = true;
     } else if (item.why === 'kicked') {
       this.status = 'kicked';
       this.rejection = 'kicked';
@@ -915,8 +1005,11 @@ export class MemberController {
     const snap = parseSnapshot(openShared(envelope.sealed, credentials.sessionKey));
     if (!snap || snap.code !== credentials.code) return;
     // Solo avanza: un estado repetido o más viejo (aunque esté bien firmado) no cambia nada, ni el
-    // reloj ni la señal de vida del stand.
-    if (!isNewerStamp(snap, this.mark)) {
+    // reloj ni la señal de vida del stand. La excepción es al retomar una sesión guardada, cuando aún
+    // no hay nada en pantalla: el estado donde quedó (el mismo que conserva el servidor) se muestra de
+    // inmediato en vez de esperar el siguiente latido del stand.
+    const whereItLeft = this.snapshot === null && this.mark !== null && compareAuthority(snap, this.mark) === 0 && snap.pub === this.mark.pub;
+    if (!isNewerStamp(snap, this.mark) && !whereItLeft) {
       this.stats.statesIgnored += 1;
       return;
     }
@@ -954,8 +1047,22 @@ export class MemberController {
       }
     });
     if (changed) this.persist();
-    if (resumed && this.status === 'joined' && !this.rejoining) this.flushOutbox();
+    if (this.status === 'joined' && !this.rejoining) {
+      if (resumed) this.flushOutbox();
+      // El stand está publicando y todavía no muestra algo enviado hace rato: se reenvía.
+      else this.resendOpen(RESEND_ON_STATE_MS);
+    }
     this.refresh();
+  }
+
+  // Reenvía lo que sigue sin respuesta y se envió hace al menos `minAgeMs` (hay señal de que el stand
+  // está vivo). Los duplicados no hacen daño: el stand responde lo mismo sin aplicarlos otra vez.
+  private resendOpen(minAgeMs: number) {
+    if (this.status !== 'joined' || this.rejoining) return;
+    const mono = this.clock.mono();
+    this.outbox.forEach((entry) => {
+      if (isOpen(entry) && !entry.deferred && mono - entry.lastSentMono >= minAgeMs) this.publishEntry(entry);
+    });
   }
 
   private send(action: PlayerAction) {
@@ -1021,7 +1128,7 @@ export class MemberController {
   // mientras tanto, se vuelve a guardar al terminar.
   private persist(): void {
     const store = this.store;
-    if (!store || !this.credentials || this.credentials.solo) return;
+    if (!store || !this.credentials || this.credentials.solo || this.status === 'elsewhere') return;
     if (this.persisting) {
       this.persistAgain = true;
       return;

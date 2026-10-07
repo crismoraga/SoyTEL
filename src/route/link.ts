@@ -1,5 +1,6 @@
 import { brokerAuth, brokerUrls } from '@/realtime/config';
 import { utf8Decode } from '@/realtime/bytes';
+import { randomHex } from '@/realtime/crypto';
 import { MqttClient, type LinkStatus, type MqttClientOptions } from '@/realtime/mqttClient';
 import { topicMatches } from '@/realtime/mqttPackets';
 
@@ -25,6 +26,8 @@ export interface RouteLink {
   stop(): void;
   nudge(): void;
   moveToNextBroker(): void;
+  // La conexión se cayó: reconectar por cualquier servidor (los enlaces que saben, prueban todos a la vez).
+  reconnectAny?(): void;
   subscribe(filter: string): void;
   // `key`: mientras no haya conexión, un mensaje nuevo con la misma clave reemplaza al anterior en la cola.
   publish(topic: string, text: string, options?: { retain?: boolean; qos?: 0 | 1; key?: string }): void;
@@ -45,16 +48,33 @@ class Emitter<T extends unknown[]> {
 }
 
 const DENIED_RETRY_MS = 20_000;
+// En la carrera entre servidores: cuánto se espera, desde que conecta el primero, a que alguno traiga
+// mensajes de la ruta antes de seguir con ese primero.
+const RACE_QUIET_MS = 2500;
+
+// Identificador de una conexión MQTT (23 caracteres, lo que todo servidor acepta). Es de la conexión,
+// no de la ruta ni del participante: un servidor MQTT cierra la conexión anterior cuando entra otra con
+// el mismo identificador, así que dos pantallas (o dos pestañas) que lo compartieran se echarían una a
+// otra sin parar. Quién es quién lo dicen las llaves y los tópicos, no este valor.
+export function connectionId(prefix: string): string {
+  return `${prefix}${randomHex(10)}`.slice(0, 23);
+}
 
 export interface MqttLinkOptions {
   // Al iniciar, conecta a todos los servidores a la vez y se queda con el primero que responde.
   // El stand está en todos, así que el teléfono entra por el que su red alcance más rápido.
   race?: boolean;
+  // Comienzo del identificador de conexión (para reconocerla en el servidor al diagnosticar).
+  idPrefix?: string;
   socketFactory?: MqttClientOptions['socketFactory'];
 }
 
 // Enlace MQTT de un participante: una conexión a la vez, con cambio de servidor si el suyo deja de responder.
+// La sesión es limpia: al reconectar, el servidor entrega el último estado (retenido) y lo demás lo
+// recupera el protocolo (reintentos con confirmación). Así no quedan sesiones ni mensajes acumulados
+// en servidores que este teléfono dejó de usar.
 export class MqttRouteLink implements RouteLink {
+  readonly connectionId: string;
   private client: MqttClient | null = null;
   // Conexiones en carrera al iniciar (ver `race`).
   private racers: MqttClient[] = [];
@@ -65,16 +85,16 @@ export class MqttRouteLink implements RouteLink {
   private index: number;
   private running = false;
   private deniedTimer: ReturnType<typeof setTimeout> | null = null;
+  private raceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastStatus: LinkStatus = 'idle';
 
   constructor(
-    private readonly clientId: string,
     initialIndex: number,
-    private readonly cleanSession: boolean,
     private readonly urls: string[] = brokerUrls,
     private readonly options: MqttLinkOptions = {},
   ) {
     this.index = ((initialIndex % urls.length) + urls.length) % urls.length;
+    this.connectionId = connectionId(options.idPrefix ?? 'stp');
   }
 
   get status(): LinkStatus {
@@ -106,13 +126,19 @@ export class MqttRouteLink implements RouteLink {
     this.running = false;
     if (this.deniedTimer) clearTimeout(this.deniedTimer);
     this.deniedTimer = null;
+    this.closeAll();
+    this.report('closed');
+  }
+
+  private closeAll() {
+    if (this.raceTimer) clearTimeout(this.raceTimer);
+    this.raceTimer = null;
     const racers = this.racers;
     this.racers = [];
     racers.forEach((racer) => racer.close());
     const client = this.client;
     this.client = null;
     client?.close();
-    this.report('closed');
   }
 
   nudge(): void {
@@ -135,14 +161,25 @@ export class MqttRouteLink implements RouteLink {
       return;
     }
     this.index = (this.index + 1) % this.urls.length;
-    const racers = this.racers;
-    this.racers = [];
-    racers.forEach((racer) => racer.close());
-    const client = this.client;
-    this.client = null;
-    client?.close();
+    this.closeAll();
     if (this.running) this.open();
     this.brokerChanges.emit(this.index);
+  }
+
+  // Se perdió la conexión y no vuelve: en vez de probar los servidores de a uno (y pagar la espera de
+  // cada uno que no responda), se intenta con todos a la vez. Mientras la carrera sigue, cada conexión
+  // reintenta sola; pedirlo de nuevo no la reinicia.
+  reconnectAny(): void {
+    if (!this.running) return;
+    if (!this.options.race || this.urls.length < 2) {
+      this.moveToNextBroker();
+      return;
+    }
+    if (this.racers.length > 0) return;
+    if (this.deniedTimer) clearTimeout(this.deniedTimer);
+    this.deniedTimer = null;
+    this.closeAll();
+    this.openRace();
   }
 
   subscribe(filter: string): void {
@@ -175,15 +212,16 @@ export class MqttRouteLink implements RouteLink {
 
   private raceStatus(): LinkStatus {
     const states = this.racers.map((racer) => racer.status);
-    if (states.some((state) => state === 'connecting' || state === 'idle')) return 'connecting';
+    // Una que ya conectó pero aún no gana la carrera cuenta como "conectando".
+    if (states.some((state) => state === 'connecting' || state === 'idle' || state === 'online')) return 'connecting';
     return states.every((state) => state === 'denied') ? 'denied' : 'offline';
   }
 
   private create(index: number): MqttClient {
     const client = new MqttClient({
       url: this.urls[index],
-      clientId: this.clientId,
-      cleanSession: this.cleanSession,
+      clientId: this.connectionId,
+      cleanSession: true,
       keepAlive: 30,
       username: brokerAuth.username,
       password: brokerAuth.password,
@@ -217,25 +255,49 @@ export class MqttRouteLink implements RouteLink {
     client.connect();
   }
 
-  // Carrera inicial: gana la primera conexión lista; las demás se cierran.
+  // Carrera entre servidores: gana la primera conexión por la que llega algo de la ruta (el stand deja
+  // su saludo y su estado guardados en cada servidor donde está), no la primera que conecta: así no se
+  // elige un servidor rápido donde el stand no está. Si ninguna trae nada en un momento, se sigue con
+  // la primera que conectó, y una ruta que no existe se informa igual. Las demás se cierran.
   private openRace() {
-    this.racers = this.urls.map((_, index) => this.create(index));
-    this.racers.forEach((racer, index) => {
+    const racers = this.urls.map((_, index) => this.create(index));
+    this.racers = racers;
+    const early = new Map<MqttClient, [string, Uint8Array, boolean][]>();
+    const win = (racer: MqttClient) => {
+      if (!this.racers.includes(racer)) return;
+      if (this.raceTimer) clearTimeout(this.raceTimer);
+      this.raceTimer = null;
+      const others = this.racers.filter((item) => item !== racer);
+      this.racers = [];
+      others.forEach((other) => other.close());
+      const index = racers.indexOf(racer);
+      const moved = index !== this.index;
+      this.index = index;
+      this.adopt(racer);
+      if (moved) this.brokerChanges.emit(index);
+      this.report(racer.status);
+      // Lo que llegó durante la carrera se entrega ahora, en orden.
+      (early.get(racer) ?? []).forEach(([topic, payload, retain]) => {
+        if (this.client === racer) this.messages.emit(topic, utf8Decode(payload), retain);
+      });
+    };
+    racers.forEach((racer) => {
       racer.onStatus = (status) => {
         if (!this.racers.includes(racer)) return;
-        if (status !== 'online') {
-          // Mientras alguna siga intentando, el enlace está "conectando".
-          this.report(this.raceStatus());
-          return;
+        if (status === 'online' && !this.raceTimer) {
+          this.raceTimer = setTimeout(() => {
+            this.raceTimer = null;
+            const first = this.racers.find((item) => item.status === 'online');
+            if (first) win(first);
+          }, RACE_QUIET_MS);
         }
-        const others = this.racers.filter((item) => item !== racer);
-        this.racers = [];
-        others.forEach((other) => other.close());
-        const moved = index !== this.index;
-        this.index = index;
-        this.adopt(racer);
-        if (moved) this.brokerChanges.emit(index);
-        this.report('online');
+        this.report(this.raceStatus());
+      };
+      racer.onMessage = (topic, payload, retain) => {
+        const list = early.get(racer) ?? [];
+        list.push([topic, payload, retain]);
+        early.set(racer, list);
+        win(racer);
       };
       racer.connect();
     });
@@ -247,6 +309,7 @@ export class MqttRouteLink implements RouteLink {
 // así cada teléfono puede entrar y jugar por el servidor que su red alcance, y la caída de uno no
 // detiene la ruta. Los mensajes repetidos entre servidores no hacen daño: el protocolo los reconoce.
 export class MultiRouteLink implements RouteLink {
+  readonly connectionId: string;
   private clients: MqttClient[] = [];
   private filters = new Set<string>();
   private messages = new Emitter<[string, string, boolean]>();
@@ -256,13 +319,12 @@ export class MultiRouteLink implements RouteLink {
   private primary: number;
 
   constructor(
-    private readonly clientId: string,
     primaryIndex: number,
-    private readonly cleanSession: boolean,
     private readonly urls: string[] = brokerUrls,
-    private readonly options: Pick<MqttLinkOptions, 'socketFactory'> = {},
+    private readonly options: Pick<MqttLinkOptions, 'socketFactory' | 'idPrefix'> = {},
   ) {
     this.primary = ((primaryIndex % urls.length) + urls.length) % urls.length;
+    this.connectionId = connectionId(options.idPrefix ?? 'sth');
   }
 
   // En línea si al menos un servidor está listo.
@@ -292,8 +354,8 @@ export class MultiRouteLink implements RouteLink {
     this.clients = this.urls.map((url) => {
       const client = new MqttClient({
         url,
-        clientId: this.clientId,
-        cleanSession: this.cleanSession,
+        clientId: this.connectionId,
+        cleanSession: true,
         keepAlive: 30,
         username: brokerAuth.username,
         password: brokerAuth.password,

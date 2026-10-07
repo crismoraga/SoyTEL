@@ -18,7 +18,7 @@ import {
 import { MqttClient } from '@/realtime/mqttClient';
 import { Budget, RecentSet, systemClock, type RouteClock } from './clock';
 import { addPlayer, applyHostAction, createRoute, DEFAULT_SETTINGS, ownPlayer, resumeRoute, snapshot, submitPlayerAction, tick } from './engine';
-import { LocalRouteLink, MultiRouteLink, type BrokerState, type LinkStatus, type LocalBus, type RouteLink } from './link';
+import { connectionId, LocalRouteLink, MultiRouteLink, type BrokerState, type LinkStatus, type LocalBus, type RouteLink } from './link';
 import {
   compareAuthority,
   generateRouteCode,
@@ -172,7 +172,7 @@ export function probeBroker(url: string, timeoutMs = 7000): Promise<boolean> {
     const topic = `soytel/probe/${randomHex(8)}`;
     const client = new MqttClient({
       url,
-      clientId: `stp${randomHex(8)}`,
+      clientId: connectionId('stq'),
       username: brokerAuth.username,
       password: brokerAuth.password,
       connectTimeoutMs: timeoutMs,
@@ -209,6 +209,12 @@ export async function findReachableBroker(timeoutMs = 7000, urls: string[] = bro
   return best;
 }
 
+// Enlace de una pantalla del stand con todos los servidores. Cada pantalla abierta tiene su propia
+// conexión: la que conduce y las que solo miran la misma ruta conviven sin desconectarse entre sí.
+export function standLink(record: HostRecord, urls: string[] = brokerUrls): MultiRouteLink {
+  return new MultiRouteLink(record.brokerIndex, urls);
+}
+
 export class RouteUnavailableError extends Error {
   constructor(readonly reason: 'no-broker' | 'storage') {
     super(`route-${reason}`);
@@ -216,11 +222,10 @@ export class RouteUnavailableError extends Error {
   }
 }
 
-export function newHostRecord(code: string, clientId: string, brokerIndex: number, settings: Partial<RouteSettings>, now: number, owner: string): HostRecord {
+export function newHostRecord(code: string, brokerIndex: number, settings: Partial<RouteSettings>, now: number, owner: string): HostRecord {
   return {
     v: ROUTE_RECORD_VERSION,
     code,
-    clientId,
     brokerIndex,
     boxKeys: newBoxKeys(),
     signKeys: newSignKeys(),
@@ -296,6 +301,8 @@ export class HostController {
   private impostorMono = -Infinity;
   private lastReassertMono = -Infinity;
   private offlineSince: number | null = null;
+  // Servidores en línea la última vez que cambió la conexión (para saber cuándo vuelve uno).
+  private onlineBrokers = 0;
 
   private counters: HostCounters = {
     published: 0,
@@ -339,24 +346,24 @@ export class HostController {
     const brokerIndex = await findReachableBroker();
     if (brokerIndex === null) throw new RouteUnavailableError('no-broker');
     const code = generateRouteCode(brokerIndex, brokerUrls.length);
-    const record = newHostRecord(code, `sth${randomHex(9)}`, brokerIndex, settings, Date.now(), OWNER);
+    const record = newHostRecord(code, brokerIndex, settings, Date.now(), OWNER);
     try {
       await deviceHostStore.save(record);
     } catch {
       throw new RouteUnavailableError('storage');
     }
-    return new HostController(record, new MultiRouteLink(record.clientId, brokerIndex, false));
+    return new HostController(record, standLink(record));
   }
 
   static fromRecord(record: HostRecord): HostController {
-    return new HostController(record, new MultiRouteLink(record.clientId, record.brokerIndex, false));
+    return new HostController(record, standLink(record));
   }
 
   // Ruta sobre un enlace dado (bus local del modo individual y pruebas).
   static createWithLink(link: RouteLink, settings: Partial<RouteSettings> = {}, options: HostOptions = {}): HostController {
     const clock = options.clock ?? systemClock;
     const code = generateRouteCode(link.brokerIndex, link.brokerCount);
-    const record = newHostRecord(code, `loc${randomHex(6)}`, link.brokerIndex, settings, clock.now(), options.owner ?? OWNER);
+    const record = newHostRecord(code, link.brokerIndex, settings, clock.now(), options.owner ?? OWNER);
     return new HostController(record, link, options);
   }
 
@@ -746,9 +753,14 @@ export class HostController {
   }
 
   private onLinkStatus(status: LinkStatus) {
+    const online = this.brokerStates().filter((item) => item.status === 'online').length;
+    const gained = online > this.onlineBrokers;
+    this.onlineBrokers = online;
     if (status === 'online') {
       this.offlineSince = null;
-      if (this.role === 'driver') {
+      // Volvió la conexión con un servidor: el stand se anuncia y publica el estado en él. (Que otro
+      // servidor siga caído y reintentando no es motivo para publicar de nuevo.)
+      if (this.role === 'driver' && gained) {
         this.publishHello();
         this.publishState();
       }
@@ -1022,7 +1034,14 @@ export class HostController {
       if (known) {
         // Reintento de algo ya resuelto: misma respuesta, sin aplicarlo otra vez.
         if (!player.kicked) this.apply({ ...this.record.state, players: { ...this.record.state.players, [clientId]: { ...player, lastSeen: now } } });
-        this.sendDirect(clientId, player.boxKey, { k: 'dm', type: 'acks', list: [known] });
+        const reply = () => this.sendDirect(clientId, player.boxKey, { k: 'dm', type: 'acks', list: [known] });
+        // Si esa respuesta todavía se está guardando, la confirmación espera igual que la primera vez.
+        if (this.saving || this.dirty) {
+          this.afterSave.push(reply);
+          this.commit();
+        } else {
+          reply();
+        }
         return;
       }
     }

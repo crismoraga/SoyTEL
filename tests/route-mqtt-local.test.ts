@@ -3,7 +3,7 @@ import path from 'path';
 import { createInterface } from 'readline';
 import WebSocket from 'ws';
 import { systemClock } from '@/route/clock';
-import { findReachableBroker, HostController, newHostRecord, probeBroker } from '@/route/host';
+import { findReachableBroker, HostController, newHostRecord, probeBroker, standLink } from '@/route/host';
 import { MqttRouteLink, MultiRouteLink } from '@/route/link';
 import { MemberController } from '@/route/member';
 import { generateRouteCode } from '@/route/protocol';
@@ -79,9 +79,8 @@ async function brokerStats(broker: Broker): Promise<{ published: number; clients
   return JSON.parse(broker.lines[broker.lines.length - 1]) as { published: number; clients: number };
 }
 
-let serial = 0;
-const clientId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(serial++).toString(36)}`;
-const link = (prefix: string) => new MqttRouteLink(clientId(prefix), 0, false, [brokers[0].url]);
+// `prefix` marca el comienzo del identificador de conexión, para poder cortarla desde el broker.
+const link = (prefix: string) => new MqttRouteLink(0, [brokers[0].url], { idPrefix: prefix });
 
 // Corta desde el broker la conexión de un cliente (como una caída de red del lado del servidor).
 function dropClient(broker: Broker, prefix: string) {
@@ -100,7 +99,7 @@ describe('ruta sobre brokers MQTT locales reales', () => {
     const store = new MemoryHostStore();
     const locks = new MemoryLocks();
     const code = generateRouteCode(0, 1);
-    const record = newHostRecord(code, 'sthlocal', 0, { quizQuestions: 2, countdownSeconds: 1, questionSeconds: 6, revealSeconds: 1 }, Date.now(), 'a0000000aaaa');
+    const record = newHostRecord(code, 0, { quizQuestions: 2, countdownSeconds: 1, questionSeconds: 6, revealSeconds: 1 }, Date.now(), 'a0000000aaaa');
     const host = new HostController(record, link('sth'), { store, locks, clock: systemClock, owner: 'a0000000aaaa' });
     stoppers.push(() => host.stop(false));
     await host.start();
@@ -222,13 +221,77 @@ describe('ruta sobre brokers MQTT locales reales', () => {
     host.stop(false);
   });
 
+  it('dos pantallas del stand con la misma ruta guardada siguen conectadas a la vez: el servidor no echa a una por la otra', async () => {
+    const urls = [brokers[0].url, brokers[1].url];
+    const store = new MemoryHostStore();
+    const locks = new MemoryLocks();
+    const code = generateRouteCode(0, urls.length);
+    const record = newHostRecord(code, 0, {}, Date.now(), 'a0000000dddd');
+    const before = await Promise.all(brokers.map(brokerStats));
+    // Como en la app: cada pantalla arma su enlace a partir de la misma ruta guardada.
+    const driverLink = standLink(record, urls);
+    const driver = new HostController(record, driverLink, { store, locks, clock: systemClock, owner: 'a0000000dddd' });
+    stoppers.push(() => driver.stop(false));
+    await driver.start();
+    await until(() => driver.getView().brokersOnline === 2, 8000, 'la pantalla que conduce, en línea en los dos servidores');
+    const observerLink = standLink((await store.load(code))!, urls);
+    const observer = new HostController((await store.load(code))!, observerLink, { store, locks, clock: systemClock, owner: 'a0000000eeee' });
+    stoppers.push(() => observer.stop(false));
+    await observer.start();
+    expect(observer.getView().role).toBe('observer');
+    await until(() => observer.getView().brokersOnline === 2, 8000, 'la segunda pantalla, en línea en los dos servidores');
+
+    // Durante varios segundos ninguna de las dos pierde una conexión.
+    const drops: string[] = [];
+    const watch = (name: string, target: MultiRouteLink) =>
+      target.onStatus(() => {
+        const offline = target.brokers.filter((item) => item.status !== 'online').length;
+        if (offline > 0) drops.push(`${name}: ${offline} sin conexión`);
+      });
+    const stops = [watch('conduce', driverLink), watch('observa', observerLink)];
+    await sleep(4000);
+    stops.forEach((stop) => stop());
+    expect(drops).toEqual([]);
+    const after = await Promise.all(brokers.map(brokerStats));
+    after.forEach((stats, index) => expect(stats.clients - before[index].clients).toBe(2));
+    // Y la que observa sigue viendo lo que publica la que conduce.
+    driver.dispatch({ type: 'finish' });
+    await until(() => observer.getView().snapshot.phase === driver.getView().snapshot.phase, 3000, 'la segunda pantalla ve el cambio');
+    observer.stop(false);
+    driver.stop(false);
+  });
+
+  it('la carrera elige el servidor donde está el stand, no el que conecta primero', async () => {
+    const [empty, used] = brokers;
+    const code = generateRouteCode(1, 2);
+    const record = newHostRecord(code, 1, {}, Date.now(), 'a0000000ffff');
+    // El stand solo alcanza el segundo servidor (el primero está bloqueado en su red).
+    const host = new HostController(record, new MqttRouteLink(0, [used.url], { idPrefix: 'sth' }), { store: new MemoryHostStore(), locks: null, clock: systemClock, owner: 'a0000000ffff' });
+    stoppers.push(() => host.stop(false));
+    await host.start();
+    await until(() => host.getView().link === 'online', 5000, 'stand en línea');
+    for (const alias of ['Uno', 'Dos', 'Tres', 'Cuatro']) {
+      const member = new MemberController({ store: new MemoryMemberStore(), clock: systemClock });
+      stoppers.push(() => member.reset());
+      const memberLink = new MqttRouteLink(0, [empty.url, used.url], { race: true });
+      const started = Date.now();
+      await member.join({ code, alias, avatar: 1, fingerprint: host.fingerprint, link: memberLink });
+      await until(() => member.getView().status === 'joined' && Boolean(member.getView().me), 8000, `unión de ${alias}`);
+      // Sin pagar la espera de un servidor donde el stand no está.
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(memberLink.brokerIndex).toBe(1);
+    }
+    expect(host.getView().snapshot.players).toHaveLength(4);
+    host.stop(false);
+  });
+
   it('el stand está en todos los servidores: cada teléfono entra por el que alcanza y la caída de uno no detiene la ruta', async () => {
     const [first, secondBroker] = brokers;
     // Tres servidores configurados: uno caído (o bloqueado por la red) y dos que funcionan.
     const urls = [DEAD_URL, first.url, secondBroker.url];
     const code = generateRouteCode(0, urls.length);
-    const record = newHostRecord(code, 'sthmulti', 0, { quizQuestions: 1 }, Date.now(), 'a0000000cccc');
-    const hostLink = new MultiRouteLink(clientId('shm'), 0, false, urls);
+    const record = newHostRecord(code, 0, { quizQuestions: 1 }, Date.now(), 'a0000000cccc');
+    const hostLink = new MultiRouteLink(0, urls);
     const host = new HostController(record, hostLink, { store: new MemoryHostStore(), locks: null, clock: systemClock, owner: 'a0000000cccc' });
     stoppers.push(() => host.stop(false));
     await host.start();
@@ -245,10 +308,10 @@ describe('ruta sobre brokers MQTT locales reales', () => {
       return { alias, member, link: memberLink, ms: Date.now() - started };
     };
     // Ana parte por el servidor del código (el caído): la carrera la lleva al primero que responde.
-    const ana = await join('Ana', new MqttRouteLink(clientId('mra'), 0, false, urls, { race: true }));
+    const ana = await join('Ana', new MqttRouteLink(0, urls, { race: true }));
     // Beto solo alcanza el servidor 1 y Caro solo el 2 (como dos redes con bloqueos distintos).
-    const beto = await join('Beto', new MqttRouteLink(clientId('mrb'), 0, false, [first.url]));
-    const caro = await join('Caro', new MqttRouteLink(clientId('mrc'), 0, false, [secondBroker.url]));
+    const beto = await join('Beto', new MqttRouteLink(0, [first.url]));
+    const caro = await join('Caro', new MqttRouteLink(0, [secondBroker.url]));
     expect(ana.link.brokerIndex).not.toBe(0);
     // Con la carrera no se paga la espera del servidor caído.
     expect(ana.ms).toBeLessThan(4000);

@@ -156,7 +156,7 @@ describe('recompensa del podio (RT-13)', () => {
 describe('apertura de una ruta en el stand (RT-07)', () => {
   it('dos aperturas simultáneas comparten un solo controlador y "tomar el control" detiene al anterior', async () => {
     const net = new SimNet();
-    await saveHost(newHostRecord('ABC234', 'sthprueba', 0, {}, Date.now(), 'a000000000aa'));
+    await saveHost(newHostRecord('ABC234', 0, {}, Date.now(), 'a000000000aa'));
     const created: HostController[] = [];
     jest.spyOn(HostController, 'fromRecord').mockImplementation((record) => {
       const controller = new HostController(record, net.link(`stand${created.length}`), { locks: null });
