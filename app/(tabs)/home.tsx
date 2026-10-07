@@ -1,21 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router, type Href } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
-import { SectionHeader } from '@/components/Blocks';
-import { AppLogo, brandImages, Wordmark } from '@/components/Brand';
+import { ListRow, SectionHeader } from '@/components/Blocks';
+import { AppLogo, Wordmark } from '@/components/Brand';
 import { Tag } from '@/components/Chips';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Skeleton, SkeletonText } from '@/components/feedback/Skeleton';
 import { Medallion, type MedallionGlyph } from '@/components/graphics/Medallion';
 import { Rutix } from '@/components/graphics/Rutix';
-import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
 import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
-import { TelIcon } from '@/components/TelIcon';
+import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { UserAvatar } from '@/components/UserAvatar';
 import { useAccount } from '@/account/store';
@@ -33,28 +32,11 @@ import { nextMission } from '@/lib/missions';
 import { useEntering } from '@/lib/motion';
 import { levelTitle, progressToNextLevel, xpToNextLevel } from '@/lib/progression';
 import { useFocusData } from '@/lib/useFocusData';
-import { ensureDailyInbox, useUnreadCount } from '@/storage/inbox';
-import { loadProfile, loadResults } from '@/storage/profile';
+import { ensureDailyInbox } from '@/storage/inbox';
+import { loadProfile, loadResults, progressStatsOf } from '@/storage/profile';
 import { loadCareerProgress } from '@/storage/career';
 import { loadMascotDays, loadStoryProgress } from '@/storage/story';
-import { colors, radius, shadows, spacing } from '@/theme';
-
-interface ExploreItem {
-  label: string;
-  glyph: MedallionGlyph;
-  route: Href;
-}
-
-const explore: ExploreItem[] = [
-  { label: 'Ráfaga', glyph: 'bolt', route: '/burst' },
-  { label: 'Telemático', glyph: 'question', route: '/millionaire' },
-  { label: 'Historia', glyph: 'book', route: '/story' },
-  { label: 'Ruta', glyph: 'route', route: '/ruta' },
-  { label: 'Rutix', glyph: 'robot', route: '/mascot' },
-  { label: 'Runner', glyph: 'rocket', route: '/runner' },
-  { label: 'Malla', glyph: 'cap', route: '/malla' },
-  { label: 'Conecta', glyph: 'network', route: { pathname: '/puzzle', params: { juego: 'red' } } },
-];
+import { colors, radius, spacing } from '@/theme';
 
 function moodLabel(value: number): string {
   if (value >= 85) return 'radiante';
@@ -63,39 +45,58 @@ function moodLabel(value: number): string {
   return 'con poca señal';
 }
 
-// Pantalla "Inicio" de Claude Design: cabecera azul, tarjeta flotante de misión y accesos a todo.
+// El único paso que Inicio propone a la vez: volver a la ruta, seguir la guía o la próxima misión.
+interface NextStep {
+  kicker: string;
+  title: string;
+  text: string;
+  cta: string;
+  route: Href;
+  glyph?: MedallionGlyph;
+  icon?: IconName;
+}
+
+// Inicio responde una sola pregunta: "¿qué hago ahora?". Un paso principal, lo de hoy y dos accesos.
+// Todo el catálogo de juegos vive en la pestaña Jugar.
 export default function HomeScreen() {
   const entering = useEntering();
-  const unread = useUnreadCount();
   const account = useAccount();
   const [tipOpen, setTipOpen] = useState(false);
   const [brandOpen, setBrandOpen] = useState(false);
-  const { data } = useFocusData(async () => {
+  const { data, error, reload } = useFocusData(async () => {
     const [profile, results, story, mascotDays, career] = await Promise.all([loadProfile(), loadResults(), loadStoryProgress(), loadMascotDays(), loadCareerProgress()]);
     return { profile, results, story, mascotDays: mascotDays.length, careerAreas: Object.values(career).filter(Boolean).length };
   });
   const profile = data?.profile;
 
   useEffect(() => {
-    if (profile) void ensureDailyInbox(profile.mascotMood);
+    if (profile) void ensureDailyInbox(profile.mascotMood).catch(() => undefined);
   }, [profile]);
 
   const route = useMemberView();
   const routeActive = route.status !== 'idle' && Boolean(route.code);
-  const mission = data ? nextMission(data.results, data.story.completedChapters) : null;
   const tip = tipForDate(new Date());
   const dailyDone = data ? isDailyDone(data.results, dailyKey(new Date())) : false;
-  const guideSteps = data ? starterGuide(data) : [];
+  const guideSteps = data ? starterGuide({ ...data, stats: progressStatsOf(data.profile, data.results) }) : [];
   const guide = guideProgress(guideSteps);
-  const nextStep = guide.next;
   const missions = data ? missionStates(data.results) : [];
   const missionsDone = missions.filter((state) => state.done).length;
+
+  let step: NextStep | null = null;
+  if (data) {
+    if (guide.next) {
+      step = { kicker: `Guía de inicio · ${guide.done} de ${guide.total}`, title: guide.next.title, text: guide.next.text, cta: 'Vamos', route: guide.next.route, icon: guide.next.icon };
+    } else {
+      const mission = nextMission(data.results, data.story.completedChapters);
+      step = { kicker: mission.kicker, title: mission.title, text: mission.subtitle, cta: mission.cta, route: mission.route, glyph: mission.glyph };
+    }
+  }
 
   return (
     <Screen
       inTabs
       header={
-        <AppHeader rounded overlap={64}>
+        <AppHeader rounded overlap={56}>
           <View style={styles.brandRow}>
             <PressableScale
               accessibilityRole="button"
@@ -108,297 +109,195 @@ export default function HomeScreen() {
               <AppLogo size={38} />
               <Wordmark size={22} />
             </PressableScale>
-            <View style={styles.headerActions}>
-              <IconButton icon="bell" tone="dark" badge={unread} accessibilityLabel="Avisos" onPress={() => router.navigate('/inbox')} />
-              <PressableScale accessibilityRole="button" accessibilityLabel="Tu perfil" haptic onPress={() => router.push('/profile')} style={styles.avatarButton}>
-                <UserAvatar avatar={profile?.avatar ?? 0} size={40} />
-              </PressableScale>
-            </View>
+            {/* Los avisos tienen su pestaña (con su punto de pendientes): aquí solo va el perfil. */}
+            <PressableScale accessibilityRole="button" accessibilityLabel="Tu perfil" haptic onPress={() => router.push('/profile')} style={styles.avatarButton}>
+              <UserAvatar avatar={profile?.avatar ?? 0} size={40} />
+            </PressableScale>
           </View>
           {profile ? (
             <Animated.View entering={entering.fade()} style={styles.greeting}>
-              <TelText variant="title" color="cream">
+              <TelText variant="title" color="cream" numberOfLines={2}>
                 {greeting()}, {profile.alias}
               </TelText>
-              <View style={styles.pills}>
-                <Tag tone="glass" icon="star" label={`Nivel ${profile.level} · ${levelTitle(profile.level)}`} />
-                <Tag
-                  tone="glass"
-                  icon="flame"
-                  label={profile.streakDays > 0 ? `Racha ${profile.streakDays} ${profile.streakDays === 1 ? 'día' : 'días'}` : 'Empieza tu racha'}
-                />
-              </View>
+              {/* Nivel, avance y racha en una sola línea: antes ocupaban dos etiquetas y media tarjeta. */}
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel={`Nivel ${profile.level}, ${levelTitle(profile.level)}. Faltan ${formatNumber(xpToNextLevel(profile.xp))} XP para el siguiente. Racha de ${profile.streakDays} días. Ver tu perfil`}
+                onPress={() => router.push('/profile')}
+                style={styles.level}
+              >
+                <View style={styles.levelRow}>
+                  <TelText variant="label" color="cream" numberOfLines={1} style={styles.flexText}>
+                    Nivel {profile.level} · {levelTitle(profile.level)}
+                  </TelText>
+                  <View style={styles.streak}>
+                    <TelIcon name="flame" size={14} color={colors.accent} />
+                    <TelText variant="small" color="accentSoft" tabular>
+                      {profile.streakDays > 0 ? `${profile.streakDays} ${profile.streakDays === 1 ? 'día' : 'días'}` : 'Sin racha'}
+                    </TelText>
+                  </View>
+                </View>
+                <ProgressBar progress={progressToNextLevel(profile.xp)} color={colors.accent} trackColor={colors.secondary} height={6} accessibilityLabel="Progreso al siguiente nivel" />
+                <TelText variant="small" color="accentSoft" tabular>
+                  {formatNumber(profile.xp)} XP · faltan {formatNumber(xpToNextLevel(profile.xp))} para el nivel {profile.level + 1}
+                </TelText>
+              </PressableScale>
             </Animated.View>
           ) : (
             <View style={styles.greeting}>
               <Skeleton tone="dark" height={26} width="70%" />
-              <Skeleton tone="dark" height={20} width="55%" />
+              <Skeleton tone="dark" height={44} />
             </View>
           )}
         </AppHeader>
       }
     >
       <View style={styles.floating}>
-        <TelCard elevated style={styles.missionCard}>
-          {mission && profile ? (
-            <Animated.View entering={entering.fadeUp()} style={styles.missionInner}>
-              <View style={styles.missionRow}>
-                <Medallion glyph={mission.glyph} size={58} />
+        {routeActive ? (
+          <TelCard tone="navy" elevated style={styles.hero}>
+            <Tag tone="glass" live label={route.solo ? 'RUTA INDIVIDUAL' : `RUTA ${route.code}`} style={styles.heroTag} />
+            <TelText variant="heading" color="cream">
+              Tienes una ruta en curso
+            </TelText>
+            <RouteProgress stop={route.snapshot?.stop ?? 'stand'} finished={route.snapshot?.phase === 'podium'} />
+            <TelButton label="Volver a la ruta" variant="cream" icon="route" onPress={() => router.push('/ruta/juego')} />
+          </TelCard>
+        ) : step ? (
+          <TelCard elevated style={styles.hero}>
+            <Animated.View entering={entering.fadeUp()} style={styles.heroInner}>
+              <View style={styles.heroRow}>
+                {step.glyph ? (
+                  <Medallion glyph={step.glyph} size={56} />
+                ) : (
+                  <View style={styles.heroIcon}>
+                    <TelIcon name={step.icon ?? 'bolt'} size={26} color={colors.cream} />
+                  </View>
+                )}
                 <View style={styles.flex}>
                   <TelText variant="small" color="inkAccent" style={styles.kicker}>
-                    {mission.kicker.toUpperCase()}
+                    {step.kicker.toUpperCase()}
                   </TelText>
                   <TelText variant="subtitle" color="ink">
-                    {mission.title}
+                    {step.title}
                   </TelText>
                   <TelText variant="caption" color="inkSoft">
-                    {mission.subtitle}
+                    {step.text}
                   </TelText>
                 </View>
               </View>
-              <View style={styles.progressBlock}>
-                <View style={styles.progressLabels}>
-                  <TelText variant="label" color="ink">
-                    Nivel {profile.level}
-                  </TelText>
-                  <TelText variant="label" color="inkSoft" tabular>
-                    {formatNumber(profile.xp)} XP · faltan {formatNumber(xpToNextLevel(profile.xp))}
-                  </TelText>
-                </View>
-                <ProgressBar progress={progressToNextLevel(profile.xp)} accessibilityLabel="Progreso al siguiente nivel" />
-              </View>
-              <TelButton label={mission.cta} iconRight="arrowRight" onPress={() => router.push(mission.route)} />
+              {guide.next && (
+                <ProgressBar progress={guide.total ? guide.done / guide.total : 0} height={6} accessibilityLabel={`Guía de inicio: ${guide.done} de ${guide.total} pasos listos`} />
+              )}
+              <TelButton label={step.cta} iconRight="arrowRight" onPress={() => router.push((step as NextStep).route)} />
             </Animated.View>
-          ) : (
-            <View style={styles.missionInner}>
-              <View style={styles.missionRow}>
-                <Skeleton width={58} height={58} rounded={29} />
-                <View style={styles.flex}>
-                  <SkeletonText lines={3} />
-                </View>
-              </View>
-              <Skeleton height={8} rounded={radius.pill} />
-              <Skeleton height={52} rounded={radius.md} />
-            </View>
-          )}
-        </TelCard>
-      </View>
-
-      {nextStep && (
-        <Animated.View entering={entering.fadeUp(1)}>
-          <TelCard style={styles.guideCard}>
-            <View style={styles.guideHead}>
-              <View style={styles.guideRutix}>
-                <Rutix size={54} expression="wink" pose="point" animated={false} accessibilityLabel="" />
-              </View>
-              <View style={styles.flex}>
-                <TelText variant="small" color="inkAccent" style={styles.kicker}>
-                  GUÍA DE INICIO · {guide.done} DE {guide.total}
-                </TelText>
-                <TelText variant="subtitle" color="ink">
-                  {nextStep.title}
-                </TelText>
-                <TelText variant="caption" color="inkSoft">
-                  {nextStep.text}
-                </TelText>
-              </View>
-            </View>
-            <View style={styles.guideSteps} accessible accessibilityLabel={`Guía de inicio: ${guide.done} de ${guide.total} pasos listos`}>
-              {guideSteps.map((step) => (
-                <View key={step.id} style={[styles.guideDot, step.done && styles.guideDotDone, step.id === nextStep.id && styles.guideDotNow]}>
-                  <TelIcon
-                    name={step.done ? 'check' : step.icon}
-                    size={14}
-                    color={step.done ? colors.white : step.id === nextStep.id ? colors.actionInk : colors.inkSoft}
-                    strokeWidth={step.done ? 3 : 2}
-                  />
-                </View>
-              ))}
-            </View>
-            <TelButton label="Vamos" size="sm" iconRight="arrowRight" onPress={() => router.push(nextStep.route)} />
           </TelCard>
-        </Animated.View>
-      )}
-
-      <Animated.View entering={entering.fadeUp(1)}>
-        <TelCard tone="navy" style={styles.routeCard}>
-          <View style={styles.routeHead}>
-            <Tag tone="glass" live label={routeActive ? (route.solo ? 'RUTA INDIVIDUAL' : `RUTA ${route.code}`) : 'FERIA · STAND TELEMÁTICA'} />
-          </View>
-          <TelText variant="heading" color="cream">
-            {routeActive ? 'Tienes una ruta en curso' : 'Ruta Telemática en vivo'}
-          </TelText>
-          <TelText variant="caption" color="accentSoft">
-            {routeActive ? 'Vuelve para seguir jugando con tu grupo.' : 'Ingresa el código del stand y juega con tu grupo en B215, B213 y el pasillo.'}
-          </TelText>
-          <RouteProgress stop={route.snapshot?.stop ?? 'stand'} finished={route.snapshot?.phase === 'podium'} />
-          <TelButton
-            label={routeActive ? 'Volver a la ruta' : 'Ingresar código del stand'}
-            variant="cream"
-            icon={routeActive ? 'route' : 'qr'}
-            onPress={() => router.push(routeActive ? '/ruta/juego' : '/ruta')}
-          />
-        </TelCard>
-      </Animated.View>
-
-      <Animated.View entering={entering.fadeUp(1)}>
-        <TelCard onPress={() => router.push(account.status === 'guest' ? '/cuenta' : '/ranking')} accessibilityLabel="Ranking global" style={styles.rankCard}>
-          <View style={styles.rankIcon}>
-            <TelIcon name="trophy" size={24} color={colors.primary} />
-          </View>
-          <View style={styles.flex}>
-            <TelText variant="small" color="inkAccent" style={styles.kicker}>
-              RANKING GLOBAL
-            </TelText>
-            {account.status === 'registered' && account.rank ? (
-              <TelText variant="subtitle" color="ink">
-                Lugar #{formatNumber(account.rank.rank)} de {formatNumber(account.rank.total)}
-              </TelText>
-            ) : (
-              <TelText variant="subtitle" color="ink">
-                {account.status === 'expired' ? 'Vuelve a entrar a tu cuenta' : 'Crea tu cuenta y entra al ranking'}
-              </TelText>
-            )}
-            <TelText variant="caption" color="inkSoft">
-              {account.status === 'registered' ? 'Compara tu XP con todos los que juegan SoyTEL.' : 'Solo un alias: tus puntajes quedan registrados.'}
-            </TelText>
-          </View>
-          <TelIcon name="chevronRight" size={20} color={colors.ink} />
-        </TelCard>
-      </Animated.View>
-
-      <Animated.View entering={entering.fadeUp(1)}>
-        <TelCard
-          onPress={() => router.push({ pathname: '/burst', params: { diario: '1' } })}
-          accessibilityLabel={dailyDone ? 'Desafío de hoy completado' : 'Desafío de hoy'}
-          style={styles.rankCard}
-        >
-          <View style={[styles.rankIcon, styles.dailyIcon]}>
-            <TelIcon name={dailyDone ? 'checkCircle' : 'calendar'} size={24} color={colors.primary} />
-          </View>
-          <View style={styles.flex}>
-            <TelText variant="small" color="inkAccent" style={styles.kicker}>
-              DESAFÍO DE HOY
-            </TelText>
+        ) : error ? (
+          <TelCard elevated style={styles.hero}>
             <TelText variant="subtitle" color="ink">
-              {dailyDone ? '¡Completado! Vuelve mañana' : 'Cinco microjuegos, los mismos para todos'}
+              No pudimos leer tu progreso
             </TelText>
             <TelText variant="caption" color="inkSoft">
-              {dailyDone ? 'Puedes repetirlo para practicar.' : `Termínalo hoy y suma +${DAILY_BONUS} puntos de bono.`}
+              Tus datos siguen en el teléfono. Inténtalo otra vez.
             </TelText>
-          </View>
-          <TelIcon name="chevronRight" size={20} color={colors.ink} />
-        </TelCard>
-      </Animated.View>
-
-      <View style={styles.section}>
-        <SectionHeader title="Explora" />
-        <View style={styles.grid}>
-          {explore.map((item, index) => (
-            <Animated.View key={item.label} entering={entering.pop(index)} style={styles.gridCell}>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={item.label}
-                haptic
-                onPress={() => router.push(item.route)}
-                style={styles.gridButton}
-              >
-                <Medallion glyph={item.glyph} size={64} />
-                <TelText variant="small" color="ink" align="center">
-                  {item.label}
-                </TelText>
-              </PressableScale>
-            </Animated.View>
-          ))}
-        </View>
-      </View>
-
-      {profile && (
-        <Animated.View entering={entering.fadeUp(2)}>
-          <TelCard tone="navy" onPress={() => router.push('/mascot')} accessibilityLabel={`Rutix está ${moodLabel(profile.mascotMood)}. Visitar a Rutix`} style={styles.rutixCard}>
-            <Rutix size={96} expression={expressionForMood(profile.mascotMood)} signal={signalForMood(profile.mascotMood)} />
-            <View style={styles.flex}>
-              <TelText variant="small" color="accent" style={styles.kicker}>
-                TU COMPAÑERO · MISIONES {missionsDone} DE {missions.length}
-              </TelText>
-              <TelText variant="subtitle" color="cream">
-                Rutix está {moodLabel(profile.mascotMood)}
-              </TelText>
-              <ProgressBar progress={profile.mascotMood / 100} color={colors.accent} trackColor={colors.secondary} height={6} style={styles.moodBar} />
-              <View style={styles.inlineLink}>
-                <TelText variant="label" color="accentSoft">
-                  Visitar a Rutix
-                </TelText>
-                <TelIcon name="arrowRight" size={16} color={colors.accentSoft} />
+            <TelButton label="Reintentar" icon="refresh" onPress={reload} />
+          </TelCard>
+        ) : (
+          <TelCard elevated style={styles.hero}>
+            <View style={styles.heroRow}>
+              <Skeleton width={56} height={56} rounded={28} />
+              <View style={styles.flex}>
+                <SkeletonText lines={3} />
               </View>
             </View>
+            <Skeleton height={52} rounded={radius.md} />
           </TelCard>
+        )}
+      </View>
+
+      {!routeActive && (
+        <Animated.View entering={entering.fadeUp(1)}>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Ruta Telemática en vivo. Ingresa el código del stand"
+            haptic
+            onPress={() => router.push('/ruta')}
+            scaleTo={0.98}
+            style={styles.routeRow}
+          >
+            <View style={styles.routeIcon}>
+              <TelIcon name="qr" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.flex}>
+              <TelText variant="subtitle" color="cream">
+                Ruta Telemática en vivo
+              </TelText>
+              <TelText variant="caption" color="accentSoft">
+                ¿Estás en la feria? Ingresa el código del stand y juega con tu grupo.
+              </TelText>
+            </View>
+            <TelIcon name="chevronRight" size={20} color={colors.cream} />
+          </PressableScale>
         </Animated.View>
       )}
 
       <View style={styles.section}>
-        <SectionHeader title="Hoy en SoyTEL" actionLabel="Ver avisos" onAction={() => router.navigate('/inbox')} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carousel} contentContainerStyle={styles.carouselContent}>
-          <FeatureCard
-            image={brandImages.spotLabs}
-            tag={<Tag tone="navy" live label="EN VIVO" />}
-            title="Ráfaga relámpago"
-            meta="8 microjuegos · a tu ritmo"
-            onPress={() => router.push('/burst')}
-          />
-          <FeatureCard
-            image={brandImages.spotEvents}
-            tag={<Tag tone="cream" label="¿SABÍAS QUE?" />}
-            title={tip.text}
-            meta="Dato del día · toca para leer"
-            onPress={() => setTipOpen(true)}
-            compactTitle
-          />
-          <FeatureCard
-            image={brandImages.spotCareer}
-            tag={<Tag tone="sky" label="CARRERA" />}
-            title="¿Qué hace un telemático?"
-            meta="6 áreas para descubrir"
-            onPress={() => router.navigate('/career')}
-          />
-        </ScrollView>
+        <SectionHeader title="Hoy" />
+        <Animated.View entering={entering.fadeUp(1)} style={styles.today}>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={dailyDone ? 'Desafío de hoy: completado. Repetir para practicar' : `Desafío de hoy: cinco microjuegos, bono de ${DAILY_BONUS} puntos`}
+            haptic
+            onPress={() => router.push({ pathname: '/burst', params: { diario: '1' } })}
+            scaleTo={0.97}
+            style={styles.tile}
+          >
+            <View style={[styles.tileIcon, dailyDone && styles.tileIconDone]}>
+              <TelIcon name={dailyDone ? 'checkCircle' : 'calendar'} size={22} color={dailyDone ? colors.white : colors.primary} />
+            </View>
+            <TelText variant="label" color="ink">
+              Desafío de hoy
+            </TelText>
+            <TelText variant="small" color={dailyDone ? 'successInk' : 'inkSoft'}>
+              {dailyDone ? 'Completado' : `5 microjuegos · +${DAILY_BONUS} pts`}
+            </TelText>
+          </PressableScale>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={profile ? `Rutix está ${moodLabel(profile.mascotMood)}. Misiones de hoy: ${missionsDone} de ${missions.length}. Visitar a Rutix` : 'Visitar a Rutix'}
+            haptic
+            onPress={() => router.push('/mascot')}
+            scaleTo={0.97}
+            style={styles.tile}
+          >
+            <View style={styles.tileRutix}>
+              <Rutix size={44} expression={expressionForMood(profile?.mascotMood ?? 70)} signal={signalForMood(profile?.mascotMood ?? 70)} animated={false} accessibilityLabel="" />
+            </View>
+            <TelText variant="label" color="ink">
+              Misiones de Rutix
+            </TelText>
+            <TelText variant="small" color={missions.length > 0 && missionsDone === missions.length ? 'successInk' : 'inkSoft'}>
+              {missions.length ? `${missionsDone} de ${missions.length} · ${profile ? moodLabel(profile.mascotMood) : ''}` : 'Tu compañero'}
+            </TelText>
+          </PressableScale>
+        </Animated.View>
       </View>
+
+      <Animated.View entering={entering.fadeUp(2)} style={styles.rows}>
+        <ListRow
+          icon="trophy"
+          iconTint={['#F2CE63', colors.primary]}
+          title={account.status === 'registered' && account.rank ? `Ranking: lugar #${formatNumber(account.rank.rank)} de ${formatNumber(account.rank.total)}` : account.status === 'expired' ? 'Vuelve a entrar a tu cuenta' : 'Entra al ranking global'}
+          body={account.status === 'registered' ? 'Compara tu XP con todos los que juegan SoyTEL.' : 'Solo necesitas un alias: tus puntajes quedan registrados.'}
+          onPress={() => router.push(account.status === 'guest' ? '/cuenta' : '/ranking')}
+        />
+        <ListRow icon="lightbulb" title="Dato del día" body={tip.text.length > 78 ? `${tip.text.slice(0, 76).trimEnd()}…` : tip.text} onPress={() => setTipOpen(true)} />
+      </Animated.View>
+
+      <TelButton label="Ver todos los juegos" variant="subtle" iconRight="arrowRight" onPress={() => router.navigate('/games')} />
+
       <TipSheet tip={tip} visible={tipOpen} onClose={() => setTipOpen(false)} />
       <TelematicaSheet visible={brandOpen} onClose={() => setBrandOpen(false)} />
     </Screen>
-  );
-}
-
-function FeatureCard({
-  image,
-  tag,
-  title,
-  meta,
-  onPress,
-  compactTitle = false,
-}: {
-  image: number;
-  tag: React.ReactNode;
-  title: string;
-  meta: string;
-  onPress: () => void;
-  compactTitle?: boolean;
-}) {
-  return (
-    <PressableScale accessibilityRole="button" accessibilityLabel={`${title}. ${meta}`} onPress={onPress} scaleTo={0.97} style={styles.feature}>
-      <View style={styles.featureMedia}>
-        <Image source={image} style={styles.featureImage} resizeMode="cover" />
-        <View style={styles.featureTag}>{tag}</View>
-      </View>
-      <View style={styles.featureBody}>
-        <TelText variant={compactTitle ? 'label' : 'subtitle'} color="ink" numberOfLines={compactTitle ? 3 : 2}>
-          {title}
-        </TelText>
-        <TelText variant="caption" color="inkSoft">
-          {meta}
-        </TelText>
-      </View>
-    </PressableScale>
   );
 }
 
@@ -416,175 +315,120 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xs,
   },
   avatarButton: {
+    marginLeft: 'auto',
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankCard: {
+  greeting: {
+    gap: spacing.sm,
+  },
+  level: {
+    gap: 6,
+    minHeight: 44,
+  },
+  levelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  guideCard: {
-    gap: spacing.sm,
-  },
-  guideHead: {
+  streak: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  flexText: {
+    flex: 1,
+  },
+  floating: {
+    marginTop: -56 - spacing.gutter,
+  },
+  hero: {
+    padding: 18,
     gap: spacing.sm,
   },
-  guideRutix: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  heroInner: {
+    gap: 14,
+  },
+  heroTag: {
+    alignSelf: 'flex-start',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
   },
-  guideSteps: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  guideDot: {
-    flex: 1,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceAlt,
-  },
-  guideDotDone: {
-    backgroundColor: colors.success,
-  },
-  guideDotNow: {
-    backgroundColor: colors.action,
-  },
-  dailyIcon: {
-    backgroundColor: colors.accent,
-  },
-  rankIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F2CE63',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerActions: {
-    marginLeft: 'auto',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  greeting: {
-    gap: spacing.xs,
-  },
-  pills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  floating: {
-    marginTop: -64 - spacing.gutter,
-  },
-  missionCard: {
-    padding: 18,
-  },
-  missionInner: {
-    gap: 14,
-  },
-  missionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
   kicker: {
-    letterSpacing: 1.4,
-  },
-  progressBlock: {
-    gap: 6,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.xs,
+    letterSpacing: 1.2,
   },
   flex: {
     flex: 1,
     gap: 2,
   },
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: 14,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
+  },
+  routeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cream,
+  },
   section: {
     gap: spacing.sm,
-    marginTop: spacing.xs,
   },
-  grid: {
+  today: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: spacing.sm,
-  },
-  gridCell: {
-    width: '25%',
-  },
-  gridButton: {
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 2,
-  },
-  routeCard: {
     gap: spacing.sm,
   },
-  routeHead: {
-    flexDirection: 'row',
-  },
-  rutixCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: 14,
-  },
-  moodBar: {
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  inlineLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  tile: {
+    flex: 1,
     gap: 4,
-  },
-  carousel: {
-    marginHorizontal: -spacing.md,
-    flexGrow: 0,
-  },
-  carouselContent: {
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: 4,
-  },
-  feature: {
-    width: 236,
-    borderRadius: 18,
+    padding: 14,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  tileIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    marginBottom: 4,
+  },
+  tileIconDone: {
+    backgroundColor: colors.success,
+  },
+  tileRutix: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    marginBottom: 4,
     overflow: 'hidden',
-    ...shadows.soft,
   },
-  featureMedia: {
-    height: 120,
-    backgroundColor: colors.surfaceAlt,
-  },
-  featureImage: {
-    width: '100%',
-    height: '100%',
-  },
-  featureTag: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-  },
-  featureBody: {
-    padding: 14,
-    gap: 4,
-    minHeight: 96,
+  rows: {
+    gap: spacing.xs,
   },
 });
