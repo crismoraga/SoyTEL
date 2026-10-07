@@ -105,11 +105,17 @@ export function cipherRounds(level: number, random: Random = Math.random): Ciphe
   });
 }
 
-// Puntaje de un mensaje: 1000/3 por mensaje, menos por cada comprobación fallida.
-export function cipherPoints(wrongChecks: number): number {
-  return Math.max(120, Math.round(1000 / CIPHER_ROUNDS) - wrongChecks * 60);
+// Reparte 1000 puntos entre `rounds` rondas sin perder el resto de la división: las primeras se llevan
+// el punto que sobra, así una partida perfecta suma exactamente 1000.
+function roundShare(rounds: number, index: number): number {
+  return Math.floor(1000 / rounds) + (index < 1000 % rounds ? 1 : 0);
 }
 
-export function binaryPoints(wrongChecks: number): number {
-  return Math.max(60, Math.round(1000 / BINARY_ROUNDS) - wrongChecks * 50);
+// Puntaje de un mensaje: su parte de los 1000, menos por cada comprobación fallida.
+export function cipherPoints(wrongChecks: number, round = 0): number {
+  return Math.max(120, roundShare(CIPHER_ROUNDS, round) - wrongChecks * 60);
+}
+
+export function binaryPoints(wrongChecks: number, round = 0): number {
+  return Math.max(60, roundShare(BINARY_ROUNDS, round) - wrongChecks * 50);
 }

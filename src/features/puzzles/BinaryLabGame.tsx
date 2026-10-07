@@ -26,7 +26,7 @@ export function BinaryLabGame({ level, seed, onSolved, say }: PuzzleGameProps) {
 
   function win() {
     void feedbackSuccess();
-    score.current += binaryPoints(wrongHere.current);
+    score.current += binaryPoints(wrongHere.current, index);
     setSolved(true);
     say(`¡Correcto! ${explainBinary(challenge.value, challenge.bits)}`, 'good');
   }

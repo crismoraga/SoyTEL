@@ -75,7 +75,7 @@ export function deviceRound(random: Random = Math.random): ConceptRound {
 
 // ---- Wi-Fi seguro ----
 export const wifiSecurities = [
-  { level: 0, tag: 'Abierta, sin clave', why: 'Sin clave, cualquiera cerca puede leer lo que envías.' },
+  { level: 0, tag: 'Abierta, sin clave', why: 'Sin clave, la red no cifra nada: quien esté cerca ve a qué sitios entras y todo lo que no viaje por HTTPS.' },
   { level: 1, tag: 'WEP', why: 'WEP es antiguo: su clave se rompe en minutos.' },
   { level: 2, tag: 'WPA', why: 'WPA mejoró a WEP, pero ya está superado.' },
   { level: 3, tag: 'WPA2', why: 'WPA2 es seguro si la clave es buena.' },

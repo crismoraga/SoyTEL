@@ -68,10 +68,10 @@ export const securityCards: SecurityCard[] = [
     body: 'Red abierta, sin contraseña. Para navegar, ingresa el correo y la contraseña de tu Instagram.',
     threat: true,
     flags: [
-      { text: 'sin contraseña', why: 'Cualquiera puede espiar el tráfico.' },
+      { text: 'sin contraseña', why: 'La red no cifra el tráfico: quien esté cerca ve a qué sitios entras y lo que no viaje por HTTPS.' },
       { text: 'la contraseña de tu Instagram', why: 'Una red Wi-Fi nunca necesita tus claves de redes sociales.' },
     ],
-    explanation: 'Portal falso (evil twin) para robar cuentas.',
+    explanation: 'Portal falso (evil twin) para robar cuentas. En una red abierta HTTPS protege lo que envías a un sitio, pero la red nunca debe pedirte tus claves.',
   },
   {
     id: 't-linterna',

@@ -163,6 +163,16 @@ export function minimalMoves(puzzle: NetPuzzle): number {
 }
 
 // Puntaje: resolver vale 600 y la eficiencia (giros mínimos / giros usados) hasta 400 más.
+// Precisión de una solución: qué parte se resolvió sin pistas y con cuántos giros de más.
+// `hintedMoves` son los giros que hicieron las pistas. Solo con pistas → 0; a mano y sin giros de más → 1.
+export function netAccuracy(optimal: number, usedMoves: number, hintedMoves: number): number {
+  if (optimal <= 0) return 1;
+  const own = Math.max(0, optimal - hintedMoves);
+  if (own === 0) return 0;
+  const efficiency = usedMoves <= own ? 1 : own / usedMoves;
+  return Math.min(1, (own / optimal) * efficiency);
+}
+
 export function netScore(optimal: number, moves: number): number {
   const efficiency = moves <= 0 ? 1 : Math.min(1, optimal / moves);
   return Math.round(600 + 400 * efficiency);

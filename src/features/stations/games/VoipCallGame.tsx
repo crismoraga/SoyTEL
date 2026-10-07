@@ -4,11 +4,10 @@ import Animated, { FadeIn, FadeInDown, ZoomIn, ZoomOut } from 'react-native-rean
 import { PressableScale } from '@/components/PressableScale';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32, seededShuffle } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   DIAL_MAX,
   dialScore,
@@ -52,7 +51,7 @@ export function VoipCallGame({ seed, deadline, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
   }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
@@ -103,13 +102,6 @@ export function VoipCallGame({ seed, deadline, onComplete }: StationGameProps) {
   );
 }
 
-function useStageTimeout(endsAt: number, onTimeout: () => void) {
-  useEffect(() => {
-    const timer = setTimeout(onTimeout, Math.max(0, endsAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [endsAt, onTimeout]);
-}
-
 // ——— Etapa 1: marcar ———
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
@@ -118,7 +110,7 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
   const [typed, setTyped] = useState('');
   const [wrong, setWrong] = useState(0);
   const [calling, setCalling] = useState(false);
-  const [startedAt] = useState(() => Date.now());
+  const [startedAt] = useState(() => gameNow());
   const done = useRef(false);
   const askContinue = useAskContinue();
   const pace = usePace();
@@ -129,14 +121,14 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     onPoints(0);
     askContinue(onFinish);
   }, [askContinue, onFinish, onPoints]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function call() {
     if (calling || done.current) return;
     if (typed === EXTENSION) {
       done.current = true;
       setCalling(true);
-      onPoints(dialScore((clockNow() - startedAt) / pace, wrong));
+      onPoints(dialScore((gameNow() - startedAt) / pace, wrong));
       void feedbackSuccess();
       askContinue(onFinish);
     } else {
@@ -210,7 +202,7 @@ function SipStage({ random, endsAt, onPoints, onFinish }: { random: () => number
     onPoints(Math.round((sipScore(mistakes) * step) / sipFlow.length));
     askContinue(onFinish);
   }, [askContinue, mistakes, onFinish, onPoints, step]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function choose(message: SipMessage) {
     if (done.current) return;
@@ -310,7 +302,7 @@ function JitterStage({
   onFinish: () => void;
 }) {
   const pace = usePace();
-  const [packets] = useState<VoicePacket[]>(() => schedulePackets(random, Date.now() + 900, pace));
+  const [packets] = useState<VoicePacket[]>(() => schedulePackets(random, gameNow() + 900, pace));
   const [expected, setExpected] = useState(1);
   const [played, setPlayed] = useState<Record<number, 'ok' | 'lost'>>({});
   const [wrong, setWrong] = useState(0);
@@ -328,23 +320,24 @@ function JitterStage({
     onPoints(jitterScore(delivered, wrong));
     askContinue(onFinish, 'Ver resultado');
   }, [askContinue, delivered, onDelivered, onFinish, onPoints, wrong]);
-  useStageTimeout(endsAt, finish);
+  useGameTimeout(endsAt, finish);
+
+  useEffect(() => {
+    if (!done.current && expected > PHRASE.length) finish();
+  }, [expected, finish]);
 
   // Si el paquete esperado caducó, se pierde y la voz sigue sin él.
-  useEffect(() => {
-    if (done.current) return;
-    if (expected > PHRASE.length) {
-      finish();
-      return;
-    }
-    const packet = packets[expected - 1];
-    const timer = setTimeout(() => {
+  const awaited = expected <= PHRASE.length ? packets[expected - 1] : null;
+  useGameTimeout(
+    awaited ? awaited.expiresAt : null,
+    () => {
+      if (done.current) return;
       setPlayed((current) => ({ ...current, [expected]: 'lost' }));
       setExpected((value) => (value === expected ? value + 1 : value));
       void feedbackWarning();
-    }, Math.max(0, packet.expiresAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [expected, finish, packets]);
+    },
+    expected,
+  );
 
   useEffect(() => {
     onPoints(jitterScore(delivered, wrong));

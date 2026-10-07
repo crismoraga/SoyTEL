@@ -5,13 +5,12 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { PressableScale } from '@/components/PressableScale';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
 import {
   deviceLabels,
   initialChannels,
@@ -101,7 +100,7 @@ export function NetworkOpsGame({ seed, deadline, onComplete }: StationGameProps)
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + stageSeconds(STAGES[stageIndex], pace) * 1000);
+    setEndsAt(gameNow() + stageSeconds(STAGES[stageIndex], pace) * 1000);
   }, [pace, stageIndex]);
 
   const finishStage = useCallback(() => {
@@ -431,7 +430,7 @@ const interfaceIcons: Record<Interface, IconName> = { lan: 'laptop', servers: 's
 function RoutingStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StageProps) {
   const [random] = useState(() => mulberry32(seed ^ 0x51ed));
   const [packet, setPacket] = useState<Packet>(() => makePacket(0, random));
-  const [spawnedAt, setSpawnedAt] = useState(() => Date.now());
+  const [spawnedAt, setSpawnedAt] = useState(() => gameNow());
   const [stats, setStats] = useState({ points: 0, correct: 0, total: 0, streak: 0 });
   const [last, setLast] = useState<{ ok: boolean; text: string; id: number } | null>(null);
   const done = useRef(false);
@@ -465,7 +464,7 @@ function RoutingStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StagePro
             : `${packet.ip} iba a ${label}${packet.tricky ? ' (no calza con la máscara /24)' : ''}`,
       });
       setPacket(makePacket(packet.id + 1, random));
-      setSpawnedAt(Date.now());
+      setSpawnedAt(gameNow());
     },
     [onPoints, packet, random, stats],
   );
@@ -571,7 +570,7 @@ function WifiStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StageProps)
   const [channels, setChannels] = useState(() => initialChannels(mulberry32(seed ^ 0xa11)));
   const [width, setWidth] = useState(0);
   const [solvedAt, setSolvedAt] = useState<number | null>(null);
-  const [startedAt] = useState(() => Date.now());
+  const [startedAt] = useState(() => gameNow());
   const done = useRef(false);
   const askContinue = useAskContinue();
   const now = useNow(true, 250);
@@ -600,7 +599,7 @@ function WifiStage({ seed, endsAt, onPoints, onAccuracy, onFinish }: StageProps)
     setChannels(next);
     void feedbackTap();
     if (interference(next) === 0) {
-      const at = clockNow();
+      const at = gameNow();
       setSolvedAt(at);
       void feedbackSuccess();
       finish(true, at);

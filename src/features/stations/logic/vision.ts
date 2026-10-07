@@ -203,14 +203,30 @@ export function trainLoss(epoch: number): number {
   return 1.15 * Math.exp(-epoch / 6) + 0.05;
 }
 
-// La pérdida de validación baja y luego sube: ahí empieza el sobreajuste.
+// La pérdida de validación baja y luego sube: ahí empieza el sobreajuste. Desde `best` el castigo por
+// sobreajuste crece más rápido de lo que la curva sigue bajando, así que el punto más bajo que se
+// dibuja es exactamente `best` (el mismo que premia stopQuality).
 export function validationLoss(epoch: number, best: number): number {
   const overfit = Math.max(0, epoch - best);
-  return 1.15 * Math.exp(-epoch / 6.5) + 0.12 + overfit * overfit * 0.0045;
+  return 1.15 * Math.exp(-epoch / 6.5) + 0.12 + overfit * 0.035 + overfit * overfit * 0.0035;
 }
 
 export function stopQuality(epoch: number, best: number): number {
   return Math.max(0, Math.min(1, 1 - Math.abs(epoch - best) / 9));
+}
+
+// Qué se le dice al jugador según dónde detuvo el entrenamiento (coherente con la curva).
+export function stopVerdict(epoch: number, best: number): { tone: 'good' | 'bad'; text: string } {
+  const distance = Math.abs(epoch - best);
+  if (distance <= 1) return { tone: 'good', text: '¡Justo a tiempo! La validación estaba en su mínimo.' };
+  if (distance <= 3) {
+    return epoch < best
+      ? { tone: 'good', text: 'Casi: la validación todavía bajaba un poco. Unas épocas más y era el mínimo.' }
+      : { tone: 'good', text: 'Casi: la validación ya empezaba a subir. El mínimo estaba unas épocas antes.' };
+  }
+  return epoch < best
+    ? { tone: 'bad', text: 'Muy pronto: el modelo todavía podía aprender más.' }
+    : { tone: 'bad', text: 'Muy tarde: la validación subió, el modelo memorizó los datos (sobreajuste).' };
 }
 
 export const LABEL_MAX = 450;

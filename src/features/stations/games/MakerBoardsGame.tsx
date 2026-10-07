@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useDeadline, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   boardInfo,
   CHOOSE_MAX,
@@ -56,7 +56,7 @@ export function MakerBoardsGame({ seed, deadline, onComplete }: StationGameProps
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
   }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
@@ -116,13 +116,6 @@ export function MakerBoardsGame({ seed, deadline, onComplete }: StationGameProps
   );
 }
 
-function useStageTimeout(endsAt: number, onTimeout: () => void) {
-  useEffect(() => {
-    const timer = setTimeout(onTimeout, Math.max(0, endsAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [endsAt, onTimeout]);
-}
-
 function BoardArt({ board, size = 88 }: { board: BoardId; size?: number }) {
   const color = boardInfo[board].color;
   return (
@@ -170,7 +163,7 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
     done.current = true;
     askContinue(onFinish);
   }, [askContinue, onFinish]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function choose(board: BoardId) {
     if (picked || done.current) return;
@@ -251,7 +244,7 @@ function WireStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     onPoints(correct === 2 ? wireScore(mistakes) : correct * 60);
     askContinue(onFinish);
   }, [askContinue, mistakes, onFinish, onPoints, wires]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function connect(terminal: Terminal) {
     if (done.current || wires[terminal]) return;
@@ -374,7 +367,7 @@ function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     onPoints(attempt > 0 ? codeScore(attempt, false) : 0);
     askContinue(onFinish, 'Ver resultado');
   }, [askContinue, attempt, onFinish, onPoints]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function upload() {
     if (program.length < SLOTS || done.current) return;
