@@ -290,7 +290,8 @@ function phaseLabel(phase: string, stop?: string): string {
 }
 
 function linkLabel(view: HostView): { ok: boolean; label: string } {
-  if (view.link === 'online') return { ok: true, label: 'En línea' };
+  // El stand está en todos los servidores a la vez; la ruta funciona mientras quede al menos uno.
+  if (view.link === 'online') return { ok: true, label: view.brokerCount > 1 && !view.solo ? `En línea · ${view.brokersOnline}/${view.brokerCount}` : 'En línea' };
   if (view.link === 'denied') return { ok: false, label: 'Servidor no disponible' };
   return { ok: false, label: 'Conectando…' };
 }
@@ -473,7 +474,7 @@ function StatusPanel({ controller, view }: { controller: HostController; view: H
   }
   const info = controller.getDiagnostics();
   const rows: [string, string][] = [
-    ['Conexión', `${linkLabel(view).label} · servidor ${info.broker + 1} de ${info.brokers}`],
+    ['Conexión', view.link === 'online' ? `En línea en ${info.brokersOnline} de ${info.brokers} servidores` : linkLabel(view).label],
     ['Guardado', view.storage === 'ok' ? `Al día (${info.counters.saves} guardados)` : view.storage === 'failing' ? 'Reintentando' : 'No disponible en este dispositivo'],
     ['Conducción', view.readOnly ? 'Otra pantalla (aquí, solo lectura)' : `Esta pantalla · época ${info.epoch}`],
     ['Participantes', `${info.online} en línea de ${info.players}`],

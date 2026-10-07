@@ -13,7 +13,8 @@ Código: `src/route/` (anfitrión, participante, motor, protocolo, almacenamient
 | Confirmación de aplicación | Cada acción lleva un id de evento. El stand responde `ok`, `retry` (todavía no) o `no` (con motivo) **después de guardar**. Reintentar la misma acción no la aplica dos veces. |
 | Lo confirmado es durable | El stand solo publica y confirma el último estado que ya quedó guardado. El teléfono guarda sus acciones sin respuesta y las reenvía al reabrir la app. |
 | Unión auténtica y reciente | La solicitud va sellada hacia la llave del stand y repite el id del participante, la época y el **desafío** del saludo vigente (vale ~45 s). Una copia vieja, o publicada en el tópico de otro, no sirve. |
-| Errores acotados | Buscar la ruta, esperar la bienvenida y las suscripciones tienen plazo. Al vencer se informa (`not-found`, `unreachable`, `incompatible`) y se ofrece reintentar. |
+| Errores acotados | Buscar la ruta, esperar la bienvenida y las suscripciones tienen plazo. Al vencer se informa (`not-found`, `unreachable`, `incompatible`) y se ofrece reintentar o jugar la ruta sin grupo. |
+| Varios caminos hasta el stand | El stand se conecta a **todos** los servidores a la vez: publica y escucha en todos. Cada teléfono entra por el primero que su red alcance y cambia a otro si el suyo se cae. |
 
 Objetivos medidos (ver `docs/audits/hermes-9eeda63/RESULTADOS.md`): una actualización llega a todas las pantallas en menos de 500 ms (p95) y, tras recuperar el transporte o la autoridad, todo converge en menos de 2 s.
 
@@ -59,7 +60,8 @@ Si el guardado del stand falla, reintenta y mientras tanto no confirma ni public
 | El stand se cierra o reinicia | Al reabrir toma una época nueva y parte de lo guardado. Los plazos en curso se corren el tiempo que estuvo detenido y todos reciben señal de vida fresca. Lo que no alcanzó a guardarse no se había confirmado: los teléfonos lo reenvían. |
 | Dos pantallas abren la misma ruta | En la web, Web Locks deja a una en solo lectura. Sin Web Locks ambas toman la conducción y gana la época mayor: la otra pasa a solo lectura al ver su estado y no puede guardar. |
 | "Tomar el control" | La pantalla nueva sube la época; la anterior queda en solo lectura y sigue mostrando la ruta en vivo. |
-| El stand cambia de broker | Tras 25 s sin conexión (o 3 s si el broker lo rechaza) pasa al siguiente. Los teléfonos lo siguen: si no reciben estados nuevos en 20 s rotan, y quien aún no entra busca al stand en los demás brokers **sin soltar las llaves** que ya verificó. |
+| Se cae un servidor | El stand sigue por los demás (está en todos). El teléfono que estaba en el caído se pasa a otro a los 4 s y continúa; quien aún no entraba busca al stand en los demás **sin soltar las llaves** que ya verificó. |
+| El teléfono no alcanza un servidor | Al unirse conecta a todos a la vez y se queda con el primero que responde, así no paga la espera de uno bloqueado. |
 | El teléfono pierde la red o se suspende | Las acciones quedan en cola en el teléfono. Al volver recibe el estado vigente; lo pendiente sale de inmediato y lo que ya no aplica se marca vencido. |
 | El stand no conoce al participante | Si el estado no lo incluye (o cambió la llave mientras no estaba), el teléfono vuelve a pedir su lugar con la misma identidad. |
 | Se quita a un participante | El stand cambia la llave de sesión y la reparte a los demás. El quitado no puede actuar ni leer lo que sigue ni volver con la misma identidad. |
@@ -70,7 +72,8 @@ Si el guardado del stand falla, reintenta y mientras tanto no confirma ni public
 - **Broker público.** Cualquiera puede publicar en los tópicos. Los mensajes ajenos no se pueden falsificar ni leer, pero una inundación degrada el servicio. Hay presupuestos de verificación, pero no hay control de acceso por tópico. Un broker propio con ACL lo resuelve; las credenciales administrativas nunca deben ir en variables `EXPO_PUBLIC_*`, que quedan dentro de la app.
 - **Quien conoce el código puede unirse.** No hay cuentas en la ruta. Un expulsado puede volver con otra identidad si aún conoce el código; para evitarlo hay que crear una ruta nueva.
 - **Un solo stand por ruta.** La ruta vive en el equipo donde se creó. Otra pantalla del mismo equipo puede observarla o tomar el control; otro equipo no.
-- **El teléfono debe alcanzar el broker del stand.** Si la red de un teléfono bloquea ese broker, no entra hasta que el stand se mude.
+- **El teléfono debe alcanzar al menos un servidor.** Los tres por defecto son públicos y usan puertos distintos de 443 (8884, 8084 y 8081). Una red que los bloquee todos deja al teléfono fuera de la ruta en vivo; en ese caso puede jugar la ruta sin grupo. Un broker propio en el puerto 443 lo evita.
+- **Latencia sobre brokers públicos.** Medido desde Chile, una acción tarda entre 550 y 920 ms en verse en todas las pantallas (cuatro tramos de red hasta Europa o Norteamérica). El objetivo de 500 ms se cumple con un broker cercano.
 - **Particiones.** Mientras dura un corte no hay consistencia instantánea: cada pantalla muestra su último estado y lo dice (`Sin señal del stand`, `Reconectando`).
 
 ## Migración desde la versión 2

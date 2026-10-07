@@ -18,7 +18,7 @@ import {
 import { MqttClient } from '@/realtime/mqttClient';
 import { Budget, RecentSet, systemClock, type RouteClock } from './clock';
 import { addPlayer, applyHostAction, createRoute, DEFAULT_SETTINGS, ownPlayer, resumeRoute, snapshot, submitPlayerAction, tick } from './engine';
-import { LocalRouteLink, MqttRouteLink, type LinkStatus, type LocalBus, type RouteLink } from './link';
+import { LocalRouteLink, MultiRouteLink, type BrokerState, type LinkStatus, type LocalBus, type RouteLink } from './link';
 import {
   compareAuthority,
   generateRouteCode,
@@ -57,6 +57,9 @@ export interface HostView {
   state: RouteState;
   snapshot: RouteSnapshot;
   link: LinkStatus;
+  // Servidores listos y total: la ruta funciona mientras quede al menos uno.
+  brokersOnline: number;
+  brokerCount: number;
   joinUrl: string;
   role: HostRole;
   readOnly: boolean;
@@ -96,6 +99,9 @@ export interface HostDiagnostics {
   link: LinkStatus;
   broker: number;
   brokers: number;
+  // Servidores con conexión lista (el stand publica y escucha en todos a la vez).
+  brokersOnline: number;
+  brokerStates: LinkStatus[];
   epoch: number;
   publications: number;
   storage: HostStorageState;
@@ -154,7 +160,13 @@ const LEGACY_NOTICE_MS = 90_000;
 // Identificador de esta pestaña/proceso para la concesión de la ruta.
 const OWNER = randomHex(6);
 
-// Comprueba que el broker sirva de verdad: conecta, se suscribe (con confirmación) y recibe su propio mensaje.
+// Comprueba que el broker sirva de verdad: conecta, se suscribe (con confirmación) y recibe su propio
+// mensaje. Devuelve cuánto tardó (ms) o null si no sirve.
+export function measureBroker(url: string, timeoutMs = 7000): Promise<number | null> {
+  const startedAt = Date.now();
+  return probeBroker(url, timeoutMs).then((reachable) => (reachable ? Date.now() - startedAt : null));
+}
+
 export function probeBroker(url: string, timeoutMs = 7000): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const topic = `soytel/probe/${randomHex(8)}`;
@@ -186,12 +198,15 @@ export function probeBroker(url: string, timeoutMs = 7000): Promise<boolean> {
   });
 }
 
-// Prueba los brokers en orden y devuelve el primero que funciona, o null si ninguno responde.
+// Prueba todos los brokers a la vez y devuelve el más rápido que funciona, o null si ninguno responde.
+// El stand se conecta a todos; este solo decide cuál va en el código (por dónde parten los teléfonos).
 export async function findReachableBroker(timeoutMs = 7000, urls: string[] = brokerUrls): Promise<number | null> {
-  for (let index = 0; index < urls.length; index += 1) {
-    if (await probeBroker(urls[index], timeoutMs)) return index;
-  }
-  return null;
+  const times = await Promise.all(urls.map((url) => measureBroker(url, timeoutMs)));
+  let best: number | null = null;
+  times.forEach((time, index) => {
+    if (time !== null && (best === null || time < (times[best] as number))) best = index;
+  });
+  return best;
 }
 
 export class RouteUnavailableError extends Error {
@@ -330,11 +345,11 @@ export class HostController {
     } catch {
       throw new RouteUnavailableError('storage');
     }
-    return new HostController(record, new MqttRouteLink(record.clientId, brokerIndex, false));
+    return new HostController(record, new MultiRouteLink(record.clientId, brokerIndex, false));
   }
 
   static fromRecord(record: HostRecord): HostController {
-    return new HostController(record, new MqttRouteLink(record.clientId, record.brokerIndex, false));
+    return new HostController(record, new MultiRouteLink(record.clientId, record.brokerIndex, false));
   }
 
   // Ruta sobre un enlace dado (bus local del modo individual y pruebas).
@@ -375,6 +390,8 @@ export class HostController {
       link: this.link.status,
       broker: this.link.brokerIndex,
       brokers: this.link.brokerCount,
+      brokersOnline: this.brokerStates().filter((item) => item.status === 'online').length,
+      brokerStates: this.brokerStates().map((item) => item.status),
       epoch: this.role === 'observer' && this.observed ? this.observed.epoch : this.record.epoch,
       publications: this.pub,
       storage: this.storage,
@@ -567,6 +584,10 @@ export class HostController {
     return { epoch: this.record.epoch, owner: this.owner, pub: Math.max(1, this.pub) };
   }
 
+  private brokerStates(): BrokerState[] {
+    return this.link.brokers ?? [{ index: this.link.brokerIndex, status: this.link.status }];
+  }
+
   private buildView(): HostView {
     const mono = this.clock.mono();
     const state = this.record.state;
@@ -575,6 +596,8 @@ export class HostController {
       state,
       snapshot: this.role === 'observer' && this.observed ? this.observed : snapshot(state, this.now(), this.stamp()),
       link: this.link.status,
+      brokersOnline: this.brokerStates().filter((item) => item.status === 'online').length,
+      brokerCount: this.link.brokerCount,
       joinUrl: this.joinUrl,
       role: this.role,
       readOnly: this.role === 'observer',

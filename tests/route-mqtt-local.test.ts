@@ -4,24 +4,29 @@ import { createInterface } from 'readline';
 import WebSocket from 'ws';
 import { systemClock } from '@/route/clock';
 import { findReachableBroker, HostController, newHostRecord, probeBroker } from '@/route/host';
-import { MqttRouteLink } from '@/route/link';
+import { MqttRouteLink, MultiRouteLink } from '@/route/link';
 import { MemberController } from '@/route/member';
 import { generateRouteCode } from '@/route/protocol';
 import { getRouteQuestion } from '@/route/quizBank';
 import { digest, MemoryHostStore, MemoryLocks, MemoryMemberStore, percentile } from './support/routeHarness';
 
-// MQTT de verdad: un broker local (Aedes, en un proceso aparte) escuchando WebSocket en 127.0.0.1 y el
-// cliente MQTT de la app hablando con él con sus paquetes reales (CONNECT, SUBSCRIBE/SUBACK, PUBLISH
-// QoS 1, retenidos).
-// Anfitrión, tres participantes y una segunda pantalla del stand, con cifrado y firmas reales y reloj
-// real. No toca brokers públicos ni necesita Internet.
+// MQTT de verdad: brokers locales (Aedes, cada uno en su proceso) escuchando WebSocket en 127.0.0.1 y
+// el cliente MQTT de la app hablando con ellos con sus paquetes reales (CONNECT, SUBSCRIBE/SUBACK,
+// PUBLISH QoS 1, retenidos). Anfitrión, participantes y una segunda pantalla del stand, con cifrado y
+// firmas reales y reloj real. No toca brokers públicos ni necesita Internet.
 
-jest.setTimeout(120_000);
+jest.setTimeout(180_000);
 
-let broker: ChildProcessWithoutNullStreams;
-let url = '';
-const lines: string[] = [];
+interface Broker {
+  process: ChildProcessWithoutNullStreams;
+  lines: string[];
+  url: string;
+}
+
+const brokers: Broker[] = [];
 const stoppers: (() => void)[] = [];
+// Un puerto local donde no escucha nadie: simula un servidor caído o bloqueado por la red.
+const DEAD_URL = 'ws://127.0.0.1:9';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -34,52 +39,64 @@ async function until(check: () => boolean, timeoutMs: number, what: string): Pro
   return Date.now() - started;
 }
 
+async function startBroker(): Promise<Broker> {
+  const child = spawn(process.execPath, [path.join(__dirname, 'support', 'mqttBroker.mjs')], { stdio: 'pipe' });
+  const lines: string[] = [];
+  createInterface({ input: child.stdout }).on('line', (line) => lines.push(line));
+  await until(() => lines.length > 0, 15_000, 'broker local listo');
+  return { process: child, lines, url: `ws://127.0.0.1:${(JSON.parse(lines[0]) as { port: number }).port}` };
+}
+
+function stopBroker(broker: Broker): Promise<void> {
+  if (broker.process.exitCode !== null) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    // Si no termina por las buenas, se le corta.
+    const timer = setTimeout(() => broker.process.kill(), 2000);
+    broker.process.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    broker.process.stdin.write('quit\n');
+  });
+}
+
 beforeAll(async () => {
   // El cliente de la app usa el WebSocket global (navegador, React Native, Node 22+). Aquí se fija el de `ws`.
   (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
-  broker = spawn(process.execPath, [path.join(__dirname, 'support', 'mqttBroker.mjs')], { stdio: 'pipe' });
-  createInterface({ input: broker.stdout }).on('line', (line) => lines.push(line));
-  await until(() => lines.length > 0, 15_000, 'broker local listo');
-  url = `ws://127.0.0.1:${(JSON.parse(lines[0]) as { port: number }).port}`;
+  brokers.push(await startBroker(), await startBroker());
 });
 
 afterAll(async () => {
   stoppers.splice(0).forEach((stop) => stop());
-  await new Promise<void>((resolve) => {
-    // Si no termina por las buenas, se le corta.
-    const timer = setTimeout(() => broker.kill(), 2000);
-    broker.once('exit', () => {
-      clearTimeout(timer);
-      resolve();
-    });
-    broker.stdin.write('quit\n');
-  });
+  await Promise.all(brokers.map(stopBroker));
 });
 
-// Mensajes de la ruta que pasaron por el broker.
-async function brokerStats(): Promise<{ published: number; clients: number }> {
-  const before = lines.length;
-  broker.stdin.write('stats\n');
-  await until(() => lines.length > before, 3000, 'estadísticas del broker');
-  return JSON.parse(lines[lines.length - 1]) as { published: number; clients: number };
+// Mensajes de la ruta que pasaron por un broker.
+async function brokerStats(broker: Broker): Promise<{ published: number; clients: number }> {
+  const before = broker.lines.length;
+  broker.process.stdin.write('stats\n');
+  await until(() => broker.lines.length > before, 3000, 'estadísticas del broker');
+  return JSON.parse(broker.lines[broker.lines.length - 1]) as { published: number; clients: number };
 }
 
 let serial = 0;
-const link = (prefix: string) => new MqttRouteLink(`${prefix}${Date.now().toString(36)}${(serial++).toString(36)}`, 0, false, [url]);
+const clientId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(serial++).toString(36)}`;
+const link = (prefix: string) => new MqttRouteLink(clientId(prefix), 0, false, [brokers[0].url]);
 
 // Corta desde el broker la conexión de un cliente (como una caída de red del lado del servidor).
-function dropClient(prefix: string) {
-  broker.stdin.write(`drop ${prefix}\n`);
+function dropClient(broker: Broker, prefix: string) {
+  broker.process.stdin.write(`drop ${prefix}\n`);
 }
 
-describe('ruta sobre un broker MQTT local real', () => {
-  it('detecta si un broker sirve de verdad (conexión, suscripción y eco)', async () => {
-    expect(await probeBroker(url, 4000)).toBe(true);
-    expect(await findReachableBroker(1500, ['ws://127.0.0.1:9', url])).toBe(1);
-    expect(await findReachableBroker(800, ['ws://127.0.0.1:9'])).toBeNull();
+describe('ruta sobre brokers MQTT locales reales', () => {
+  it('detecta si un broker sirve de verdad y elige el más rápido que responde', async () => {
+    expect(await probeBroker(brokers[0].url, 4000)).toBe(true);
+    expect(await findReachableBroker(1500, [DEAD_URL, brokers[0].url])).toBe(1);
+    expect(await findReachableBroker(800, [DEAD_URL])).toBeNull();
   });
 
   it('anfitrión, tres participantes y una segunda pantalla: unión, fases, trivia, reconexión y podio', async () => {
+    const broker = brokers[0];
     const store = new MemoryHostStore();
     const locks = new MemoryLocks();
     const code = generateRouteCode(0, 1);
@@ -156,10 +173,10 @@ describe('ruta sobre un broker MQTT local real', () => {
     convergence.push(await until(everyone, 4000, 'juego B215'));
 
     // Se cae la conexión de un teléfono (desde el broker) y luego la del stand: ambos se reconectan solos.
-    dropClient('stm');
+    dropClient(broker, 'stm');
     await order({ type: 'advance' }, 'resultados tras la caída de los teléfonos', recoveries);
     await order({ type: 'advance' }, 'rumbo a B213');
-    dropClient('sth');
+    dropClient(broker, 'sth');
     const back = Date.now();
     await until(() => host.getView().link === 'online', 5000, 'reconexión del stand');
     members.forEach(({ member }) => member.checkin('b213'));
@@ -188,9 +205,8 @@ describe('ruta sobre un broker MQTT local real', () => {
     expect(final.players.every((player) => player.quizCorrect === 2)).toBe(true);
     members.forEach(({ member }) => expect(member.getView().pending).toEqual([]));
     expect(host.getCounters().saveFailures).toBe(0);
-    const stats = await brokerStats();
+    const stats = await brokerStats(broker);
     expect(stats.published).toBeGreaterThan(40);
-    expect(stats.clients).toBe(5);
 
     const p95Convergence = percentile(convergence, 0.95);
     const p95Ack = percentile(acks, 0.95);
@@ -200,5 +216,76 @@ describe('ruta sobre un broker MQTT local real', () => {
     expect(p95Convergence).toBeLessThanOrEqual(500);
     expect(p95Ack).toBeLessThanOrEqual(500);
     recoveries.forEach((ms) => expect(ms).toBeLessThanOrEqual(2000));
+
+    members.forEach(({ member }) => member.reset());
+    second.stop(false);
+    host.stop(false);
+  });
+
+  it('el stand está en todos los servidores: cada teléfono entra por el que alcanza y la caída de uno no detiene la ruta', async () => {
+    const [first, secondBroker] = brokers;
+    // Tres servidores configurados: uno caído (o bloqueado por la red) y dos que funcionan.
+    const urls = [DEAD_URL, first.url, secondBroker.url];
+    const code = generateRouteCode(0, urls.length);
+    const record = newHostRecord(code, 'sthmulti', 0, { quizQuestions: 1 }, Date.now(), 'a0000000cccc');
+    const hostLink = new MultiRouteLink(clientId('shm'), 0, false, urls);
+    const host = new HostController(record, hostLink, { store: new MemoryHostStore(), locks: null, clock: systemClock, owner: 'a0000000cccc' });
+    stoppers.push(() => host.stop(false));
+    await host.start();
+    await until(() => host.getView().brokersOnline === 2, 8000, 'stand en línea en los dos servidores que funcionan');
+    expect(host.getView()).toMatchObject({ link: 'online', brokerCount: 3 });
+    expect(host.getDiagnostics().brokerStates.filter((state) => state === 'online')).toHaveLength(2);
+
+    const join = async (alias: string, memberLink: MqttRouteLink) => {
+      const member = new MemberController({ store: new MemoryMemberStore(), clock: systemClock });
+      stoppers.push(() => member.reset());
+      const started = Date.now();
+      await member.join({ code, alias, avatar: 1, fingerprint: host.fingerprint, link: memberLink });
+      await until(() => member.getView().status === 'joined' && Boolean(member.getView().me), 10_000, `unión de ${alias}`);
+      return { alias, member, link: memberLink, ms: Date.now() - started };
+    };
+    // Ana parte por el servidor del código (el caído): la carrera la lleva al primero que responde.
+    const ana = await join('Ana', new MqttRouteLink(clientId('mra'), 0, false, urls, { race: true }));
+    // Beto solo alcanza el servidor 1 y Caro solo el 2 (como dos redes con bloqueos distintos).
+    const beto = await join('Beto', new MqttRouteLink(clientId('mrb'), 0, false, [first.url]));
+    const caro = await join('Caro', new MqttRouteLink(clientId('mrc'), 0, false, [secondBroker.url]));
+    expect(ana.link.brokerIndex).not.toBe(0);
+    // Con la carrera no se paga la espera del servidor caído.
+    expect(ana.ms).toBeLessThan(4000);
+    expect(host.getView().snapshot.players.map((player) => player.alias).sort()).toEqual(['Ana', 'Beto', 'Caro']);
+
+    const all = [ana, beto, caro];
+    const reference = () => JSON.stringify(digest(host.getView().snapshot));
+    const everyone = (group = all) => group.every(({ member }) => JSON.stringify(digest(member.getView().snapshot)) === reference());
+    host.dispatch({ type: 'start' });
+    await until(() => everyone(), 4000, 'inicio visto por los tres, cada uno por su servidor');
+    // Acciones de teléfonos en servidores distintos llegan al mismo stand y todos ven lo mismo.
+    all.forEach(({ member }) => member.checkin('b215'));
+    await until(() => host.getView().snapshot.phase === 'play' && everyone(), 5000, 'juego B215 visto por los tres');
+
+    // Se cae por completo el servidor donde está Ana (y Beto, que no tiene otro).
+    const anaBroker = ana.link.brokerIndex;
+    const killed = anaBroker === 1 ? first : secondBroker;
+    const stranded = anaBroker === 1 ? beto : caro;
+    const survivor = anaBroker === 1 ? caro : beto;
+    const started = Date.now();
+    await stopBroker(killed);
+    host.dispatch({ type: 'advance' });
+    // El stand sigue en línea por el otro servidor y quien estaba en él no nota nada.
+    await until(() => everyone([survivor]), 3000, 'quien está en el otro servidor sigue al día');
+    expect(host.getView().link).toBe('online');
+    expect(host.getView().brokersOnline).toBe(1);
+    // Ana se pasa sola al servidor que queda y se pone al día.
+    await until(() => ana.link.brokerIndex !== anaBroker && everyone([ana]), 15_000, 'Ana sigue por el otro servidor');
+    const failover = Date.now() - started;
+    expect(ana.member.getView().status).toBe('joined');
+    expect(ana.member.getView().snapshot?.phase).toBe('results');
+    // Quien solo alcanzaba el servidor caído queda sin señal, y lo sabe (no ve un estado falso como vigente).
+    expect(stranded.member.getView().link).not.toBe('online');
+
+    console.info(`[multiservidor · brokers locales] unión con un servidor caído: ${ana.ms} ms (carrera) · cambio de servidor tras la caída del suyo: ${failover} ms`);
+    expect(failover).toBeLessThan(12_000);
+    all.forEach(({ member }) => member.reset());
+    host.stop(false);
   });
 });

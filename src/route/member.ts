@@ -91,7 +91,10 @@ export interface MemberOptions {
 
 const JOIN_RETRY_MS = 3000;
 const JOIN_MIN_GAP_MS = 900;
-const HELLO_WAIT_MS = 9000;
+// Cuánto se espera en un servidor antes de probar el siguiente: para lograr la conexión, y, ya
+// conectado, para que llegue el saludo del stand (lo tiene guardado el servidor: llega enseguida).
+const CONNECT_WAIT_MS = 9000;
+const HELLO_WAIT_MS = 5000;
 // Al unirse con el código escrito (sin QR) se escuchan los saludos un momento antes de confiar en uno:
 // si aparecen dos stands distintos con el mismo código, no se elige ninguno.
 const HELLO_SETTLE_MS = 2000;
@@ -111,6 +114,9 @@ const LEAVE_WAIT_MS = 1500;
 // Si entre dos estados pasó más que esto, se perdió al menos un latido del stand (publica cada 5 s):
 // hubo un corte, así que lo pendiente se reenvía de inmediato en vez de esperar el próximo reintento.
 const STATE_GAP_MS = 7000;
+// Ya dentro de la ruta: si la conexión con el servidor lleva este tiempo caída, se pasa al siguiente
+// (el stand está en todos, así que cambiar es barato y no se pierde nada).
+const OFFLINE_ROTATE_MS = 4000;
 const DENIED_MOVE_MS = 1500;
 const MARK_SAVE_MS = 30_000;
 const SEQ_BLOCK = 64;
@@ -219,6 +225,9 @@ export class MemberController {
   private rejoining = false;
   private lastRejoinMono = -Infinity;
   private deniedMono = -Infinity;
+  // Desde cuándo está lista la conexión con el servidor actual (null si no lo está).
+  private onlineMono: number | null = null;
+  private offlineMono: number | null = null;
   // Último saludo del stand recibido en vivo (no uno que el servidor tenía guardado).
   private hostLiveMono = -Infinity;
 
@@ -357,7 +366,11 @@ export class MemberController {
   }
 
   startSolo(options: { alias: string; avatar: number; settings?: Partial<RouteSettings> }): void {
+    const previous = this.credentials;
     this.teardown();
+    // Si había una ruta en grupo guardada (por ejemplo, una que no conectó), se descarta: no debe
+    // reaparecer al reabrir la app.
+    if (previous && !previous.solo) void this.store?.clear().catch(() => undefined);
     const bus = new LocalBus();
     const host = HostController.createSolo(bus, { projectsSeconds: 60 * 60, ...options.settings });
     this.soloHost = host;
@@ -481,6 +494,8 @@ export class MemberController {
     this.unknownKeyMono = null;
     this.hostAlive = false;
     this.hostLiveMono = -Infinity;
+    this.onlineMono = null;
+    this.offlineMono = null;
     this.seenStates.clear();
     this.lastStateWall = 0;
     this.status = 'idle';
@@ -497,7 +512,8 @@ export class MemberController {
     this.secrets = deriveRouteSecrets(credentials.code);
     this.topics = routeTopics(this.secrets.roomId);
     this.givenLink = localLink ?? null;
-    this.link = localLink ?? new MqttRouteLink(credentials.clientId, credentials.brokerIndex, false);
+    // El stand está en todos los servidores: el teléfono parte por el primero que le responda.
+    this.link = localLink ?? new MqttRouteLink(credentials.clientId, credentials.brokerIndex, false, brokerUrls, { race: true });
     const link = this.link;
     const topics = this.topics;
     const mono = this.clock.mono();
@@ -516,6 +532,7 @@ export class MemberController {
         this.helloWaitMono = at;
         this.joinBrokerMono = at;
         this.hostLiveMono = -Infinity;
+        this.onlineMono = this.link?.status === 'online' ? at : null;
       }),
     );
     link.subscribe(topics.hello);
@@ -540,6 +557,8 @@ export class MemberController {
   }
 
   private onLinkStatus(status: LinkStatus) {
+    this.onlineMono = status === 'online' ? (this.onlineMono ?? this.clock.mono()) : null;
+    this.offlineMono = status === 'online' ? null : (this.offlineMono ?? this.clock.mono());
     if (status === 'online') {
       const credentials = this.credentials;
       if (credentials?.hostBox && (!credentials.sessionKey || this.rejoining)) this.sendJoin();
@@ -582,15 +601,20 @@ export class MemberController {
       const rounds = Math.max(2, link.brokerCount * 2);
       if (!credentials.hostBox) {
         // Sin saludo del anfitrión: probar otro broker; tras dar la vuelta completa, no existe la ruta.
-        if (mono - this.helloWaitMono > HELLO_WAIT_MS) {
+        const waited = this.onlineMono !== null ? mono - this.onlineMono > HELLO_WAIT_MS : mono - this.helloWaitMono > CONNECT_WAIT_MS;
+        if (waited) {
           this.brokerAttempts += 1;
-          if (this.brokerAttempts >= rounds) {
+          // El stand publica su saludo en todos los servidores: con verlos todos una vez (y uno de
+          // repaso) basta para saber que esa ruta no existe.
+          if (this.brokerAttempts >= Math.max(2, link.brokerCount + 1)) {
             this.status = 'not-found';
             this.refresh();
             return;
           }
           this.helloWaitMono = mono;
+          if (this.onlineMono !== null) this.onlineMono = mono;
           link.moveToNextBroker();
+          this.refresh();
           return;
         }
       } else if (mono - this.joinBrokerMono > (mono - this.hostLiveMono < HOST_LIVE_MS ? JOIN_BROKER_MS : JOIN_STALE_BROKER_MS)) {
@@ -611,6 +635,13 @@ export class MemberController {
     }
 
     if (joined && this.status !== 'kicked') {
+      if (this.snapshot?.phase !== 'podium' && link.brokerCount > 1 && this.offlineMono !== null && mono - this.offlineMono > OFFLINE_ROTATE_MS) {
+        // Se cayó la conexión con este servidor y no vuelve: se sigue por otro.
+        this.offlineMono = mono;
+        this.lastStateMono = mono;
+        link.moveToNextBroker();
+        return;
+      }
       if (this.snapshot?.phase !== 'podium' && mono - this.lastStateMono > STALE_MS) {
         // Sin estados nuevos: el stand pudo mudarse de servidor. Los repetidos o viejos no cuentan.
         this.lastStateMono = mono;

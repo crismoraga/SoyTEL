@@ -29,8 +29,10 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackHeavy } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
+import { currentPaceFactor } from '@/lib/pace';
 import { webAppUrl } from '@/realtime/config';
 import { checkinCopy, pillarIds, pillars, stationTitles, stopInfo } from '@/route/content';
+import { settingsForPace } from '@/route/engine';
 import { useHostClock, useHostTimeReached, useMemberView, useRouteForeground } from '@/route/hooks';
 import { routeMember, type MemberView, type OutboxView } from '@/route/member';
 import { wasRouteRecorded } from '@/route/storage';
@@ -101,6 +103,15 @@ function ConnectingView({ view }: { view: MemberView }) {
               : `Código ${view.code}. Esto toma unos segundos; mantén la app abierta.`}
         </TelText>
         <TelButton label="Cancelar" variant="outlineLight" fullWidth={false} onPress={exit} />
+        {!view.solo && (
+          <TelButton
+            label="Jugar sin grupo"
+            variant="ghostLight"
+            size="sm"
+            fullWidth={false}
+            onPress={() => routeMember.startSolo({ alias: view.alias.trim() || 'Explorador', avatar: view.avatar, settings: settingsForPace(currentPaceFactor()) })}
+          />
+        )}
         {!view.solo && <DiagnosticsButton />}
       </View>
     </Screen>
@@ -155,6 +166,13 @@ function ProblemView({ view }: { view: MemberView }) {
             void routeMember.leave(false);
             router.replace('/ruta');
           }}
+        />
+        {/* Nadie se queda sin jugar: la misma ruta se puede recorrer sin grupo, incluso sin Internet. */}
+        <TelButton
+          label="Jugar la ruta sin grupo"
+          variant="ghostLight"
+          icon="user"
+          onPress={() => routeMember.startSolo({ alias: view.alias.trim() || 'Explorador', avatar: view.avatar, settings: settingsForPace(currentPaceFactor()) })}
         />
         {view.status !== 'kicked' && view.status !== 'rejected' && <DiagnosticsButton />}
       </View>
