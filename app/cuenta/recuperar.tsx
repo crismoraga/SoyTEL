@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { AppHeader } from '@/components/AppHeader';
@@ -11,7 +11,7 @@ import { TelText } from '@/components/TelText';
 import { UserAvatar } from '@/components/UserAvatar';
 import { ApiError, type ServerPlayer } from '@/account/api';
 import { isRecoveryCode, RECOVERY_ALPHABET } from '@/account/rules';
-import { restoreAccount } from '@/account/store';
+import { AccountStorageError, restoreAccount } from '@/account/store';
 import { formatNumber } from '@/lib/format';
 import { colors, font, radius, spacing } from '@/theme';
 
@@ -31,16 +31,20 @@ export default function RecoverScreen() {
   const [player, setPlayer] = useState<ServerPlayer | null>(null);
   const fullCode = `TEL-${code}`;
   const valid = isRecoveryCode(fullCode);
+  // Un envío a la vez: Enter repetido (o Enter más el botón) no lanza otra recuperación.
+  const busy = useRef(false);
 
   async function submit() {
-    if (!valid) return;
+    if (!valid || busy.current) return;
+    busy.current = true;
     setLoading(true);
     setError(null);
     try {
       setPlayer(await restoreAccount(fullCode));
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'No se pudo entrar. Intenta de nuevo.');
+      setError(caught instanceof ApiError || caught instanceof AccountStorageError ? caught.message : 'No se pudo entrar. Intenta de nuevo.');
     } finally {
+      busy.current = false;
       setLoading(false);
     }
   }

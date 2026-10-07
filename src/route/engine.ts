@@ -2,20 +2,24 @@ import { AVATAR_COUNT } from '@/account/rules';
 import { pillarIds } from './content';
 import { getRouteQuestion, routeQuestions, type RouteQuestion } from './quizBank';
 import { mulberry32, seededShuffle } from './random';
-import type {
-  CheckinStop,
-  HostAction,
-  NewPlayer,
-  PlayerAction,
-  PlayerRecord,
-  PublicPlayer,
-  PublicQuiz,
-  QuizArea,
-  QuizGain,
-  RouteSettings,
-  RouteSnapshot,
-  RouteState,
-  StationGameId,
+import {
+  isCheckinStop,
+  isStationGameId,
+  STATION_GAME_IDS,
+  type ActionVerdict,
+  type CheckinStop,
+  type HostAction,
+  type NewPlayer,
+  type PlayerAction,
+  type PlayerRecord,
+  type PublicPlayer,
+  type PublicQuiz,
+  type QuizArea,
+  type QuizGain,
+  type RouteSettings,
+  type RouteSnapshot,
+  type RouteState,
+  type StationGameId,
 } from './types';
 
 // Motor autoritativo de la ruta. Lo ejecuta el dispositivo del stand; es puro y determinista.
@@ -46,7 +50,13 @@ export const DEFAULT_SETTINGS: RouteSettings = {
 };
 
 export const MAX_PLAYERS = 60;
+// Tope de registros guardados (incluye a quienes salieron o fueron quitados): acota la memoria del stand.
+export const MAX_RECORDS = 300;
 export const MAX_GAME_SCORE = 1000;
+// En el lobby, quien deja de dar señales libera su lugar (si vuelve, entra de nuevo sin perder nada).
+export const LOBBY_GHOST_MS = 120_000;
+// Con la ruta en marcha, quien lleva este tiempo sin conexión deja de contar para el cupo.
+export const SEAT_TTL_MS = 10 * 60_000;
 // Tiempo mínimo para terminar un juego de verdad. Un envío antes de eso se ignora (el teléfono lo
 // reintenta y se acepta cuando el tiempo ya es posible); si llega en menos de la mitad, se marca.
 export const MIN_B215_MS = 20_000;
@@ -87,6 +97,16 @@ function withPlayer(state: RouteState, player: PlayerRecord): RouteState {
   return { ...state, players: { ...state.players, [player.id]: player } };
 }
 
+// Busca un participante solo entre las claves propias del mapa: un id como "constructor" o
+// "__proto__" nunca debe resolverse a algo heredado de Object.
+export function ownPlayer(state: RouteState, id: string): PlayerRecord | undefined {
+  return Object.prototype.hasOwnProperty.call(state.players, id) ? state.players[id] : undefined;
+}
+
+function gameScore(player: PlayerRecord, game: StationGameId) {
+  return Object.prototype.hasOwnProperty.call(player.games, game) ? player.games[game] : undefined;
+}
+
 export function sanitizeAlias(alias: string): string {
   const clean = alias
     .replace(/[\u0000-\u001f\u007f<>]/g, '')
@@ -97,8 +117,9 @@ export function sanitizeAlias(alias: string): string {
   return clean || 'Jugador';
 }
 
+// Solo suman los juegos de la ruta: una clave ajena en el registro no entra al ranking.
 export function playerTotal(player: PlayerRecord): number {
-  const games = Object.values(player.games).reduce((sum, game) => sum + (game?.score ?? 0), 0);
+  const games = STATION_GAME_IDS.reduce((sum, game) => sum + (gameScore(player, game)?.score ?? 0), 0);
   return games + player.quizPoints;
 }
 
@@ -119,15 +140,24 @@ export function rankedPlayers(state: RouteState): PlayerRecord[] {
 
 export type JoinResult = { state: RouteState; ok: true } | { state: RouteState; ok: false; reason: 'full' | 'finished' | 'taken' | 'kicked' };
 
+// Lugares ocupados: participantes no quitados con señales recientes. Quien se fue hace rato no bloquea
+// la entrada de alguien nuevo (y si vuelve, su registro sigue ahí: nunca pierde su puntaje).
+export function seatsTaken(state: RouteState, now: number): number {
+  return state.order.filter((id) => {
+    const player = state.players[id];
+    return player && !player.kicked && now - player.lastSeen <= SEAT_TTL_MS;
+  }).length;
+}
+
 export function addPlayer(state: RouteState, incoming: NewPlayer, now: number): JoinResult {
-  const existing = state.players[incoming.id];
+  const existing = ownPlayer(state, incoming.id);
   if (existing) {
     if (existing.boxKey !== incoming.boxKey) return { state, ok: false, reason: 'taken' };
     if (existing.kicked) return { state, ok: false, reason: 'kicked' };
     return { state: withPlayer(state, { ...existing, lastSeen: now }), ok: true };
   }
   if (state.phase === 'podium') return { state, ok: false, reason: 'finished' };
-  if (state.order.filter((id) => !state.players[id]?.kicked).length >= MAX_PLAYERS) return { state, ok: false, reason: 'full' };
+  if (seatsTaken(state, now) >= MAX_PLAYERS || state.order.length >= MAX_RECORDS) return { state, ok: false, reason: 'full' };
 
   const base = sanitizeAlias(incoming.alias);
   const taken = new Set(Object.values(state.players).map((player) => player.alias.toLowerCase()));
@@ -139,7 +169,6 @@ export function addPlayer(state: RouteState, incoming: NewPlayer, now: number): 
     alias,
     avatar: Math.min(AVATAR_COUNT - 1, Math.max(0, Math.floor(incoming.avatar) || 0)),
     boxKey: incoming.boxKey,
-    token: incoming.token,
     joinedAt: now,
     lastSeen: now,
     kicked: false,
@@ -197,6 +226,8 @@ function toQuiz(state: RouteState, now: number): RouteState {
     phaseAt: now,
     startsAt: null,
     deadline: null,
+    // Un proyecto de B213 que seguía abierto se cierra solo en el teléfono y su puntaje alcanza a llegar.
+    projectsCloseAt: now + state.settings.graceSeconds * 1000,
     quiz: {
       questionIds: pickQuizQuestions(state.seed, state.settings.quizQuestions),
       index: 0,
@@ -279,9 +310,40 @@ export function advanceIfReady(state: RouteState, now: number): RouteState {
   }
 }
 
+// Quita del lobby a quienes llevan mucho sin dar señales (se fueron sin avisar o perdieron la red).
+function pruneLobby(state: RouteState, now: number): RouteState {
+  if (state.phase !== 'lobby') return state;
+  const gone = state.order.filter((id) => {
+    const player = state.players[id];
+    return player && !player.kicked && now - player.lastSeen > LOBBY_GHOST_MS;
+  });
+  if (gone.length === 0) return state;
+  const players = { ...state.players };
+  gone.forEach((id) => delete players[id]);
+  return bump(state, { players, order: state.order.filter((id) => !gone.includes(id)) });
+}
+
+// Al retomar una ruta tras una pausa del stand (se cerró la pestaña, se reinició el equipo): los plazos
+// en curso se corren el tiempo que estuvo detenida y todos parten con señal de vida fresca. Nadie pierde
+// una pregunta ni un juego por una caída que no fue suya.
+export function resumeRoute(state: RouteState, downtimeMs: number, now: number): RouteState {
+  const shift = Math.max(0, Math.round(downtimeMs));
+  const players = Object.fromEntries(Object.entries(state.players).map(([id, player]) => [id, player.kicked ? player : { ...player, lastSeen: now }]));
+  const next: RouteState = { ...state, players };
+  if (shift === 0) return next;
+  if (next.startsAt !== null && next.phase === 'play') next.startsAt += shift;
+  if (next.deadline !== null) next.deadline += shift;
+  if (next.projectsAt && next.phase === 'projects') next.projectsAt += shift;
+  if (next.projectsCloseAt) next.projectsCloseAt += shift;
+  if (next.quiz && next.phase === 'quiz') {
+    next.quiz = { ...next.quiz, startsAt: next.quiz.startsAt + shift, endsAt: next.quiz.endsAt + shift, revealUntil: next.quiz.revealUntil ? next.quiz.revealUntil + shift : 0 };
+  }
+  return bump(next, {});
+}
+
 // Vencimientos de tiempo; se llama periódicamente desde el anfitrión.
 export function tick(state: RouteState, now: number): RouteState {
-  let next = state;
+  let next = pruneLobby(state, now);
   if (next.phase === 'play' && next.deadline !== null && now >= next.deadline) next = toResults(next, now);
   else if (next.phase === 'results' && next.deadline !== null && now >= next.deadline) next = toCheckin(next, 'b213', now);
   else if (next.phase === 'projects' && next.deadline !== null && now >= next.deadline) next = toCheckin(next, 'hall', now);
@@ -292,79 +354,94 @@ export function tick(state: RouteState, now: number): RouteState {
   return advanceIfReady(next, now);
 }
 
-const PROJECT_PHASES = new Set(['projects']);
-
-function acceptsScore(state: RouteState, game: StationGameId): boolean {
+function acceptsScore(state: RouteState, game: StationGameId, now: number): boolean {
   if (game === 'red-b215') return state.phase === 'play' || state.phase === 'results';
-  // Se aceptan envíos tardíos mientras el grupo camina al pasillo.
-  return PROJECT_PHASES.has(state.phase) || (state.phase === 'checkin' && state.stop === 'hall');
+  if (state.phase === 'projects') return true;
+  // Se aceptan envíos tardíos mientras el grupo camina al pasillo...
+  if (state.phase === 'checkin' && state.stop === 'hall') return true;
+  // ...y, ya en la trivia, solo el margen para que cierre el proyecto que quedó abierto.
+  return state.phase === 'quiz' && typeof state.projectsCloseAt === 'number' && now <= state.projectsCloseAt;
 }
 
 // Desde cuándo cuenta el tiempo de un juego: B215 parte con la cuenta regresiva común; cada proyecto
 // de B213 parte al abrir la sala o al terminar el proyecto anterior (no se juegan dos a la vez).
 export function scoreEarliest(state: RouteState, player: PlayerRecord, game: StationGameId): number | null {
   if (game === 'red-b215') return state.startsAt === null ? null : state.startsAt + MIN_B215_MS;
-  const previous = pillarIds.reduce((latest, id) => Math.max(latest, player.games[id]?.at ?? 0), 0);
+  const previous = STATION_GAME_IDS.reduce((latest, id) => (id === 'red-b215' ? latest : Math.max(latest, gameScore(player, id)?.at ?? 0)), 0);
   const start = Math.max(state.projectsAt ?? 0, previous);
   return start > 0 ? start + MIN_PROJECT_MS : null;
 }
 
-export function applyPlayerAction(state: RouteState, id: string, action: PlayerAction, now: number): RouteState {
-  const player = state.players[id];
-  if (!player || player.kicked) return state;
+const ACCEPTED: ActionVerdict = { status: 'accepted' };
+const reject = (reason: Extract<ActionVerdict, { status: 'rejected' }>['reason']): ActionVerdict => ({ status: 'rejected', reason });
+
+export interface ActionResult {
+  state: RouteState;
+  verdict: ActionVerdict;
+}
+
+// Aplica la acción de un participante y dice qué pasó con ella. Repetir una acción ya aplicada no
+// cambia nada (y se informa como aceptada o duplicada): los reintentos son seguros.
+export function submitPlayerAction(state: RouteState, id: string, action: PlayerAction, now: number): ActionResult {
+  const player = ownPlayer(state, id);
+  if (!player) return { state, verdict: reject('unknown') };
+  if (player.kicked) return { state, verdict: reject('kicked') };
   const touched = withPlayer(state, { ...player, lastSeen: now });
+  const done = (next: RouteState, verdict: ActionVerdict): ActionResult => ({ state: advanceIfReady(next, now), verdict });
 
   switch (action.type) {
     case 'heartbeat':
-      return advanceIfReady(touched, now);
+      return done(touched, ACCEPTED);
     case 'checkin': {
-      if (state.phase !== 'checkin' || state.stop !== action.stop || player.checkins[action.stop]) return advanceIfReady(touched, now);
+      if (!isCheckinStop(action.stop)) return done(touched, reject('invalid'));
+      if (player.checkins[action.stop]) return done(touched, ACCEPTED);
+      if (state.phase !== 'checkin' || state.stop !== action.stop) return done(touched, reject('phase'));
       const updated = bump(withPlayer(touched, { ...touched.players[id], checkins: { ...player.checkins, [action.stop]: now } }), {});
-      return advanceIfReady(updated, now);
+      return done(updated, ACCEPTED);
     }
     case 'score': {
-      if (!acceptsScore(state, action.game) || player.games[action.game]) return advanceIfReady(touched, now);
+      if (!isStationGameId(action.game) || !Number.isFinite(action.score) || !Number.isFinite(action.accuracy)) return done(touched, reject('invalid'));
+      if (gameScore(player, action.game)) return done(touched, reject('duplicate'));
+      if (!acceptsScore(state, action.game, now)) return done(touched, reject(action.game !== 'red-b215' && state.phase === 'quiz' ? 'closed' : 'phase'));
       const earliest = scoreEarliest(state, player, action.game);
       if (earliest !== null && now < earliest) {
         const minimum = action.game === 'red-b215' ? MIN_B215_MS : MIN_PROJECT_MS;
         if (now < earliest - minimum / 2 && !player.suspect?.[action.game]) {
           const suspect = { ...player.suspect, [action.game]: now };
-          return advanceIfReady(bump(withPlayer(touched, { ...touched.players[id], suspect }), {}), now);
+          return done(bump(withPlayer(touched, { ...touched.players[id], suspect }), {}), { status: 'retry', reason: 'early' });
         }
-        return advanceIfReady(touched, now);
+        return done(touched, { status: 'retry', reason: 'early' });
       }
-      const score = Math.round(Math.min(MAX_GAME_SCORE, Math.max(0, Number(action.score) || 0)));
-      const accuracy = Math.min(1, Math.max(0, Number(action.accuracy) || 0));
+      const score = Math.round(Math.min(MAX_GAME_SCORE, Math.max(0, action.score)));
+      const accuracy = Math.min(1, Math.max(0, action.accuracy));
       const games = { ...player.games, [action.game]: { score, accuracy, at: now } };
-      return advanceIfReady(bump(withPlayer(touched, { ...touched.players[id], games }), {}), now);
+      return done(bump(withPlayer(touched, { ...touched.players[id], games }), {}), ACCEPTED);
     }
     case 'answer': {
       const quiz = state.quiz;
       const question = quiz ? getRouteQuestion(quiz.questionIds[quiz.index]) : undefined;
-      const valid =
-        state.phase === 'quiz' &&
-        quiz &&
-        question &&
-        quiz.step === 'question' &&
-        action.index === quiz.index &&
-        !player.answers[quiz.index] &&
-        Number.isInteger(action.option) &&
-        action.option >= 0 &&
-        action.option < question.options.length &&
-        now >= quiz.startsAt - 500 &&
-        now <= quiz.endsAt + 1500;
-      if (!valid || !quiz) return advanceIfReady(touched, now);
+      if (!Number.isSafeInteger(action.index) || !Number.isSafeInteger(action.option) || action.index < 0 || action.option < 0) return done(touched, reject('invalid'));
+      if (state.phase !== 'quiz' || !quiz || !question) return done(touched, reject('phase'));
+      if (action.index !== quiz.index || quiz.step !== 'question') return done(touched, reject(action.index <= quiz.index ? 'closed' : 'phase'));
+      if (player.answers[quiz.index]) return done(touched, reject('duplicate'));
+      if (action.option >= question.options.length) return done(touched, reject('invalid'));
+      if (now < quiz.startsAt - 500) return done(touched, { status: 'retry', reason: 'early' });
+      if (now > quiz.endsAt + 1500) return done(touched, reject('closed'));
       const answers = { ...player.answers, [quiz.index]: { option: action.option, at: Math.max(now, quiz.startsAt), points: 0, correct: false, rank: null } };
-      return advanceIfReady(bump(withPlayer(touched, { ...touched.players[id], answers }), {}), now);
+      return done(bump(withPlayer(touched, { ...touched.players[id], answers }), {}), ACCEPTED);
     }
     case 'leave': {
       const players = { ...state.players };
       delete players[id];
-      return advanceIfReady(bump(state, { players, order: state.order.filter((item) => item !== id) }), now);
+      return done(bump(state, { players, order: state.order.filter((item) => item !== id) }), ACCEPTED);
     }
     default:
-      return state;
+      return { state, verdict: reject('invalid') };
   }
+}
+
+export function applyPlayerAction(state: RouteState, id: string, action: PlayerAction, now: number): RouteState {
+  return submitPlayerAction(state, id, action, now).state;
 }
 
 export function applyHostAction(state: RouteState, action: HostAction, now: number): RouteState {
@@ -372,7 +449,7 @@ export function applyHostAction(state: RouteState, action: HostAction, now: numb
     case 'start':
       return state.phase === 'lobby' && rankedPlayers(state).length > 0 ? toCheckin(state, 'b215', now) : state;
     case 'kick': {
-      const player = state.players[action.id];
+      const player = ownPlayer(state, action.id);
       if (!player || player.kicked) return state;
       return advanceIfReady(bump(withPlayer(state, { ...player, kicked: true }), {}), now);
     }
@@ -403,7 +480,10 @@ export function applyHostAction(state: RouteState, action: HostAction, now: numb
   }
 }
 
-export function snapshot(state: RouteState, now: number): RouteSnapshot {
+// Sello por defecto para quien solo necesita la vista (pruebas, pantalla local del stand).
+export const LOCAL_STAMP = { epoch: 1, owner: '000000000000', pub: 1 };
+
+export function snapshot(state: RouteState, now: number, stamp: { epoch: number; owner: string; pub: number } = LOCAL_STAMP): RouteSnapshot {
   const ranked = rankedPlayers(state);
   const quiz = state.quiz;
   const checkinStop = state.phase === 'checkin' ? (state.stop as CheckinStop) : null;
@@ -414,7 +494,12 @@ export function snapshot(state: RouteState, now: number): RouteSnapshot {
     avatar: player.avatar,
     online: isOnline(player, now, state.settings),
     checkedIn: checkinStop ? Boolean(player.checkins[checkinStop]) : false,
-    games: Object.fromEntries(Object.entries(player.games).map(([game, value]) => [game, value?.score ?? 0])),
+    games: Object.fromEntries(
+      STATION_GAME_IDS.flatMap((game) => {
+        const value = gameScore(player, game);
+        return value ? [[game, value.score]] : [];
+      }),
+    ),
     quizPoints: player.quizPoints,
     quizCorrect: player.quizCorrect,
     answered: quiz ? Boolean(player.answers[quiz.index]) : false,
@@ -457,8 +542,11 @@ export function snapshot(state: RouteState, now: number): RouteSnapshot {
   }
 
   return {
-    version: 1,
+    version: 2,
     code: state.code,
+    epoch: stamp.epoch,
+    owner: stamp.owner,
+    pub: stamp.pub,
     rev: state.rev,
     now,
     phase: state.phase,
@@ -470,6 +558,7 @@ export function snapshot(state: RouteState, now: number): RouteSnapshot {
     quiz: publicQuiz,
     settings: state.settings,
     finishedAt: state.finishedAt,
+    projectsCloseAt: state.phase === 'quiz' ? (state.projectsCloseAt ?? null) : null,
     completed: state.phase === 'podium' && state.completed === true,
     kicked: state.order.filter((id) => state.players[id]?.kicked),
   };

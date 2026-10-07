@@ -1,5 +1,5 @@
 import { achievements } from '@/data/achievements';
-import { dailyDays } from '@/features/burst/daily';
+import { combineStats, parseStats, summarize, type ProgressStats } from '@/lib/progressStats';
 import type { AchievementId, GameResult, MicroGameId, UserProfile } from '@/types/game';
 
 export interface AchievementContext {
@@ -15,16 +15,6 @@ export function wonMicroGames(results: GameResult[]): MicroGameId[] {
   return results
     .filter((result) => result.gameId === 'burst' && typeof result.metadata?.won === 'string')
     .flatMap((result) => String(result.metadata?.won).split(',').filter(Boolean)) as MicroGameId[];
-}
-
-// Rutas jugadas hasta el final de la trivia (cerrar la ruta antes de tiempo no cuenta).
-function completedRoutes(results: GameResult[]): GameResult[] {
-  return results.filter((result) => result.gameId === 'route' && result.metadata?.completed === true);
-}
-
-// Rutas en vivo con grupo (el modo individual no cuenta para el podio).
-function liveRoutes(results: GameResult[]): GameResult[] {
-  return completedRoutes(results).filter((result) => result.metadata?.solo !== true && Number(result.metadata?.players ?? 0) >= 3);
 }
 
 export function playedStations(results: GameResult[]): string[] {
@@ -47,76 +37,83 @@ export function puzzleLevels(results: GameResult[], game: string): number {
 // Modos que cuentan para "Prueba de todo".
 const PLAY_MODES: string[] = ['burst', 'runner', 'puzzle', 'station', 'route', 'millionaire', 'story', 'practice'];
 
-function runnerRuns(results: GameResult[]): GameResult[] {
-  return results.filter((result) => result.gameId === 'runner');
+const statsCache = new WeakMap<AchievementContext, ProgressStats>();
+
+// Progreso acumulado: lo que ya salió del historial (guardado en el perfil) más las partidas recientes.
+export function contextStats(context: AchievementContext): ProgressStats {
+  const cached = statsCache.get(context);
+  if (cached) return cached;
+  const stats = combineStats(parseStats(context.profile.archive), summarize(context.results));
+  statsCache.set(context, stats);
+  return stats;
 }
+
+const own = <T,>(map: Record<string, T>, key: string): T | undefined => (Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined);
 
 // Valor actual de cada logro (se compara con su umbral). Función pura y testeable.
 export function achievementProgress(id: AchievementId, context: AchievementContext): number {
-  const { profile, results, mascotDays, careerAreas } = context;
+  const { profile, mascotDays, careerAreas } = context;
+  const stats = contextStats(context);
+  const levels = (game: string) => own(stats.puzzleLevels, game)?.length ?? 0;
   switch (id) {
     case 'first-signal':
-      return Math.min(1, results.length);
+      return Math.min(1, stats.total);
     case 'burst-starter':
-      return results.filter((result) => result.gameId === 'burst').length;
+      return own(stats.byMode, 'burst') ?? 0;
     case 'quiz-bronze':
-      return results
-        .filter((result) => result.gameId === 'millionaire')
-        .reduce((total, result) => total + Number(result.metadata?.correctAnswers ?? 0), 0);
+      return stats.millionaireCorrect;
     case 'career-explorer':
       return careerAreas;
     case 'route-complete':
-      return completedRoutes(results).length;
+      return stats.routesCompleted;
     case 'temple-restored':
-      return completedRoutes(results).some((result) => Number(result.metadata?.pillars ?? 0) >= 5) ? 1 : 0;
+      return stats.templeRestored ? 1 : 0;
     case 'route-podium':
-      return liveRoutes(results).some((result) => Number(result.metadata?.rank ?? 99) <= 3) ? 1 : 0;
+      return stats.liveBestRank !== null && stats.liveBestRank <= 3 ? 1 : 0;
     case 'route-champion':
-      return liveRoutes(results).some((result) => Number(result.metadata?.rank ?? 99) === 1) ? 1 : 0;
+      return stats.liveBestRank === 1 ? 1 : 0;
     case 'station-explorer':
-      return playedStations(results).length;
+      return stats.stations.length;
     case 'streak-three':
       return profile.streakDays;
     case 'security-guard':
-      return wonMicroGames(results).filter((game) => SECURITY_GAMES.includes(game)).length;
+      return SECURITY_GAMES.reduce((sum, game) => sum + (own(stats.microWins, game) ?? 0), 0);
     case 'perfect-run':
-      return results.some((result) => (result.gameId === 'burst' || result.gameId === 'millionaire') && result.accuracy >= 1) ? 1 : 0;
+      return stats.perfectRun ? 1 : 0;
     case 'level-five':
     case 'level-ten':
       return profile.level;
     case 'signal-restored':
-      return results
-        .filter((result) => result.gameId === 'story')
-        .reduce((max, result) => Math.max(max, Number(result.metadata?.chapter ?? 0)), 0);
+      return stats.storyChapter;
     case 'burst-collector':
     case 'burst-master':
-      return new Set(wonMicroGames(results)).size;
+      return Object.keys(stats.microWins).length;
     case 'net-architect':
-      return puzzleLevels(results, 'red');
+      return levels('red');
     case 'binary-brain':
-      return puzzleLevels(results, 'binario');
+      return levels('binario');
     case 'code-breaker':
-      return puzzleLevels(results, 'cifrado');
+      return levels('cifrado');
     case 'daily-three':
     case 'daily-seven':
-      return dailyDays(results);
+      return stats.dailyDays.length;
     case 'memory-ace':
-      return puzzleLevels(results, 'memoria');
+      return levels('memoria');
     case 'puzzle-fan':
-      return new Set(results.filter((result) => result.gameId === 'puzzle').map((result) => `${String(result.metadata?.game)}-${String(result.metadata?.level)}`)).size;
+      return Object.values(stats.puzzleLevels).reduce((sum, list) => sum + list.length, 0);
     case 'all-rounder':
-      return new Set(results.map((result) => result.gameId).filter((id) => PLAY_MODES.includes(id))).size;
+      return PLAY_MODES.filter((mode) => (own(stats.byMode, mode) ?? 0) > 0).length;
     case 'burst-flawless':
-      return results.some((result) => result.gameId === 'burst' && !result.metadata?.focus && Number(result.metadata?.lives ?? 0) >= 3 && Number(result.metadata?.rounds ?? 0) >= 5) ? 1 : 0;
+      return stats.burstFlawless ? 1 : 0;
     case 'runner-rookie':
     case 'runner-courier':
-      return runnerRuns(results).reduce((max, result) => Math.max(max, Number(result.metadata?.distance ?? 0)), 0);
+      return stats.runnerDistance;
     case 'data-collector':
-      return runnerRuns(results).reduce((total, result) => total + Number(result.metadata?.data ?? 0), 0);
+      return stats.runnerData;
     case 'rutix-friend':
       return mascotDays;
     case 'quiz-master':
-      return results.some((result) => result.gameId === 'millionaire' && Number(result.metadata?.correctAnswers ?? 0) >= 10) ? 1 : 0;
+      return stats.millionaireBest >= 10 ? 1 : 0;
     default:
       return 0;
   }

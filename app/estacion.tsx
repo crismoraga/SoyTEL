@@ -16,18 +16,20 @@ import { tutorials } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
 import { usePaceFactor } from '@/lib/pace';
 import { formatNumber } from '@/lib/format';
-import { recordGameResult } from '@/storage/profile';
+import { newRunId, useResultSaver } from '@/lib/resultSaver';
 import { useTutorial } from '@/storage/tutorials';
 import { spacing } from '@/theme';
-import type { GameOutcome } from '@/types/game';
 
 // Práctica individual de cualquier juego de la ruta (fuera de la ruta en vivo).
 export default function StationPracticeScreen() {
   const { juego } = useLocalSearchParams<{ juego?: string }>();
   const info = getStationGame(juego ?? '');
   const pace = usePaceFactor();
-  const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: 0 }));
-  const [result, setResult] = useState<{ score: number; outcome: GameOutcome | null } | null>(null);
+  // La primera partida también lleva su hora de inicio (antes siempre se guardaba como 90 s).
+  const [run, setRun] = useState(() => ({ key: 0, id: newRunId('station'), seed: Math.floor(Math.random() * 1e9), startedAt: now() }));
+  const [result, setResult] = useState<{ score: number } | null>(null);
+  // El guardado pertenece a su partida: si ya se empezó otra, su respuesta no vuelve a esta pantalla.
+  const saver = useResultSaver();
   const [leaving, setLeaving] = useState(false);
   const tutorial = useTutorial(info ? 'station' : null);
   // Con una partida en curso, volver atrás pregunta antes de salir.
@@ -51,20 +53,27 @@ export default function StationPracticeScreen() {
           </TelText>
           <View style={styles.tags}>
             <Tag tone="glass" icon="star" label="puntos" />
-            {result.outcome && <Tag tone="cream" icon="sparkle" label={`+${result.outcome.xpGained} XP`} />}
+            {saver.outcome && <Tag tone="cream" icon="sparkle" label={`+${saver.outcome.xpGained} XP`} />}
           </View>
+          {saver.status === 'failed' && (
+            <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+              No se pudo guardar esta práctica en el teléfono.
+            </TelText>
+          )}
           <TelText variant="body" color="accentSoft" align="center">
             {great ? '¡Con esto brillas en la ruta en vivo!' : 'Practica otra vez: en la ruta cada punto cuenta.'}
           </TelText>
         </View>
         <View style={styles.actions}>
+          {saver.status === 'failed' && <TelButton label="Reintentar guardado" variant="outlineLight" icon="refresh" onPress={() => void saver.retry()} />}
           <TelButton
             label="Jugar de nuevo"
             variant="cream"
             icon="refresh"
             onPress={() => {
+              saver.reset();
               setResult(null);
-              setRun((current) => ({ key: current.key + 1, seed: Math.floor(now() % 1e9), startedAt: now() }));
+              setRun((current) => ({ key: current.key + 1, id: newRunId('station'), seed: Math.floor(now() % 1e9), startedAt: now() }));
             }}
           />
           <TelButton label="Volver a los juegos" variant="outlineLight" onPress={() => router.back()} />
@@ -100,15 +109,16 @@ export default function StationPracticeScreen() {
         seed={run.seed}
         pace={pace}
         onComplete={(value) => {
-          setResult({ score: value.score, outcome: null });
-          void recordGameResult({
+          setResult({ score: value.score });
+          void saver.save({
+            id: run.id,
             gameId: 'station',
             score: value.score,
             accuracy: value.accuracy,
-            durationSeconds: run.startedAt ? Math.max(1, Math.round((now() - run.startedAt) / 1000)) : 90,
+            durationSeconds: Math.max(1, Math.round((now() - run.startedAt) / 1000)),
             completedAt: new Date().toISOString(),
             metadata: { game: info.id },
-          }).then((outcome) => setResult({ score: value.score, outcome }));
+          });
         }}
       />
       <AccountGate />

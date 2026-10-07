@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useRef } from 'react';
+import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, radius, spacing, type ColorToken } from '@/theme';
 import { PressableScale } from './PressableScale';
 import { TelIcon, type IconName } from './TelIcon';
@@ -16,23 +17,52 @@ interface ChipGroupProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   tone?: 'dark' | 'light';
+  // 'tabs': filtra lo que se muestra debajo (avisos, logros, juegos). 'choice': elige un valor entre
+  // varios (un ajuste); se anuncia como grupo de opciones con una marcada.
+  kind?: 'tabs' | 'choice';
   accessibilityLabel: string;
   style?: StyleProp<ViewStyle>;
   inset?: number;
 }
 
-// Filtros tipo "Todas · Ruta · Actividades" del centro de avisos.
-export function ChipGroup<T extends string>({ options, value, onChange, tone = 'light', accessibilityLabel, style, inset = 0 }: ChipGroupProps<T>) {
+interface Focusable {
+  focus?: () => void;
+}
+
+// Fila de opciones: filtros tipo "Todas · Ruta · Actividades" o la elección de un ajuste.
+export function ChipGroup<T extends string>({ options, value, onChange, tone = 'light', kind = 'tabs', accessibilityLabel, style, inset = 0 }: ChipGroupProps<T>) {
+  const choice = kind === 'choice';
+  const chips = useRef<(Focusable | null)[]>([]);
+
+  // En la web, las flechas (e Inicio/Fin) recorren el grupo como en cualquier selector nativo.
+  function onKeyDown(event: { key?: string; preventDefault?: () => void }, index: number) {
+    const last = options.length - 1;
+    const next =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? (index + 1) % options.length
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? (index + last) % options.length
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? last
+              : -1;
+    if (next < 0 || next === index) return;
+    event.preventDefault?.();
+    onChange(options[next].id);
+    chips.current[next]?.focus?.();
+  }
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      accessibilityRole="tablist"
+      accessibilityRole={choice ? 'radiogroup' : 'tablist'}
       accessibilityLabel={accessibilityLabel}
       style={[styles.scroller, { marginHorizontal: -inset }, style]}
       contentContainerStyle={[styles.group, { paddingHorizontal: inset }]}
     >
-      {options.map((option) => {
+      {options.map((option, index) => {
         const active = option.id === value;
         const palette = tone === 'dark'
           ? active
@@ -44,9 +74,14 @@ export function ChipGroup<T extends string>({ options, value, onChange, tone = '
         return (
           <PressableScale
             key={option.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
+            ref={(node) => {
+              chips.current[index] = node as Focusable | null;
+            }}
+            accessibilityRole={choice ? 'radio' : 'tab'}
+            accessibilityState={choice ? { checked: active } : { selected: active }}
             accessibilityLabel={option.count !== undefined ? `${option.label}, ${option.count}` : option.label}
+            // Un solo punto de tabulación por grupo: el elegido (el resto se alcanza con las flechas).
+            {...(Platform.OS === 'web' ? { tabIndex: active ? 0 : -1, onKeyDown: (event: { key?: string; preventDefault?: () => void }) => onKeyDown(event, index) } : null)}
             onPress={() => onChange(option.id)}
             haptic
             style={[styles.chip, { backgroundColor: palette.bg, borderColor: palette.border }]}
@@ -105,7 +140,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   chip: {
-    height: 36,
+    minHeight: 36,
+    paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1.5,

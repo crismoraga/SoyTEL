@@ -1,18 +1,20 @@
+import { ACHIEVEMENT_IDS } from '../../src/account/catalog';
 import {
   aliasProblem,
   AVATAR_COUNT,
   cleanAlias,
   cleanSchool,
+  contactPolicyProblem,
   isContactKind,
   isGrade,
-  needsGuardianConsent,
   normalizeContact,
   schoolProblem,
   type ContactKind,
   type GradeId,
 } from '../../src/account/rules';
+import { levelFromXp } from '../../src/lib/progression';
 import { query } from './db';
-import { decryptField, encryptField, hashSecret } from './security';
+import { encryptField, hashSecret, openField } from './security';
 
 export interface PlayerRow {
   [key: string]: unknown;
@@ -63,7 +65,9 @@ export interface ProfileValues {
 export type Validation<T> = { ok: true; value: T } | { ok: false; message: string };
 
 // Valida el perfil enviado por la app. En registro el alias es obligatorio; en edición todo es opcional.
-// `current` se usa al editar para revisar el consentimiento con el curso ya guardado.
+// La regla del contacto se revisa sobre el estado que quedaría guardado (lo enviado más lo que ya
+// tiene la cuenta en `current`), no solo sobre los campos que cambian: cambiar únicamente el curso a
+// 7° básico con un contacto ya guardado también necesita la autorización.
 export function validateProfile(input: ProfileInput, mode: 'create' | 'update', current?: PlayerRow): Validation<ProfileValues> {
   const value: ProfileValues = {};
 
@@ -96,8 +100,6 @@ export function validateProfile(input: ProfileInput, mode: 'create' | 'update', 
   const touchesContact = input.contact !== undefined || input.contactConsent !== undefined || input.guardianConsent !== undefined;
   if (touchesContact) {
     const consent = input.contactConsent === true;
-    const guardian = input.guardianConsent === true;
-    const grade = value.grade !== undefined ? value.grade : (current?.grade ?? null);
     if (!consent || input.contact === null || input.contact === undefined) {
       // Sin consentimiento no se guarda ningún dato de contacto.
       value.contactConsent = false;
@@ -109,12 +111,21 @@ export function validateProfile(input: ProfileInput, mode: 'create' | 'update', 
       if (!isContactKind(contact.kind) || typeof contact.value !== 'string') return { ok: false, message: 'Dato de contacto no válido.' };
       const normalized = normalizeContact(contact.kind, contact.value);
       if (!normalized) return { ok: false, message: 'Revisa tu dato de contacto.' };
-      if (needsGuardianConsent(grade) && !guardian) return { ok: false, message: 'Para 7° y 8° básico se necesita la autorización de tu apoderado/a.' };
       value.contactConsent = true;
-      value.guardianConsent = guardian;
+      value.guardianConsent = input.guardianConsent === true;
       value.contactKind = contact.kind;
       value.contactValue = normalized;
     }
+  }
+
+  // Estado que quedaría guardado. Se revisa cuando cambia el curso o el contacto (cambiar el alias no
+  // obliga a nadie a rehacer un contacto que guardó antes de que existiera la regla).
+  if (value.grade !== undefined || value.contactConsent !== undefined) {
+    const grade = value.grade !== undefined ? value.grade : (current?.grade ?? null);
+    const hasContact = value.contactConsent !== undefined ? Boolean(value.contactValue) : Boolean(current?.contact_value);
+    const guardian = value.contactConsent !== undefined ? Boolean(value.guardianConsent) : Boolean(current?.guardian_consent);
+    const problem = contactPolicyProblem(grade, hasContact, guardian);
+    if (problem) return { ok: false, message: problem };
   }
 
   return { ok: true, value };
@@ -134,10 +145,13 @@ function count(value: unknown, max: number): number {
   return Number.isFinite(number) ? Math.min(max, Math.max(0, number)) : 0;
 }
 
+const CATALOG = new Set(ACHIEVEMENT_IDS);
+
+// Solo se aceptan logros que existen en el catálogo: la lista guardada nunca crece más que él.
 export function sanitizeProgress(input: unknown): ProgressValues {
   const raw = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
   const achievements = Array.isArray(raw.achievements)
-    ? [...new Set(raw.achievements.filter((id): id is string => typeof id === 'string' && /^[a-z0-9-]{3,40}$/.test(id)))].slice(0, 64)
+    ? [...new Set(raw.achievements.slice(0, 256).filter((id): id is string => typeof id === 'string' && CATALOG.has(id)))]
     : [];
   return {
     xp: count(raw.xp, 10_000_000),
@@ -147,6 +161,12 @@ export function sanitizeProgress(input: unknown): ProgressValues {
     routes: count(raw.routes, 10_000),
     achievements,
   };
+}
+
+// Nivel a partir del XP, en SQL, con la misma fórmula que levelFromXp (el nivel L empieza en
+// 120·(L−1) + 35·(L−1)²). Así el nivel se calcula en la misma sentencia que cambia el XP.
+export function levelSql(xp: string): string {
+  return `(1 + floor((sqrt(14400 + 140 * (${xp})::double precision) - 120) / 70))::int`;
 }
 
 export async function findPlayerByToken(token: string): Promise<PlayerRow | null> {
@@ -166,25 +186,42 @@ export async function rankOf(row: PlayerRow): Promise<{ rank: number; total: num
   return { rank: row.hidden ? 0 : ahead + 1, total };
 }
 
+// La posición es un dato accesorio: si no se puede calcular, la respuesta sale igual sin ella.
+export async function rankOrNull(row: PlayerRow): Promise<{ rank: number; total: number } | null> {
+  try {
+    return await rankOf(row);
+  } catch (error) {
+    console.error('[api] ranking no disponible', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+// ¿La fila cumple la regla del contacto? (Las anteriores a la regla pueden no cumplirla.)
+export function contactAllowed(row: PlayerRow): boolean {
+  return contactPolicyProblem(row.grade, Boolean(row.contact_value), row.guardian_consent) === null;
+}
+
 // Perfil completo para su dueño (incluye su dato de contacto descifrado).
 export function ownerView(row: PlayerRow) {
-  const contactValue = row.contact_consent ? decryptField(row.contact_value) : null;
+  const field = row.contact_consent ? openField(row.contact_value) : ({ state: 'empty' } as const);
   return {
     id: row.id,
     alias: row.alias,
     avatar: row.avatar,
     grade: row.grade,
     school: row.school,
-    contact: row.contact_kind && contactValue ? { kind: row.contact_kind, value: contactValue } : null,
+    contact: row.contact_kind && field.state === 'ok' ? { kind: row.contact_kind, value: field.value } : null,
+    // Hay un contacto guardado que el servidor no pudo leer: no es lo mismo que no tener contacto.
+    contactError: field.state === 'unreadable',
     contactConsent: row.contact_consent,
     guardianConsent: row.guardian_consent,
     xp: row.xp,
-    level: row.level,
+    level: levelFromXp(row.xp),
     games: row.games,
     streak: row.streak,
     bestRoute: row.best_route,
     routes: row.routes,
-    achievements: row.achievements ?? [],
+    achievements: (row.achievements ?? []).filter((id) => CATALOG.has(id)),
     hidden: row.hidden,
     createdAt: row.created_at,
   };

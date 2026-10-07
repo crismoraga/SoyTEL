@@ -12,6 +12,7 @@ import {
   cleanAlias,
   cleanSchool,
   contactLabels,
+  contactPolicyProblem,
   CONTACT_KINDS,
   GRADES,
   needsGuardianConsent,
@@ -72,8 +73,11 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
   const contact = values.wantsContact ? normalizeContact(values.contactKind, values.contactValue) : null;
   const contactError = values.wantsContact && !contact ? `Revisa tu ${contactLabels[values.contactKind].label.toLowerCase()}.` : null;
   const guardianNeeded = values.wantsContact && needsGuardianConsent(values.grade);
-  const guardianError = guardianNeeded && !values.guardianConsent ? 'Necesitamos la autorización de tu apoderado/a para guardar un contacto.' : null;
-  const firstError = aliasError ?? schoolError ?? contactError ?? guardianError;
+  // La misma regla que aplican el servidor y la base: contacto solo con curso y, en 7° y 8°, con autorización.
+  const policyError = contactPolicyProblem(values.grade, values.wantsContact, values.guardianConsent);
+  const gradeError = values.wantsContact && values.grade === null ? policyError : null;
+  const guardianError = guardianNeeded ? policyError : null;
+  const firstError = aliasError ?? schoolError ?? contactError ?? policyError;
 
   function submit() {
     setTouched(true);
@@ -111,7 +115,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
           autoCorrect={false}
           style={[styles.input, font('bodySemi'), touched && aliasError && styles.inputError]}
         />
-        <TelText variant="small" color={touched && aliasError ? 'danger' : 'inkSoft'}>
+        <TelText variant="small" color={touched && aliasError ? 'dangerText' : 'inkSoft'}>
           {touched && aliasError ? aliasError : 'Aparece en el ranking. Mejor un apodo que tu nombre completo.'}
         </TelText>
       </TelCard>
@@ -125,6 +129,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
         </TelText>
         <View style={styles.wrap}>
           <ChipGroup
+            kind="choice"
             accessibilityLabel="Curso"
             options={GRADE_OPTIONS}
             value={values.grade ?? 'none'}
@@ -146,7 +151,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
           style={[styles.input, font('bodySemi'), touched && schoolError && styles.inputError]}
         />
         {touched && schoolError && (
-          <TelText variant="small" color="danger">
+          <TelText variant="small" color="dangerText">
             {schoolError}
           </TelText>
         )}
@@ -172,7 +177,12 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
         </View>
         {values.wantsContact && (
           <View style={styles.contact}>
-            <ChipGroup accessibilityLabel="Medio de contacto" options={CONTACT_OPTIONS} value={values.contactKind} onChange={(kind) => set('contactKind', kind)} />
+            {gradeError && (
+              <TelText variant="small" color={touched ? 'dangerText' : 'inkSoft'} accessibilityLiveRegion="polite">
+                {gradeError}
+              </TelText>
+            )}
+            <ChipGroup kind="choice" accessibilityLabel="Medio de contacto" options={CONTACT_OPTIONS} value={values.contactKind} onChange={(kind) => set('contactKind', kind)} />
             <TextInput
               accessibilityLabel={contactLabels[values.contactKind].label}
               value={values.contactValue}
@@ -185,7 +195,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
               style={[styles.input, font('bodySemi'), touched && contactError && styles.inputError]}
             />
             {touched && contactError && (
-              <TelText variant="small" color="danger">
+              <TelText variant="small" color="dangerText">
                 {contactError}
               </TelText>
             )}
@@ -200,7 +210,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
                   label="Mi apoderado/a sabe y está de acuerdo con que Telemática USM me contacte por este medio. (Puedes dejar el contacto de tu apoderado/a.)"
                 />
                 {touched && guardianError && (
-                  <TelText variant="small" color="danger">
+                  <TelText variant="small" color="dangerText">
                     {guardianError}
                   </TelText>
                 )}

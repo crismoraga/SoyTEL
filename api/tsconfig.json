@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../src/account/rules.ts", "../src/lib/progression.ts"]
+  "include": ["./**/*.ts", "../src/account/rules.ts", "../src/account/catalog.ts", "../src/lib/progression.ts"]
 }

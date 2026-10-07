@@ -18,8 +18,8 @@ import { TelText } from '@/components/TelText';
 import { getAchievement } from '@/data/achievements';
 import { coachLine } from '@/data/coachLines';
 import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
-import { PauseSheet, useBackToPause } from '@/features/coach/PauseSheet';
-import { DAILY_BONUS, DAILY_ROUNDS, dailyKey, dailySeed, isDailyDone } from '@/features/burst/daily';
+import { PauseSheet, useAutoPause, useBackToPause } from '@/features/coach/PauseSheet';
+import { DAILY_BONUS, DAILY_ROUNDS, dailyBonusId, dailyKey, dailySeed, isDailyComplete, isDailyDone } from '@/features/burst/daily';
 import { getMicroGameGuide } from '@/features/burst/guides';
 import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
@@ -31,11 +31,12 @@ import { formatNumber } from '@/lib/format';
 import { mulberry32 } from '@/route/random';
 import { useEntering, useMotionEnabled } from '@/lib/motion';
 import { PACE_ACCELERATION, paceFactor } from '@/lib/pace';
-import { loadResults, recordGameResult } from '@/storage/profile';
+import { newRunId, useResultSaver } from '@/lib/resultSaver';
+import { loadResults } from '@/storage/profile';
 import { useSettings, type GamePace } from '@/storage/settings';
 import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
-import type { GameOutcome, MicroGameId } from '@/types/game';
+import type { MicroGameId } from '@/types/game';
 
 const ROUNDS = 8;
 const FOCUS_ROUNDS = 3;
@@ -125,7 +126,8 @@ export default function BurstScreen() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [best, setBest] = useState(0);
-  const [outcome, setOutcome] = useState<GameOutcome | null>(null);
+  const saver = useResultSaver();
+  const outcome = saver.outcome;
   const secondsRef = useRef(0);
   // Milisegundos que le quedan a la ronda (se conserva al pausar).
   const remainingRef = useRef(0);
@@ -133,6 +135,10 @@ export default function BurstScreen() {
   const startedAt = useRef(0);
   const [runId, setRunId] = useState(0);
   const recorded = useRef(false);
+  // Identidad de la partida y día del desafío, fijados al empezar (no cambian si pasa la medianoche).
+  const run = useRef({ id: '', day: '' });
+  // Bono diario de esta partida: null hasta que se guarda.
+  const [bonusGranted, setBonusGranted] = useState<boolean | null>(null);
   const timer = useSharedValue(1);
   const current = state.games[state.round];
   const { pace } = useSettings();
@@ -147,9 +153,13 @@ export default function BurstScreen() {
     });
   }, []);
 
+  const { reset: resetSaver, save: saveResult } = saver;
   const start = useCallback(() => {
     recorded.current = false;
-    setOutcome(null);
+    resetSaver();
+    setBonusGranted(null);
+    setPaused(false);
+    run.current = { id: newRunId('burst'), day: dailyKey(new Date()) };
     startedAt.current = now();
     setRunId((value) => value + 1);
     const games = focusGame
@@ -159,7 +169,7 @@ export default function BurstScreen() {
         : pickBurstGames(ROUNDS);
     dispatch({ type: 'start', games });
     void feedbackHeavy();
-  }, [daily, focusGame]);
+  }, [daily, focusGame, resetSaver]);
 
   // Cada ronda parte cuando el jugador toca la pantalla: así alcanza a leer la instrucción.
   const readyAt = useRef(0);
@@ -209,29 +219,43 @@ export default function BurstScreen() {
   const inRun = state.phase === 'ready' || state.phase === 'playing' || state.phase === 'feedback';
   const pause = useCallback(() => setPaused(true), []);
   useBackToPause(inRun && !paused, pause);
+  // Si la app pasa a segundo plano (otra app, bloqueo de pantalla, otra pestaña), la ráfaga se pausa
+  // sola: no se pierde una ronda ni una vida por un reloj que siguió corriendo sin nadie mirando.
+  useAutoPause(inRun && !paused, pause);
 
   // Solo el ritmo rápido avanza solo; en los demás el jugador toca "Continuar" cuando terminó de leer.
+  // En pausa no avanza (ni termina la partida): al reanudar vuelve a contar el tiempo de lectura.
   useEffect(() => {
-    if (state.phase !== 'feedback' || pace !== 'fast') return;
+    if (state.phase !== 'feedback' || pace !== 'fast' || paused) return;
     const timeout = setTimeout(() => dispatch({ type: 'advance' }), FEEDBACK_MS);
     return () => clearTimeout(timeout);
-  }, [pace, state.phase, state.round]);
+  }, [pace, paused, state.phase, state.round]);
 
   useEffect(() => {
     if (state.phase !== 'finished' || recorded.current) return;
     recorded.current = true;
     const won = [...new Set(state.results.filter((item) => item.correct).map((item) => item.id))];
     const correct = state.results.filter((item) => item.correct).length;
-    const dailyBonus = daily && !dailyDone ? DAILY_BONUS : 0;
-    void recordGameResult({
-      gameId: 'burst',
-      score: state.score + dailyBonus,
-      accuracy: state.games.length ? correct / state.games.length : 0,
-      durationSeconds: Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
-      completedAt: new Date().toISOString(),
-      metadata: { rounds: state.results.length, won: won.join(','), lives: state.lives, focus: focus ?? '', daily: daily ? dailyKey(new Date()) : '' },
-    }).then(setOutcome);
-  }, [daily, dailyDone, focus, state.games.length, state.lives, state.phase, state.results, state.score]);
+    // El desafío diario se completa jugando todas sus rondas. Solo entonces queda marcado para el día
+    // y pide el bono, que se entrega una vez por día (aunque se repita sin salir de la pantalla).
+    const completedDaily = daily && isDailyComplete(state.results.length, state.games.length);
+    void saveResult(
+      {
+        id: run.current.id,
+        gameId: 'burst',
+        score: state.score,
+        accuracy: state.games.length ? correct / state.games.length : 0,
+        durationSeconds: Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
+        completedAt: new Date().toISOString(),
+        metadata: { rounds: state.results.length, won: won.join(','), lives: state.lives, focus: focus ?? '', daily: completedDaily ? run.current.day : '', dailyAttempt: daily ? run.current.day : '' },
+      },
+      completedDaily ? { bonus: { id: dailyBonusId(run.current.day), score: DAILY_BONUS } } : undefined,
+    ).then((saved) => {
+      if (!saved) return;
+      setBonusGranted(saved.bonusGranted === true);
+      if (completedDaily) setDailyDone(true);
+    });
+  }, [daily, focus, saveResult, state.games.length, state.lives, state.phase, state.results, state.score]);
 
   const onAnswer = useCallback(
     (correct: boolean, bonus = 0, note?: string) => {
@@ -326,13 +350,13 @@ export default function BurstScreen() {
             {state.lives <= 0 ? '¡Sin vidas!' : 'Ráfaga completada'}
           </TelText>
           <TelText variant="display" color="cream" align="center" tabular>
-            {formatNumber(state.score)}
+            {formatNumber(state.score + (bonusGranted ? DAILY_BONUS : 0))}
           </TelText>
           <TelText variant="label" color="accentSoft" align="center">
             puntos · {correct} de {state.games.length} microjuegos
           </TelText>
           <View style={styles.rewardRow}>
-            {daily && !dailyDone && <Tag tone="cream" icon="calendar" label={`Bono diario +${DAILY_BONUS}`} />}
+            {bonusGranted && <Tag tone="cream" icon="calendar" label={`Bono diario +${DAILY_BONUS}`} />}
             {newRecord && <Tag tone="cream" icon="crown" label="¡Nuevo récord!" />}
             {outcome && <Tag tone="glass" icon="sparkle" label={`+${outcome.xpGained} XP`} />}
             {outcome?.leveledUp && <Tag tone="cream" icon="rocket" label={`Nivel ${outcome.profile.level}`} />}
@@ -368,6 +392,29 @@ export default function BurstScreen() {
               </View>
             </View>
           ) : null,
+        )}
+        {saver.status === 'failed' && (
+          <View style={styles.saveError}>
+            <TelText variant="caption" color="cream" style={styles.flex} accessibilityLiveRegion="polite">
+              No se pudo guardar esta partida en el teléfono.
+            </TelText>
+            <TelButton
+              label="Reintentar"
+              variant="outlineLight"
+              size="sm"
+              fullWidth={false}
+              onPress={() =>
+                void saver.retry().then((saved) => {
+                  if (saved) setBonusGranted(saved.bonusGranted === true);
+                })
+              }
+            />
+          </View>
+        )}
+        {daily && bonusGranted === false && !isDailyComplete(state.results.length, state.games.length) && (
+          <TelText variant="caption" color="accentSoft" align="center">
+            El bono del día se entrega al jugar las {DAILY_ROUNDS} rondas. ¡Inténtalo de nuevo!
+          </TelText>
         )}
         <View style={styles.actions}>
           <TelButton label="Jugar otra vez" variant="cream" icon="refresh" onPress={start} />
@@ -573,6 +620,14 @@ function Pill({ icon, label }: { icon: IconName; label: string }) {
 }
 
 const styles = StyleSheet.create({
+  saveError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
   flex: {
     flex: 1,
   },

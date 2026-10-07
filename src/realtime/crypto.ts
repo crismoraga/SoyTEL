@@ -71,6 +71,37 @@ export function openFrom(sealed: Sealed, senderPublicKey: string, recipientSecre
   }
 }
 
+// Llave compartida entre dos pares de llaves (X25519). Calcularla es lo caro de `box`: se guarda
+// para que los mensajes siguientes entre los mismos dos dispositivos solo paguen el cifrado simétrico.
+const pairKeys = new Map<string, string>();
+const PAIR_CACHE_LIMIT = 256;
+
+export function pairKey(theirPublicKey: string, mySecretKey: string): string | null {
+  const cacheKey = `${theirPublicKey}|${mySecretKey}`;
+  const cached = pairKeys.get(cacheKey);
+  if (cached) return cached;
+  try {
+    const theirs = fromBase64(theirPublicKey);
+    const mine = fromBase64(mySecretKey);
+    if (theirs.length !== nacl.box.publicKeyLength || mine.length !== nacl.box.secretKeyLength) return null;
+    const key = toBase64(nacl.box.before(theirs, mine));
+    if (pairKeys.size >= PAIR_CACHE_LIMIT) pairKeys.delete(pairKeys.keys().next().value as string);
+    pairKeys.set(cacheKey, key);
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+export function isPublicKey(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 64) return false;
+  try {
+    return fromBase64(value).length === nacl.box.publicKeyLength;
+  } catch {
+    return false;
+  }
+}
+
 export function sealShared(message: string, key: string): Sealed {
   const nonce = randomBytes(nacl.secretbox.nonceLength);
   const cipher = nacl.secretbox(utf8Encode(message), nonce, fromBase64(key));
@@ -86,17 +117,19 @@ export function openShared(sealed: Sealed, key: string): string | null {
   }
 }
 
-function signedBytes(sealed: Sealed): Uint8Array {
-  return concatBytes(fromBase64(sealed.n), fromBase64(sealed.c));
+// `context` ata la firma a datos que viajan fuera del sobre (por ejemplo el número de llave del estado).
+function signedBytes(sealed: Sealed, context?: string): Uint8Array {
+  const body = concatBytes(fromBase64(sealed.n), fromBase64(sealed.c));
+  return context === undefined ? body : concatBytes(utf8Encode(`${context}:`), body);
 }
 
-export function signSealed(sealed: Sealed, signSecretKey: string): string {
-  return toBase64(nacl.sign.detached(signedBytes(sealed), fromBase64(signSecretKey)));
+export function signSealed(sealed: Sealed, signSecretKey: string, context?: string): string {
+  return toBase64(nacl.sign.detached(signedBytes(sealed, context), fromBase64(signSecretKey)));
 }
 
-export function verifySealed(sealed: Sealed, signature: string, signPublicKey: string): boolean {
+export function verifySealed(sealed: Sealed, signature: string, signPublicKey: string, context?: string): boolean {
   try {
-    return nacl.sign.detached.verify(signedBytes(sealed), fromBase64(signature), fromBase64(signPublicKey));
+    return nacl.sign.detached.verify(signedBytes(sealed, context), fromBase64(signature), fromBase64(signPublicKey));
   } catch {
     return false;
   }

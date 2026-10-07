@@ -22,12 +22,12 @@ import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { getTutorial } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
-import { recordGameResult } from '@/storage/profile';
+import { newRunId, useResultSaver } from '@/lib/resultSaver';
 import { loadPuzzleProgress, recordPuzzleSolved, type PuzzleId } from '@/storage/puzzles';
 import { useTutorial } from '@/storage/tutorials';
 import { colors, radius, spacing } from '@/theme';
-import type { GameOutcome } from '@/types/game';
 
 const components: Record<PuzzleId, React.ComponentType<PuzzleGameProps>> = {
   red: NetWalkGame,
@@ -39,7 +39,6 @@ const components: Record<PuzzleId, React.ComponentType<PuzzleGameProps>> = {
 interface Solved {
   level: number;
   result: PuzzleResult;
-  outcome: GameOutcome | null;
 }
 
 // Desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado): por niveles y con Rutix de guía.
@@ -49,31 +48,41 @@ export default function PuzzleScreen() {
   const coach = useCoachEnabled();
   const tutorial = useTutorial(info ? `puzzle-${info.id}` : null);
   const guide = info ? getTutorial(`puzzle-${info.id}`) : undefined;
-  const { data: progress, setData: setProgress } = useFocusData(loadPuzzleProgress);
+  const { data: progress, setData: setProgress, error, reload } = useFocusData(loadPuzzleProgress);
   const [chosenLevel, setChosenLevel] = useState<number | null>(null);
-  const [run, setRun] = useState(() => ({ key: 0, seed: Math.floor(Math.random() * 1e9), startedAt: now() }));
+  const [run, setRun] = useState(() => ({ key: 0, id: newRunId('puzzle'), seed: Math.floor(Math.random() * 1e9), startedAt: now() }));
   const [solved, setSolved] = useState<Solved | null>(null);
+  // El guardado pertenece a su partida: la respuesta de un nivel anterior no pisa el que está en curso.
+  const saver = useResultSaver();
   const [line, setLine] = useState<{ text: string; mood: CoachMood } | null>(null);
 
   if (!info) return <Redirect href="/games" />;
-  if (!progress) return <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />} />;
+  if (!progress) {
+    return (
+      <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />}>
+        {error && <LoadError tone="dark" onRetry={reload} />}
+      </Screen>
+    );
+  }
 
   const unlocked = Math.min(info.maxLevel, progress[info.id].level + 1);
   const level = Math.min(chosenLevel ?? unlocked, unlocked);
   const Game = components[info.id];
 
   function restart(nextLevel: number) {
+    saver.reset();
     setChosenLevel(nextLevel);
     setSolved(null);
     setLine(null);
-    setRun((current) => ({ key: current.key + 1, seed: Math.floor(now() % 1e9) + current.key * 7919, startedAt: now() }));
+    setRun((current) => ({ key: current.key + 1, id: newRunId('puzzle'), seed: Math.floor(now() % 1e9) + current.key * 7919, startedAt: now() }));
   }
 
   async function onSolved(result: PuzzleResult) {
     if (!info) return;
-    setSolved({ level, result, outcome: null });
-    setProgress(await recordPuzzleSolved(info.id, level, result.score));
-    const outcome = await recordGameResult({
+    const isCurrent = saver.mark();
+    setSolved({ level, result });
+    void saver.save({
+      id: run.id,
       gameId: 'puzzle',
       score: result.score,
       accuracy: result.accuracy,
@@ -81,7 +90,13 @@ export default function PuzzleScreen() {
       completedAt: new Date().toISOString(),
       metadata: { game: info.id, level },
     });
-    setSolved({ level, result, outcome });
+    try {
+      const updated = await recordPuzzleSolved(info.id, level, result.score);
+      // Si ya se pasó a otro nivel, este avance igual quedó guardado: no se toca la pantalla nueva.
+      if (isCurrent()) setProgress(updated);
+    } catch {
+      // El nivel se puede repetir; el puntaje de la partida va por su propio guardado.
+    }
   }
 
   if (solved) {
@@ -102,9 +117,17 @@ export default function PuzzleScreen() {
             {solved.result.detail}
           </TelText>
           <View style={styles.tags}>
-            {solved.outcome && <Tag tone="cream" icon="sparkle" label={`+${solved.outcome.xpGained} XP`} />}
-            {solved.outcome?.leveledUp && <Tag tone="cream" icon="rocket" label={`Nivel ${solved.outcome.profile.level}`} />}
+            {saver.outcome && <Tag tone="cream" icon="sparkle" label={`+${saver.outcome.xpGained} XP`} />}
+            {saver.outcome?.leveledUp && <Tag tone="cream" icon="rocket" label={`Nivel ${saver.outcome.profile.level}`} />}
           </View>
+          {saver.status === 'failed' && (
+            <View style={styles.tags}>
+              <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+                No se pudo guardar el puntaje en el teléfono.
+              </TelText>
+              <TelButton label="Reintentar" variant="outlineLight" size="sm" fullWidth={false} onPress={() => void saver.retry()} />
+            </View>
+          )}
         </View>
         <View style={styles.learned}>
           <TelIcon name="lightbulb" size={20} color={colors.cream} />
@@ -145,7 +168,7 @@ export default function PuzzleScreen() {
       }
     >
       {levels.length > 1 && (
-        <ChipGroup tone="dark" accessibilityLabel="Elegir nivel" options={levels} value={String(level)} onChange={(id) => restart(Number(id))} inset={spacing.md} />
+        <ChipGroup kind="choice" tone="dark" accessibilityLabel="Elegir nivel" options={levels} value={String(level)} onChange={(id) => restart(Number(id))} inset={spacing.md} />
       )}
       {coach ? (
         <CoachBubble mood={line?.mood ?? 'intro'} tone={line?.mood === 'good' ? 'good' : line?.mood === 'bad' ? 'bad' : 'info'} size={60}>

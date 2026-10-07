@@ -1,7 +1,6 @@
-import { newBoxKeys, newSessionKey, newSignKeys } from '@/realtime/crypto';
 import { pillarIds } from '@/route/content';
-import { createRoute, DEFAULT_SETTINGS, MIN_B215_MS, MIN_PROJECT_MS } from '@/route/engine';
-import { HostController } from '@/route/host';
+import { DEFAULT_SETTINGS, MIN_B215_MS, MIN_PROJECT_MS } from '@/route/engine';
+import { HostController, newHostRecord } from '@/route/host';
 import { LocalBus, LocalRouteLink } from '@/route/link';
 import { MemberController } from '@/route/member';
 import { getRouteQuestion } from '@/route/quizBank';
@@ -139,22 +138,7 @@ describe('route sync over the local bus', () => {
     const host = HostController.createWithLink(new LocalRouteLink(bus), {}, { solo: true });
     await host.start();
     // Un impostor con el mismo código pero llaves propias.
-    const now = Date.now();
-    const impostor = new HostController(
-      {
-        code: host.code,
-        clientId: 'impostor1',
-        brokerIndex: 0,
-        boxKeys: newBoxKeys(),
-        signKeys: newSignKeys(),
-        sessionKey: newSessionKey(),
-        state: createRoute(host.code, now, 7),
-        seqs: {},
-        savedAt: now,
-      },
-      new LocalRouteLink(bus),
-      { solo: true },
-    );
+    const impostor = new HostController(newHostRecord(host.code, 0, {}, Date.now(), 'aaaaaaaaaaaa'), new LocalRouteLink(bus), { solo: true });
     await impostor.start();
     await jest.advanceTimersByTimeAsync(300);
     expect(host.getView().impostor).toBe(true);

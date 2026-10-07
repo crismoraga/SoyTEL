@@ -20,7 +20,9 @@ export function TelText({
 }: PropsWithChildren<TelTextProps>) {
   return (
     <Text
-      maxFontSizeMultiplier={1.4}
+      // El texto sigue el tamaño elegido en el teléfono hasta el doble. Quien no pueda crecer tanto
+      // (una celda de ancho fijo) pone su propio límite y conserva el nombre completo para el lector.
+      maxFontSizeMultiplier={2}
       {...props}
       style={[
         textStyle(variant),

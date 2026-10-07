@@ -37,7 +37,7 @@ export function CipherGame({ level, seed, onSolved, say }: PuzzleGameProps) {
     if (solved) return;
     if (guess === round.shift) {
       void feedbackSuccess();
-      score.current += cipherPoints(wrongHere.current);
+      score.current += cipherPoints(wrongHere.current, index);
       setSolved(true);
       say(`¡Descifrado! Cada letra estaba corrida ${round.shift} ${round.shift === 1 ? 'lugar' : 'lugares'}.`, 'good');
       return;

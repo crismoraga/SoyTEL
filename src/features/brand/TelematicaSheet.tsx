@@ -22,7 +22,7 @@ export function TelematicaSheet({ visible, onClose }: TelematicaSheetProps) {
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} accessibilityLabel="Ingeniería Civil Telemática USM" tone="dark" scroll>
+    <Sheet visible={visible} onClose={onClose} accessibilityLabel="Ingeniería Civil Telemática USM" tone="dark">
       <View style={styles.head}>
         <AppLogo size={64} shadow />
         <View style={styles.flex}>

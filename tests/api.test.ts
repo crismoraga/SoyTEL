@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 import { profileColumns, sanitizeProgress, validateProfile, type PlayerRow } from '../api/_lib/players';
-import { decryptField, encryptField, hashSecret, newRecoveryCode } from '../api/_lib/security';
+import { encryptField, hashSecret, newRecoveryCode, openField } from '../api/_lib/security';
 import { isRecoveryCode } from '@/account/rules';
 
 // Lógica pura de la API (validación, consentimiento, cifrado de contactos). Sin base de datos.
@@ -35,17 +35,33 @@ describe('api validation', () => {
     expect(validateProfile({ contact: { kind: 'email', value: 'a@b.cl' }, contactConsent: true }, 'update', current).ok).toBe(false);
   });
 
+  it('checks the contact rule against what would end up stored, not only the fields sent', () => {
+    const withContact = { grade: '4m', contact_value: 'g2:cifrado', contact_consent: true, guardian_consent: false } as PlayerRow;
+    // Cambiar solo el curso a 7° básico con un contacto ya guardado.
+    expect(validateProfile({ grade: '7b' }, 'update', withContact).ok).toBe(false);
+    expect(validateProfile({ grade: null }, 'update', withContact).ok).toBe(false);
+    expect(validateProfile({ grade: '3m' }, 'update', withContact).ok).toBe(true);
+    // Sin curso no se guarda contacto.
+    expect(validateProfile({ alias: 'Ana', contact: { kind: 'email', value: 'a@b.cl' }, contactConsent: true, guardianConsent: true }, 'create').ok).toBe(false);
+    // Cambiar el alias no obliga a rehacer un contacto guardado antes de la regla.
+    const legacy = { grade: null, contact_value: 'g1:antiguo', contact_consent: true, guardian_consent: false } as PlayerRow;
+    expect(validateProfile({ alias: 'Nuevo alias' }, 'update', legacy).ok).toBe(true);
+  });
+
   it('encrypts contact data before it reaches the database', () => {
     const { columns, params } = profileColumns({ contactConsent: true, guardianConsent: false, contactKind: 'email', contactValue: 'ana@correo.cl' });
     const sealed = params[columns.indexOf('contact_value')] as string;
-    expect(sealed).toMatch(/^g1:/);
+    expect(sealed).toMatch(/^g2:[0-9a-f]{8}:/);
     expect(sealed).not.toContain('ana@');
-    expect(decryptField(sealed)).toBe('ana@correo.cl');
-    expect(decryptField(encryptField('x').replace(/.$/, 'A'))).not.toBe('x');
+    expect(openField(sealed)).toEqual({ state: 'ok', value: 'ana@correo.cl' });
+    // Un dato alterado no se lee, y no se confunde con "no hay dato".
+    expect(openField(`${encryptField('x').slice(0, -4)}AAAA`)).toEqual({ state: 'unreadable' });
+    expect(openField(null)).toEqual({ state: 'empty' });
+    expect(openField('texto-sin-formato')).toEqual({ state: 'unreadable' });
   });
 
   it('sanitizes progress', () => {
-    const progress = sanitizeProgress({ xp: -5, games: 3.7, achievements: ['first-signal', 'first-signal', '<script>', 7] });
+    const progress = sanitizeProgress({ xp: -5, games: 3.7, achievements: ['first-signal', 'first-signal', '<script>', 7, 'logro-que-no-existe'] });
     expect(progress).toEqual({ xp: 0, games: 3, streak: 0, bestRoute: 0, routes: 0, achievements: ['first-signal'] });
   });
 

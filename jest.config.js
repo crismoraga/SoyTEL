@@ -7,5 +7,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    // La misma librería, evaluada sin el costo del contexto aislado de Jest (ver el archivo).
+    '^tweetnacl$': '<rootDir>/tests/support/tweetnacl-fast.js',
   },
 };

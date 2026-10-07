@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { useKeepAwake } from 'expo-keep-awake';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
@@ -20,6 +21,7 @@ import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { BigCountdown, PlayerAvatar, PlayerChip, RouteProgress } from '@/features/route/parts';
 import { Leaderboard, Podium } from '@/features/route/Podium';
 import { QuizQuestion, QuizReveal } from '@/features/route/QuizViews';
+import { answerNote, isLostEntry as isLost, isOpenEntry as isOpen, pillarState, scoreStatus } from '@/features/route/status';
 import { Temple } from '@/features/route/Temple';
 import { getStationGame, stationGames } from '@/features/stations/registry';
 import type { StationGameResult } from '@/features/stations/kit';
@@ -27,43 +29,49 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackHeavy } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
+import { currentPaceFactor } from '@/lib/pace';
+import { webAppUrl } from '@/realtime/config';
 import { checkinCopy, pillarIds, pillars, stationTitles, stopInfo } from '@/route/content';
-import { useMemberView, useRouteForeground } from '@/route/hooks';
-import { routeMember, type MemberView } from '@/route/member';
-import { markRouteRecorded, wasRouteRecorded } from '@/route/storage';
+import { settingsForPace } from '@/route/engine';
+import { useHostClock, useHostTimeReached, useMemberView, useRouteForeground } from '@/route/hooks';
+import { routeMember, type MemberView, type OutboxView } from '@/route/member';
+import { wasRouteRecorded } from '@/route/storage';
 import type { CheckinStop, PillarId, PublicPlayer, RouteSnapshot, StationGameId } from '@/route/types';
 import { recordGameResult } from '@/storage/profile';
+import type { GameResult } from '@/types/game';
 import { colors, radius, spacing } from '@/theme';
 
-// Reloj del anfitrión (hora del stand). Solo lo usan las vistas con cuenta regresiva, para que los
-// juegos no se vuelvan a dibujar en cada tic (importante en teléfonos de gama baja).
-function useHostClock(offset: number, intervalMs = 250): number {
-  const [now, setNow] = useState(() => clockNow());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now + offset;
-}
-
-// true desde el instante local indicado (un solo cambio, sin reloj que corra).
-function useTimeReached(target: number | null): boolean {
-  const [reached, setReached] = useState(() => target === null || clockNow() >= target);
-  useEffect(() => {
-    if (target === null) return;
-    const timer = setTimeout(() => setReached(true), Math.max(0, target - Date.now()));
-    return () => clearTimeout(timer);
-  }, [target]);
-  return reached;
-}
+const PROBLEMS: MemberView['status'][] = ['not-found', 'rejected', 'kicked', 'conflict', 'unreachable', 'incompatible'];
 
 export default function RouteGameScreen() {
   useKeepAwake();
   useRouteForeground();
   const view = useMemberView();
+  // Al recargar la página (o reabrir la app) en medio de la ruta, primero se recupera lo guardado:
+  // recién entonces se sabe si hay una ruta que seguir o hay que volver al inicio.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void routeMember.restore().finally(() => {
+      if (active) setRestored(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  if (view.status === 'idle') return <Redirect href="/ruta" />;
-  if (view.status === 'not-found' || view.status === 'rejected' || view.status === 'kicked' || view.status === 'conflict') return <ProblemView view={view} />;
+  if (view.status === 'idle') {
+    if (restored) return <Redirect href="/ruta" />;
+    return (
+      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent compact />}>
+        <View style={styles.center}>
+          <SignalSpinner size={96} />
+        </View>
+      </Screen>
+    );
+  }
+  if (view.status === 'elsewhere') return <ElsewhereView view={view} />;
+  if (PROBLEMS.includes(view.status)) return <ProblemView view={view} />;
   if (!view.snapshot || !view.me) return <ConnectingView view={view} />;
   return <LiveRoute view={view} snapshot={view.snapshot} me={view.me} />;
 }
@@ -73,39 +81,125 @@ function exit() {
   router.replace('/home');
 }
 
+// Copia el estado de la conexión para pedir ayuda (no incluye nombres, llaves ni el código).
+function DiagnosticsButton() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <TelButton
+      label={copied ? 'Diagnóstico copiado' : 'Copiar diagnóstico'}
+      variant="ghostLight"
+      size="sm"
+      fullWidth={false}
+      onPress={() => {
+        void Clipboard.setStringAsync(JSON.stringify({ app: 'SoyTEL', pantalla: 'participante', ...routeMember.getDiagnostics() }, null, 2)).then(
+          () => setCopied(true),
+          () => setCopied(false),
+        );
+      }}
+    />
+  );
+}
+
 function ConnectingView({ view }: { view: MemberView }) {
+  const offline = view.link !== 'online' && !view.solo;
+  const title =
+    view.status === 'joined'
+      ? 'Recuperando tu lugar…'
+      : view.status === 'connecting'
+        ? 'Volviendo a tu ruta…'
+        : view.verification
+          ? 'Entrando al grupo…'
+          : 'Buscando la ruta…';
   return (
     <Screen tone="dark" backdrop="signal" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
         <SignalSpinner size={96} />
         <TelText variant="title" color="cream" align="center">
-          {view.status === 'joining' ? 'Buscando la ruta…' : 'Conectando…'}
+          {title}
         </TelText>
-        <TelText variant="body" color="accentSoft" align="center">
-          {view.solo ? 'Preparando tu ruta individual.' : `Código ${view.code}. Esto toma unos segundos; mantén la app abierta.`}
+        <TelText variant="body" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+          {view.solo
+            ? 'Preparando tu ruta individual.'
+            : offline
+              ? `Sin conexión a Internet. Seguimos intentando con el código ${view.code}; revisa el Wi-Fi o los datos.`
+              : `Código ${view.code}. Esto toma unos segundos; mantén la app abierta.`}
         </TelText>
         <TelButton label="Cancelar" variant="outlineLight" fullWidth={false} onPress={exit} />
+        {!view.solo && (
+          <TelButton
+            label="Jugar sin grupo"
+            variant="ghostLight"
+            size="sm"
+            fullWidth={false}
+            onPress={() => routeMember.startSolo({ alias: view.alias.trim() || 'Explorador', avatar: view.avatar, settings: settingsForPace(currentPaceFactor()) })}
+          />
+        )}
+        {!view.solo && <DiagnosticsButton />}
       </View>
     </Screen>
   );
 }
 
+// La ruta quedó abierta en otra pestaña del mismo navegador (por ejemplo, al escanear el QR otra vez).
+// Solo una puede estar conectada; esta ofrece volver a tomarla con un toque.
+function ElsewhereView({ view }: { view: MemberView }) {
+  const [resuming, setResuming] = useState(false);
+  return (
+    <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={() => router.replace('/home')} />}>
+      <View style={styles.center}>
+        <Rutix size={150} expression="think" />
+        <TelText variant="title" color="cream" align="center">
+          La ruta sigue en otra pestaña
+        </TelText>
+        <TelText variant="body" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+          Abriste SoyTEL en otra pestaña de este navegador y la ruta {view.code} continúa ahí. Tu lugar y tus puntos están a salvo: puedes seguir jugando aquí cuando quieras.
+        </TelText>
+        <TelButton
+          label="Seguir en esta pestaña"
+          variant="cream"
+          icon="refresh"
+          loading={resuming}
+          onPress={() => {
+            setResuming(true);
+            void routeMember.resumeHere().finally(() => setResuming(false));
+          }}
+        />
+        <TelButton label="Ir al inicio" variant="outlineLight" onPress={() => router.replace('/home')} />
+      </View>
+    </Screen>
+  );
+}
+
+function problemCopy(view: MemberView): { title: string; body: string } {
+  switch (view.status) {
+    case 'conflict':
+      return {
+        title: 'Hay dos stands con ese código',
+        body: 'Por seguridad no te unimos a ninguno. Escanea el QR de la pantalla del stand (así verificamos que sea el correcto) o pide un código nuevo.',
+      };
+    case 'not-found':
+      return { title: 'No encontramos esa ruta', body: `Revisa el código ${view.code} en la pantalla del stand. Si el stand acaba de crearla, reintenta en unos segundos.` };
+    case 'unreachable':
+      return {
+        title: 'El stand no responde',
+        body: `Encontramos la ruta ${view.code}, pero su pantalla no contesta. Revisa tu conexión y pide al equipo que confirme que la pantalla del stand sigue abierta y en línea.`,
+      };
+    case 'incompatible':
+      return view.incompatible === 'client-old'
+        ? { title: 'Necesitas actualizar SoyTEL', body: `Esta ruta usa una versión más nueva de la app. Actualízala o entra desde el navegador en ${webAppUrl.replace(/^https?:\/\//, '')}/ruta.` }
+        : { title: 'El stand usa una versión anterior', body: 'Pide al equipo del stand que actualice su pantalla (basta con recargarla) y vuelve a intentar.' };
+    case 'kicked':
+      return { title: 'Saliste de la ruta', body: 'El equipo del stand te quitó de esta ruta. Si fue un error, pídeles que te ayuden a entrar de nuevo.' };
+    default:
+      if (view.rejection === 'full') return { title: 'La ruta está llena', body: 'Este grupo ya alcanzó el máximo de participantes. Espera la siguiente ruta en el stand.' };
+      if (view.rejection === 'finished') return { title: 'Esa ruta ya terminó', body: 'Pide en el stand el código de la próxima ruta.' };
+      return { title: 'No pudimos unirte', body: 'Vuelve a intentarlo desde el inicio de la ruta.' };
+  }
+}
+
 function ProblemView({ view }: { view: MemberView }) {
-  const copy =
-    view.status === 'conflict'
-      ? {
-          title: 'Hay dos stands con ese código',
-          body: 'Por seguridad no te unimos a ninguno. Escanea el QR de la pantalla del stand (así verificamos que sea el correcto) o pide un código nuevo.',
-        }
-      : view.status === 'not-found'
-      ? { title: 'No encontramos esa ruta', body: `Revisa el código ${view.code} en la pantalla del stand. Si el stand acaba de crearla, reintenta en unos segundos.` }
-      : view.status === 'kicked'
-        ? { title: 'Saliste de la ruta', body: 'El equipo del stand te quitó de esta ruta. Si fue un error, pídeles que te ayuden a entrar de nuevo.' }
-        : view.rejection === 'full'
-          ? { title: 'La ruta está llena', body: 'Este grupo ya alcanzó el máximo de participantes. Espera la siguiente ruta en el stand.' }
-          : view.rejection === 'finished'
-            ? { title: 'Esa ruta ya terminó', body: 'Pide en el stand el código de la próxima ruta.' }
-            : { title: 'No pudimos unirte', body: 'Vuelve a intentarlo desde el inicio de la ruta.' };
+  const copy = problemCopy(view);
+  const canRetry = view.status === 'not-found' || view.status === 'conflict' || view.status === 'unreachable' || view.status === 'incompatible';
   return (
     <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
@@ -116,7 +210,7 @@ function ProblemView({ view }: { view: MemberView }) {
         <TelText variant="body" color="accentSoft" align="center">
           {copy.body}
         </TelText>
-        {(view.status === 'not-found' || view.status === 'conflict') && <TelButton label="Reintentar" variant="cream" icon="refresh" onPress={() => routeMember.retryJoin()} />}
+        {canRetry && <TelButton label="Reintentar" variant="cream" icon="refresh" onPress={() => routeMember.retryJoin()} />}
         <TelButton
           label="Usar otro código"
           variant="outlineLight"
@@ -125,6 +219,14 @@ function ProblemView({ view }: { view: MemberView }) {
             router.replace('/ruta');
           }}
         />
+        {/* Nadie se queda sin jugar: la misma ruta se puede recorrer sin grupo, incluso sin Internet. */}
+        <TelButton
+          label="Jugar la ruta sin grupo"
+          variant="ghostLight"
+          icon="user"
+          onPress={() => routeMember.startSolo({ alias: view.alias.trim() || 'Explorador', avatar: view.avatar, settings: settingsForPace(currentPaceFactor()) })}
+        />
+        {view.status !== 'kicked' && view.status !== 'rejected' && <DiagnosticsButton />}
       </View>
     </Screen>
   );
@@ -135,7 +237,9 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
   // Juegos en curso que deben sobrevivir al cambio de fase (si el stand avanza, se envía lo logrado).
   const [b215Started, setB215Started] = useState(false);
   const [activeProject, setActiveProject] = useState<PillarId | null>(null);
-  const b215Pending = b215Started && me.games['red-b215'] === undefined;
+  const b215Pending = b215Started && me.games['red-b215'] === undefined && !view.outbox['score:red-b215'];
+  const waiting = view.pending.length;
+  const noSignal = !view.solo && (view.link !== 'online' || !view.hostAlive);
 
   const header = (
     <AppHeader
@@ -143,13 +247,19 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
       onBack={() => router.back()}
       right={
         <View style={styles.headerRight}>
-          {view.link !== 'online' && !view.solo && <Tag tone="warning" icon="wifiOff" label="Reconectando" />}
+          {!view.solo && view.link !== 'online' && <Tag tone="warning" icon="wifiOff" label="Reconectando" />}
+          {!view.solo && view.link === 'online' && !view.hostAlive && <Tag tone="warning" icon="wifiOff" label="Sin señal del stand" />}
           {me.total > 0 && <Tag tone="glass" icon="star" label={`${formatNumber(me.total)} pts`} />}
           <IconButton icon="close" tone="dark" size={40} accessibilityLabel="Salir de la ruta" onPress={() => setConfirmLeave(true)} />
         </View>
       }
     >
       <RouteProgress stop={snapshot.stop} finished={snapshot.phase === 'podium'} />
+      {noSignal && waiting > 0 && (
+        <TelText variant="small" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+          {waiting === 1 ? 'Tienes 1 envío guardado en el teléfono.' : `Tienes ${waiting} envíos guardados en el teléfono.`} Se mandan solos al volver la señal.
+        </TelText>
+      )}
     </AppHeader>
   );
 
@@ -165,41 +275,36 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
             Perderás tu lugar en el ranking de este grupo.
           </TelText>
           <TelButton label="Seguir jugando" variant="cream" onPress={() => setConfirmLeave(false)} />
-          <TelButton label="Salir de la ruta" variant="dangerOutline" onPress={exit} />
+          <TelButton label="Salir de la ruta" variant="dangerOutlineLight" onPress={exit} />
+          {!view.solo && <DiagnosticsButton />}
         </View>
       </Screen>
     );
   }
 
   const b215 = (
-    <B215View
-      header={header}
-      snapshot={snapshot}
-      me={me}
-      offset={view.offset}
-      pending={view.pending}
-      forceFinish={snapshot.phase !== 'play'}
-      onStarted={() => setB215Started(true)}
-    />
+    <B215View header={header} snapshot={snapshot} me={me} offset={view.offset} entry={view.outbox['score:red-b215']} forceFinish={snapshot.phase !== 'play'} onStarted={() => setB215Started(true)} />
   );
-  const projects = <ProjectsView header={header} snapshot={snapshot} me={me} offset={view.offset} pending={view.pending} active={activeProject} onActive={setActiveProject} />;
+  const projects = <ProjectsView header={header} snapshot={snapshot} me={me} outbox={view.outbox} active={activeProject} onActive={setActiveProject} />;
 
   switch (snapshot.phase) {
     case 'lobby':
       return <LobbyView header={header} snapshot={snapshot} me={me} solo={view.solo} verification={view.verification} warning={view.warning} />;
     case 'checkin':
-      // Si alguien sigue en un proyecto de B213 cuando el grupo sale al pasillo, termina y envía su puntaje.
+      // Si alguien sigue en un proyecto de B213 cuando el grupo sale al pasillo, puede terminarlo.
       if (activeProject && snapshot.stop === 'hall') return projects;
-      return <CheckinView header={header} snapshot={snapshot} me={me} pending={view.pending} />;
+      return <CheckinView header={header} snapshot={snapshot} me={me} entry={view.outbox[`checkin:${snapshot.stop}`]} />;
     case 'play':
       return b215;
     case 'results':
       if (b215Pending) return b215;
-      return <ResultsView header={header} snapshot={snapshot} me={me} offset={view.offset} />;
+      return <ResultsView header={header} snapshot={snapshot} me={me} />;
     case 'projects':
       return projects;
     case 'quiz':
-      return <QuizView header={header} snapshot={snapshot} me={me} offset={view.offset} />;
+      // La trivia ya partió: el proyecto que quedó abierto se cierra solo y envía lo logrado (una vez).
+      if (activeProject) return projects;
+      return <QuizView header={header} snapshot={snapshot} me={me} outbox={view.outbox} />;
     case 'podium':
       return <PodiumView header={header} snapshot={snapshot} me={me} solo={view.solo} />;
     default:
@@ -285,14 +390,14 @@ function LobbyView({ header, snapshot, me, solo, verification, warning }: PhaseP
   );
 }
 
-function CheckinView({ header, snapshot, me, pending }: PhaseProps & { pending: string[] }) {
+function CheckinView({ header, snapshot, me, entry }: PhaseProps & { entry: OutboxView | undefined }) {
   const entering = useEntering();
   const stop = snapshot.stop as CheckinStop;
   const copy = checkinCopy[stop];
   const info = stopInfo(stop);
   const confirmed = snapshot.players.filter((player) => player.checkedIn);
   const waitingFor = snapshot.players.filter((player) => !player.checkedIn && player.online);
-  const sending = pending.includes(`checkin:${stop}`) && !me.checkedIn;
+  const sending = !me.checkedIn && isOpen(entry);
   return (
     <Screen tone="dark" backdrop="stars" header={header}>
       <Animated.View key={stop} entering={entering.fadeUp()} style={styles.hero}>
@@ -323,17 +428,24 @@ function CheckinView({ header, snapshot, me, pending }: PhaseProps & { pending: 
           </View>
         </TelCard>
       ) : (
-        <TelButton
-          label={copy.confirm}
-          variant="cream"
-          size="lg"
-          icon="door"
-          loading={sending}
-          onPress={() => {
-            routeMember.checkin(stop);
-            void feedbackHeavy();
-          }}
-        />
+        <>
+          <TelButton
+            label={sending ? 'Confirmando con el stand…' : copy.confirm}
+            variant="cream"
+            size="lg"
+            icon="door"
+            loading={sending}
+            onPress={() => {
+              routeMember.checkin(stop);
+              void feedbackHeavy();
+            }}
+          />
+          {sending && entry?.state === 'queued' && (
+            <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+              Sin conexión: tu llegada quedó guardada y se enviará sola al volver la señal.
+            </TelText>
+          )}
+        </>
       )}
       <View style={styles.gap}>
         <TelText variant="label" color="cream">
@@ -370,47 +482,37 @@ function seedFor(code: string, playerId: string, game: string): number {
   return hash >>> 0;
 }
 
-function B215Countdown({ header, startsAt, offset }: { header: React.ReactNode; startsAt: number; offset: number }) {
-  const hostNow = useHostClock(offset, 250);
+function B215Countdown({ header, startsAt }: { header: React.ReactNode; startsAt: number }) {
+  const hostNow = useHostClock(250);
   return (
     <Screen tone="dark" backdrop="signal" header={header}>
       <BigCountdown seconds={Math.ceil((startsAt - hostNow) / 1000)} label="Operación Red B215 comienza en" />
-        <TelCard tone="dark" style={styles.gap}>
-          <TelText variant="subtitle" color="cream">
-            Mira los equipos de la sala
-          </TelText>
-          <TelText variant="body" color="accentSoft">
-            Routers, switches y access points: en 2 minutos tendrás que armar la red, enrutar paquetes y ordenar los canales Wi-Fi.
-          </TelText>
-        </TelCard>
+      <TelCard tone="dark" style={styles.gap}>
+        <TelText variant="subtitle" color="cream">
+          Mira los equipos de la sala
+        </TelText>
+        <TelText variant="body" color="accentSoft">
+          Routers, switches y access points: en 2 minutos tendrás que armar la red, enrutar paquetes y ordenar los canales Wi-Fi.
+        </TelText>
+      </TelCard>
     </Screen>
   );
 }
 
-function B215View({
-  header,
-  snapshot,
-  me,
-  offset,
-  pending,
-  forceFinish,
-  onStarted,
-}: PhaseProps & { offset: number; pending: string[]; forceFinish: boolean; onStarted: () => void }) {
-  const [done, setDone] = useState(false);
+function B215View({ header, snapshot, me, offset, entry, forceFinish, onStarted }: PhaseProps & { offset: number; entry: OutboxView | undefined; forceFinish: boolean; onStarted: () => void }) {
   const submitted = me.games['red-b215'] !== undefined;
   const startsAt = snapshot.startsAt;
-  const started = useTimeReached(startsAt === null ? null : startsAt - offset);
-  const playing = !submitted && !done && started;
+  const started = useHostTimeReached(startsAt);
+  const resolved = submitted || Boolean(entry);
+  const playing = !resolved && started;
 
   useEffect(() => {
     if (playing) onStarted();
   }, [onStarted, playing]);
 
-  if (submitted || done) {
-    return <WaitingView header={header} snapshot={snapshot} me={me} game="red-b215" sending={pending.includes('score:red-b215')} />;
-  }
+  if (resolved) return <WaitingView header={header} snapshot={snapshot} me={me} game="red-b215" entry={entry} />;
 
-  if (!started && startsAt !== null) return <B215Countdown header={header} startsAt={startsAt} offset={offset} />;
+  if (!started && startsAt !== null) return <B215Countdown header={header} startsAt={startsAt} />;
 
   return (
     <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
@@ -418,26 +520,29 @@ function B215View({
         game="red-b215"
         pace={snapshot.settings.pace ?? 1}
         seed={seedFor(snapshot.code, me.id, 'red-b215')}
+        // El juego mide con la hora del teléfono: el plazo del stand se traduce a esa hora.
         deadline={forceFinish || snapshot.deadline === null ? 1 : snapshot.deadline - offset - 2500}
-        onDone={(result) => {
-          setDone(true);
-          routeMember.submitScore('red-b215', result.score, result.accuracy);
-        }}
+        onDone={(result) => routeMember.submitScore('red-b215', result.score, result.accuracy)}
       />
     </Screen>
   );
 }
 
-function WaitingView({ header, snapshot, me, game, sending }: PhaseProps & { game: StationGameId; sending: boolean }) {
+function WaitingView({ header, snapshot, me, game, entry }: PhaseProps & { game: StationGameId; entry: OutboxView | undefined }) {
   const finished = snapshot.players.filter((player) => player.games[game] !== undefined);
-  const score = me.games[game];
+  // Qué pasó con el puntaje: en el teléfono, en camino, guardado en el stand o perdido (con motivo).
+  const status = scoreStatus(me.games[game], entry);
   return (
     <Screen tone="dark" backdrop="orbits" header={header}>
       <View style={styles.hero}>
-        <Rutix size={120} expression="happy" pose="wave" />
-        <TelText variant="title" color="cream" align="center">
-          {sending ? 'Enviando tu puntaje…' : `¡${formatNumber(score ?? 0)} puntos!`}
+        <Rutix size={120} expression={status.lost ? 'sad' : 'happy'} pose="wave" />
+        <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="polite">
+          {status.title}
         </TelText>
+        <TelText variant="caption" color="accentSoft" align="center">
+          {status.note}
+        </TelText>
+        {status.canRetry && <TelButton label="Enviar otra vez" variant="cream" icon="refresh" fullWidth={false} onPress={() => routeMember.retry(`score:${game}`)} />}
         <TelText variant="body" color="accentSoft" align="center">
           Esperando al resto del grupo: {finished.length} de {snapshot.players.length} terminaron {stationTitles[game]}.
         </TelText>
@@ -465,8 +570,8 @@ function WaitingView({ header, snapshot, me, game, sending }: PhaseProps & { gam
   );
 }
 
-function ResultsView({ header, snapshot, me, offset }: PhaseProps & { offset: number }) {
-  const hostNow = useHostClock(offset, 500);
+function ResultsView({ header, snapshot, me }: PhaseProps) {
+  const hostNow = useHostClock(500);
   const ranking = [...snapshot.players].sort((a, b) => (b.games['red-b215'] ?? 0) - (a.games['red-b215'] ?? 0));
   const seconds = snapshot.deadline ? Math.max(0, Math.ceil((snapshot.deadline - hostNow) / 1000)) : 0;
   return (
@@ -501,35 +606,38 @@ function ResultsView({ header, snapshot, me, offset }: PhaseProps & { offset: nu
   );
 }
 
-function MinutesLeft({ deadline, offset }: { deadline: number; offset: number }) {
-  const hostNow = useHostClock(offset, 10_000);
+function MinutesLeft({ deadline }: { deadline: number }) {
+  const hostNow = useHostClock(10_000);
   const minutes = Math.max(0, Math.ceil((deadline - hostNow) / 60000));
   return <>{` Quedan ~${minutes} min.`}</>;
 }
 
-function ProjectsView({
-  header,
-  snapshot,
-  me,
-  offset,
-  pending,
-  active,
-  onActive,
-}: PhaseProps & { offset: number; pending: string[]; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
-  const [localDone, setLocalDone] = useState<Partial<Record<PillarId, boolean>>>({});
-  const lit = Object.fromEntries(pillarIds.map((id) => [id, me.games[id] !== undefined || Boolean(localDone[id])])) as Record<PillarId, boolean>;
+function ProjectsView({ header, snapshot, me, outbox, active, onActive }: PhaseProps & { outbox: MemberView['outbox']; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
+  // Un pilar se enciende cuando su puntaje ya está en camino o guardado en el stand.
+  const entryOf = (id: PillarId) => outbox[`score:${id}`];
+  const lit = Object.fromEntries(pillarIds.map((id) => [id, me.games[id] !== undefined || (Boolean(entryOf(id)) && !isLost(entryOf(id)))])) as Record<PillarId, boolean>;
   const doneCount = pillarIds.filter((id) => lit[id]).length;
   const groupDone = snapshot.players.filter((player) => pillarIds.every((id) => player.games[id] !== undefined)).length;
+  const moved = snapshot.phase !== 'projects';
 
   if (active) {
     return (
       <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
+        {moved && (
+          <View style={styles.movedBar} accessible accessibilityLiveRegion="polite">
+            <TelIcon name="alert" size={18} color={colors.primary} />
+            <TelText variant="caption" color="primary" style={styles.flex}>
+              {snapshot.phase === 'quiz' ? 'La trivia ya empezó: cerramos este juego y enviamos lo que lograste.' : 'El grupo ya va al pasillo. Termina este juego para alcanzarlos.'}
+            </TelText>
+          </View>
+        )}
         <StationGameHost
           game={active}
           pace={snapshot.settings.pace ?? 1}
           seed={seedFor(snapshot.code, me.id, active)}
+          // Al partir la trivia el juego se cierra en el acto y entrega su resultado una sola vez.
+          deadline={snapshot.phase === 'quiz' || snapshot.phase === 'podium' ? 1 : null}
           onDone={(result) => {
-            setLocalDone((current) => ({ ...current, [active]: true }));
             routeMember.submitScore(active, result.score, result.accuracy);
             onActive(null);
           }}
@@ -551,7 +659,7 @@ function ProjectsView({
           {doneCount === 5
             ? `Esperando al grupo: ${groupDone} de ${snapshot.players.length} listos.`
             : 'Cada proyecto de la sala tiene su juego. Acércate al proyecto y juega en el orden que quieras.'}
-          {snapshot.deadline !== null && doneCount < 5 ? <MinutesLeft deadline={snapshot.deadline} offset={offset} /> : null}
+          {snapshot.deadline !== null && doneCount < 5 ? <MinutesLeft deadline={snapshot.deadline} /> : null}
         </TelText>
       </View>
       <Temple lit={lit} />
@@ -560,12 +668,14 @@ function ProjectsView({
         {pillars.map((pillar, index) => {
           const done = lit[pillar.id];
           const score = me.games[pillar.id];
-          const sending = pending.includes(`score:${pillar.id}`) && score === undefined;
+          const entry = entryOf(pillar.id);
+          const lost = score === undefined && isLost(entry);
+          const state = pillarState(score, entry);
           return (
             <Animated.View key={pillar.id} entering={FadeInDown.delay(index * 70)}>
               <PressableScale
                 accessibilityRole="button"
-                accessibilityLabel={`${pillar.pillar}: ${pillar.game}${done ? ', completado' : ''}`}
+                accessibilityLabel={`${pillar.pillar}: ${pillar.game}${done ? `, completado, ${state}` : lost ? ', el puntaje anterior no se registró' : ''}`}
                 disabled={done}
                 onPress={() => onActive(pillar.id)}
                 scaleTo={0.97}
@@ -582,14 +692,14 @@ function ProjectsView({
                     {pillar.game}
                   </TelText>
                   <TelText variant="caption" color="accentSoft" numberOfLines={2}>
-                    {pillar.summary}
+                    {lost ? 'Tu puntaje anterior no alcanzó a registrarse. Puedes jugarlo de nuevo.' : pillar.summary}
                   </TelText>
                 </View>
                 {done ? (
                   <View style={styles.projectScore}>
-                    <TelIcon name="checkCircle" size={22} color={colors.success} />
+                    <TelIcon name={score !== undefined || entry?.state === 'accepted' ? 'checkCircle' : 'clock'} size={22} color={score !== undefined || entry?.state === 'accepted' ? colors.success : colors.cream} />
                     <TelText variant="small" color="cream" tabular>
-                      {sending ? '…' : formatNumber(score ?? 0)}
+                      {state}
                     </TelText>
                   </View>
                 ) : (
@@ -604,22 +714,28 @@ function ProjectsView({
   );
 }
 
-function QuizView({ header, snapshot, me, offset }: PhaseProps & { offset: number }) {
-  const hostNow = useHostClock(offset, 200);
+function QuizView({ header, snapshot, me, outbox }: PhaseProps & { outbox: MemberView['outbox'] }) {
+  const hostNow = useHostClock(200);
   const quiz = snapshot.quiz;
   const [chosen, setChosen] = useState<{ index: number; option: number } | null>(null);
   if (!quiz) return null;
+  const entry = outbox[`answer:${quiz.index}`];
+  const lost = !me.answered && isLost(entry);
   const myChoice = chosen && chosen.index === quiz.index ? chosen.option : null;
   const online = snapshot.players.filter((player) => player.online).length;
+  // Honesto con lo que pasó: en el teléfono, en camino, registrada o perdida.
+  const note = answerNote(me.answered, entry);
   return (
     <Screen tone="dark" backdrop="signal" header={header}>
       {quiz.step === 'question' ? (
         <QuizQuestion
           quiz={quiz}
           hostNow={hostNow}
-          chosen={myChoice ?? (me.answered ? -1 : null)}
+          // Si la respuesta se perdió y la pregunta sigue abierta, se puede volver a elegir.
+          chosen={lost ? null : (myChoice ?? (me.answered || entry ? -1 : null))}
           answeredCount={quiz.answered}
           playerCount={online || snapshot.players.length}
+          note={note}
           onAnswer={(option) => {
             setChosen({ index: quiz.index, option });
             routeMember.answer(quiz.index, option);
@@ -632,31 +748,42 @@ function QuizView({ header, snapshot, me, offset }: PhaseProps & { offset: numbe
   );
 }
 
+type Reward = { state: 'saving' } | { state: 'saved'; xp: number | null } | { state: 'failed' };
+
 function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean }) {
-  const [xp, setXp] = useState<number | null>(null);
-  const recording = useRef(false);
   const top = me.rank <= 3 && snapshot.players.length > 1;
   // La ruta solo cuenta como completada si la trivia terminó y respondiste en ella.
   const completed = snapshot.completed && me.answeredCount > 0;
+  // El resultado final se arma una vez (el podio ya no cambia) y lleva un id propio de esta ruta y
+  // este participante: abrir el podio dos veces, o reintentar tras un error, suma una sola vez.
+  const [result] = useState<GameResult>(() => ({
+    id: `route:${snapshot.code}:${me.id}`,
+    gameId: 'route',
+    score: me.total,
+    accuracy: snapshot.quiz?.total ? me.quizCorrect / snapshot.quiz.total : me.quizCorrect / 10,
+    durationSeconds: 1200,
+    completedAt: new Date(clockNow()).toISOString(),
+    metadata: { rank: me.rank, players: snapshot.players.length, pillars: pillarIds.filter((id) => me.games[id] !== undefined).length, solo, code: snapshot.code, completed },
+  }));
+  const [reward, setReward] = useState<Reward>({ state: 'saving' });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (recording.current) return;
-    recording.current = true;
+    let active = true;
     void (async () => {
-      if (await wasRouteRecorded(snapshot.code)) return;
-      await markRouteRecorded(snapshot.code);
-      const pillarsDone = pillarIds.filter((id) => me.games[id] !== undefined).length;
-      const outcome = await recordGameResult({
-        gameId: 'route',
-        score: me.total,
-        accuracy: snapshot.quiz?.total ? me.quizCorrect / snapshot.quiz.total : me.quizCorrect / 10,
-        durationSeconds: 1200,
-        completedAt: new Date().toISOString(),
-        metadata: { rank: me.rank, players: snapshot.players.length, pillars: pillarsDone, solo, code: snapshot.code, completed },
-      });
-      setXp(outcome.xpGained);
+      try {
+        // Rutas ya sumadas con una versión anterior de la app.
+        const before = await wasRouteRecorded(snapshot.code);
+        const outcome = before ? null : await recordGameResult(result);
+        if (active) setReward({ state: 'saved', xp: outcome ? outcome.xpGained : null });
+      } catch {
+        if (active) setReward({ state: 'failed' });
+      }
     })();
-  }, [completed, me, snapshot, solo]);
+    return () => {
+      active = false;
+    };
+  }, [attempt, result, snapshot.code]);
 
   const winners = snapshot.players.slice(0, 3).map((player) => player.alias);
 
@@ -682,10 +809,27 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
             {me.rank}º lugar · {formatNumber(me.total)} pts
           </TelText>
           <TelText variant="caption" color={top ? 'muted' : 'accentSoft'}>
-            Trivia: {me.quizCorrect} correctas{xp !== null ? ` · +${xp} XP` : ''}
+            Trivia: {me.quizCorrect} correctas{reward.state === 'saved' && reward.xp !== null ? ` · +${reward.xp} XP` : ''}
           </TelText>
         </View>
       </TelCard>
+      {reward.state === 'failed' && (
+        <TelCard tone="danger" style={styles.gap}>
+          <TelText variant="caption" color="dangerInk" accessibilityLiveRegion="polite">
+            No pudimos guardar este resultado en tu perfil. Tu puntaje en la ruta está a salvo en el stand; reintenta para sumar la XP.
+          </TelText>
+          <TelButton
+            label="Reintentar"
+            variant="danger"
+            size="sm"
+            icon="refresh"
+            onPress={() => {
+              setReward({ state: 'saving' });
+              setAttempt((value) => value + 1);
+            }}
+          />
+        </TelCard>
+      )}
       {!completed && (
         <TelCard tone="dark" style={styles.verifyCard}>
           <TelIcon name="info" size={20} color={colors.accentSoft} />
@@ -700,7 +844,7 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
           label="Compartir mi resultado"
           variant="outlineLight"
           icon="share"
-          onPress={() => void Share.share({ message: `Terminé la Ruta Telemática de Ingeniería Civil Telemática USM en ${me.rank}º lugar con ${formatNumber(me.total)} puntos. ¡Juega SoyTEL!` })}
+          onPress={() => void Share.share({ message: `Terminé la Ruta Telemática de Ingeniería Civil Telemática USM en ${me.rank}º lugar con ${formatNumber(me.total)} puntos. ¡Juega SoyTEL!` }).catch(() => undefined)}
         />
         <TelButton
           label="Terminar y volver al inicio"
@@ -773,6 +917,16 @@ const styles = StyleSheet.create({
   },
   gameContent: {
     flex: 1,
+  },
+  movedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.cream,
+    marginBottom: spacing.xs,
   },
   project: {
     flexDirection: 'row',

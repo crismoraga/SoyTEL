@@ -15,6 +15,7 @@ import { TelText } from '@/components/TelText';
 import { achievements } from '@/data/achievements';
 import { achievementProgress, type AchievementContext } from '@/lib/achievements';
 import { useEntering } from '@/lib/motion';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadAchievementContext } from '@/storage/profile';
 import { colors, radius, spacing, tierColors, type Tier } from '@/theme';
@@ -45,7 +46,7 @@ export default function AchievementsScreen() {
   const entering = useEntering();
   const [filter, setFilter] = useState<Filter>('all');
   const [detail, setDetail] = useState<Row | null>(null);
-  const { data: context } = useFocusData(() => loadAchievementContext());
+  const { data: context, error, reload } = useFocusData(() => loadAchievementContext());
   const rows = context ? buildRows(context) : [];
   const done = rows.filter((row) => row.status === 'done').length;
   const visible = rows.filter((row) => filter === 'all' || row.status === filter);
@@ -74,6 +75,7 @@ export default function AchievementsScreen() {
         </AppHeader>
       }
     >
+      {error && !context && <LoadError onRetry={reload} />}
       <ChipGroup
         accessibilityLabel="Filtrar logros"
         value={filter}

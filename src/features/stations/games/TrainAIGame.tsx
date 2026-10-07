@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useDeadline, useGamePaused, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   bestEpoch,
   EPOCHS,
@@ -24,6 +24,7 @@ import {
   modelAccuracy,
   modelQuality,
   stopQuality,
+  stopVerdict,
   TRAIN_MAX,
   trainLoss,
   validationLoss,
@@ -74,7 +75,7 @@ const PixelGrid = memo(function PixelGrid({ pixels, size }: { pixels: string[]; 
 });
 
 // B213 · Datos: etiquetar, filtrar, entrenar y probar un clasificador de imágenes.
-export function TrainAIGame({ seed, onComplete }: StationGameProps) {
+export function TrainAIGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0xda7a));
   const [dataset] = useState(() => makeDataset(LABEL_COUNT, random));
@@ -103,7 +104,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
   }, [pace, stageIndex]);
 
   const askContinue = useAskContinue();
@@ -141,17 +142,17 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
   const handleTestDone = useCallback(() => setFinished(true), []);
 
   // Al agotarse el tiempo de la etapa se toma lo que haya.
-  useEffect(() => {
-    if (endsAt === null || waiting) return;
-    const timer = setTimeout(() => {
-      if (stage.key === 'train' && stopEpoch === null) setStopEpoch(EPOCHS);
-      nextStage();
-    }, Math.max(0, endsAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [endsAt, nextStage, stage.key, stopEpoch, waiting]);
+  useGameTimeout(endsAt === null || waiting ? null : endsAt, () => {
+    if (stage.key === 'train' && stopEpoch === null) setStopEpoch(EPOCHS);
+    nextStage();
+  });
+
+  const accuracy = modelAccuracy(quality);
+  const submit = useSubmitOnce(onComplete);
+  // Si el stand cierra el proyecto antes, cuenta lo logrado en las etapas ya resueltas.
+  useDeadline(deadline, () => submit({ score: total, accuracy: stopEpoch === null ? labelAccuracy : accuracy }));
 
   if (finished) {
-    const accuracy = modelAccuracy(quality);
     return (
       <StationSummary
         title="Entrena la IA"
@@ -164,7 +165,7 @@ export function TrainAIGame({ seed, onComplete }: StationGameProps) {
           { label: 'Momento de detener', value: trainPoints, max: TRAIN_MAX, icon: 'neural' },
         ]}
         learned="Un modelo de machine learning aprende de datos etiquetados: si las etiquetas están mal, aprende mal. Filtros como la detección de bordes resaltan formas, y hay que detener el entrenamiento antes del sobreajuste."
-        onSubmit={() => onComplete({ score: labelPoints + filterPoints + trainPoints, accuracy })}
+        onSubmit={() => submit({ score: labelPoints + filterPoints + trainPoints, accuracy })}
       />
     );
   }
@@ -303,6 +304,7 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
   const [width, setWidth] = useState(0);
   const stoppedRef = useRef(false);
   const pace = usePace();
+  const paused = useGamePaused();
   const onStopRef = useRef(onStop);
   useLayoutEffect(() => {
     onStopRef.current = onStop;
@@ -310,7 +312,7 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
 
   // El intervalo no depende de callbacks del padre para no reiniciarse en cada render.
   useEffect(() => {
-    if (!running) return;
+    if (!running || paused) return;
     const timer = setInterval(() => {
       setEpoch((value) => {
         const next = Math.min(EPOCHS, value + 1);
@@ -322,7 +324,7 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
       });
     }, Math.round(300 * pace));
     return () => clearInterval(timer);
-  }, [pace, running]);
+  }, [pace, paused, running]);
 
   const shown = stopped ?? epoch;
   const x = (value: number) => 12 + (value / EPOCHS) * (width - 24);
@@ -377,13 +379,7 @@ function TrainStage({ best, stopped, onStop }: { best: number; stopped: number |
         ) : null}
       </View>
       {stopped !== null && (
-        <Hint tone={Math.abs(stopped - best) <= 3 ? 'good' : 'bad'}>
-          {Math.abs(stopped - best) <= 3
-            ? '¡Justo a tiempo! La validación estaba en su mínimo.'
-            : stopped < best
-              ? 'Muy pronto: el modelo todavía podía aprender más.'
-              : 'Muy tarde: la validación subió, el modelo memorizó los datos (sobreajuste).'}
-        </Hint>
+        <Hint tone={stopVerdict(stopped, best).tone}>{stopVerdict(stopped, best).text}</Hint>
       )}
     </View>
   );

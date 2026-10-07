@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 import type { IconName } from '@/graphics/icons';
+import { summarize, type ProgressStats } from '@/lib/progressStats';
 import type { GameResult } from '@/types/game';
 
 // Guía de inicio: los primeros pasos recomendados para quien abre SoyTEL por primera vez.
@@ -19,10 +20,14 @@ export interface GuideInput {
   mascotDays: number;
   // Áreas de la carrera con al menos una práctica.
   careerAreas: number;
+  // Progreso acumulado (incluye lo que ya salió del historial). Si falta, se calcula de `results`.
+  stats?: ProgressStats;
 }
 
-export function starterGuide({ results, mascotDays, careerAreas }: GuideInput): GuideStep[] {
-  const played = (...ids: string[]) => results.some((result) => ids.includes(result.gameId));
+export function starterGuide({ results, mascotDays, careerAreas, stats }: GuideInput): GuideStep[] {
+  const byMode = (stats ?? summarize(results)).byMode;
+  // Un paso cumplido sigue cumplido aunque después se jueguen cientos de partidas de otro modo.
+  const played = (...ids: string[]) => ids.some((id) => Object.prototype.hasOwnProperty.call(byMode, id) && byMode[id] > 0);
   return [
     { id: 'burst', title: 'Juega tu primera Ráfaga', text: 'Ocho microjuegos cortos. Rutix te explica cada uno antes de empezar.', icon: 'bolt', route: '/burst', done: played('burst') },
     { id: 'runner', title: 'Corre en TEL Runner', text: 'Junta paquetes de datos, esquiva virus y desbloquea personajes.', icon: 'rocket', route: '/runner', done: played('runner') },

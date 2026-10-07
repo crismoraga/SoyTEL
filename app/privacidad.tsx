@@ -47,6 +47,7 @@ const SECTIONS: Section[] = [
     icon: 'users',
     title: 'Si eres menor de edad',
     items: [
+      'Un contacto solo se guarda si nos dices tu curso; sin él, puedes jugar y tener cuenta igual.',
       'Para dejar un contacto en 7° u 8° básico necesitas la autorización de tu apoderado/a.',
       'Te recomendamos dejar el contacto de tu apoderado/a en vez del tuyo.',
       'No pedimos tu nombre real, tu RUT ni tu fecha de nacimiento.',

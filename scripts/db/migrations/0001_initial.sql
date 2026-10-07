@@ -1,5 +1,5 @@
--- Esquema de la API de SoyTEL (Neon Postgres). Idempotente: se puede ejecutar varias veces.
--- Uso: npm run db:migrate
+-- 0001 · Esquema inicial de la API de SoyTEL (el que ya estaba en producción antes de llevar historial).
+-- Es idempotente a propósito: en una base que ya lo tiene no cambia nada y queda anotado como aplicado.
 
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
@@ -39,6 +39,3 @@ create table if not exists rate_limits (
   window_start timestamptz not null,
   hits integer not null
 );
-
--- Limpieza de contadores viejos (se ejecuta en cada migración).
-delete from rate_limits where window_start < now() - interval '2 days';

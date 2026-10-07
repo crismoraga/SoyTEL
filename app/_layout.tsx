@@ -13,6 +13,7 @@ import { routeMember } from '@/route/member';
 import { loadInbox } from '@/storage/inbox';
 import { initSettings } from '@/storage/settings';
 import { colors, setFontsLoaded } from '@/theme';
+import { useSystemTheme } from '@/theme/useSystemTheme';
 import { fontAssets } from '@/theme/fontAssets';
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -21,6 +22,7 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const ready = fontsLoaded || Boolean(fontError);
   useRouteForeground();
+  useSystemTheme();
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.primary);

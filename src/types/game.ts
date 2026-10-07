@@ -93,12 +93,23 @@ export interface UserProfile {
   streakDays: number;
   lastPlayedAt: string | null;
   mascotMood: number;
+  // Desde cuándo se calcula la baja de ánimo de Rutix (cada día ya descontado mueve esta fecha).
+  moodAt?: string | null;
   unlockedAchievements: string[];
   // Partidas completadas en total (el historial guarda solo las últimas 200).
   gamesPlayed: number;
+  // Resultados ya sumados al perfil, por id: el mismo resultado nunca cuenta dos veces.
+  appliedResults?: string[];
+  // Resumen de las partidas que ya salieron del historial (ver lib/progressStats).
+  archive?: unknown;
 }
 
 export interface GameResult {
+  // Identificador de la partida. Con él, guardar dos veces el mismo resultado (doble toque, reintento
+  // tras un error, pantalla que se vuelve a montar) suma una sola vez.
+  id?: string;
+  // XP que entregó (se guarda junto al resultado).
+  xp?: number;
   gameId: GameId | MicroGameId;
   score: number;
   accuracy: number;
@@ -112,5 +123,9 @@ export interface GameOutcome {
   xpGained: number;
   leveledUp: boolean;
   newAchievements: AchievementId[];
+  // El resultado ya estaba guardado: no sumó de nuevo.
+  alreadyRecorded?: boolean;
+  // Se entregó el bono pedido (por ejemplo, el del desafío diario).
+  bonusGranted?: boolean;
 }
 

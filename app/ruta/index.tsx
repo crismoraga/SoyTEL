@@ -18,10 +18,11 @@ import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { tutorials } from '@/features/tutorial/tutorials';
 import { useEntering } from '@/lib/motion';
 import { currentPaceFactor } from '@/lib/pace';
-import { isValidJourneyCode, sanitizeJourneyCode } from '@/lib/progression';
+import { isValidJourneyCode } from '@/lib/progression';
 import { routeStops } from '@/route/content';
 import { settingsForPace } from '@/route/engine';
 import { useMemberView } from '@/route/hooks';
+import { parseJoinLink } from '@/route/joinLink';
 import { routeMember } from '@/route/member';
 import { DEFAULT_ALIAS, loadProfile, updateIdentity } from '@/storage/profile';
 import { colors, font, radius, spacing } from '@/theme';
@@ -29,9 +30,11 @@ import { colors, font, radius, spacing } from '@/theme';
 // Punto de entrada de la Ruta Telemática: código del stand, alias y avatar.
 export default function RouteLandingScreen() {
   const entering = useEntering();
-  const params = useLocalSearchParams<{ codigo?: string; k?: string }>();
+  const params = useLocalSearchParams<{ codigo?: string | string[]; k?: string | string[] }>();
+  // El enlace viene de fuera: se valida tal cual (un código mal formado no se "corrige").
+  const link = parseJoinLink(params.codigo, params.k);
   const view = useMemberView();
-  const [code, setCode] = useState(() => sanitizeJourneyCode(params.codigo ?? ''));
+  const [code, setCode] = useState(() => link.code ?? '');
   const [alias, setAlias] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [avatar, setAvatar] = useState(0);
@@ -52,6 +55,7 @@ export default function RouteLandingScreen() {
   }, []);
 
   async function join() {
+    if (joining) return;
     if (!isValidJourneyCode(code)) {
       setError('El código tiene 6 caracteres (sin 0, 1, I ni O). Míralo en la pantalla del stand.');
       return;
@@ -63,13 +67,18 @@ export default function RouteLandingScreen() {
     }
     setError(null);
     setJoining(true);
-    const clean = cleanAlias(alias);
-    // El alias y el avatar elegidos aquí quedan también en el perfil.
-    await updateIdentity({ alias: clean, avatar });
-    const fingerprint = params.codigo && sanitizeJourneyCode(params.codigo) === code ? (params.k ?? null) : null;
-    await routeMember.join({ code, alias: clean, avatar, fingerprint });
-    setJoining(false);
-    router.push('/ruta/juego');
+    try {
+      const clean = cleanAlias(alias);
+      // El alias y el avatar elegidos aquí quedan también en el perfil (si no se puede guardar, se entra igual).
+      await updateIdentity({ alias: clean, avatar }).catch(() => undefined);
+      // La huella del QR solo vale para el código que traía el enlace.
+      await routeMember.join({ code, alias: clean, avatar, fingerprint: link.code === code ? link.fingerprint : null });
+      router.push('/ruta/juego');
+    } catch {
+      setError('No pudimos empezar a unirte. Revisa tu conexión e inténtalo otra vez.');
+    } finally {
+      setJoining(false);
+    }
   }
 
   function playSolo() {
@@ -114,7 +123,17 @@ export default function RouteLandingScreen() {
           <CodeBoxes value={code} onChange={(value) => {
             setCode(value);
             setError(null);
-          }} autoFocus={!params.codigo && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
+          }} autoFocus={!link.code && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
+          {link.problem === 'code' && (
+            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
+              El enlace que abriste no trae un código válido. Escribe el que muestra la pantalla del stand.
+            </TelText>
+          )}
+          {link.problem === 'key' && (
+            <TelText variant="caption" color="inkSoft" accessibilityLiveRegion="polite">
+              El enlace llegó incompleto. Puedes unirte igual: al entrar, compara el código de verificación de tu teléfono con el del stand.
+            </TelText>
+          )}
 
           <TelText variant="label" color="ink" style={styles.fieldLabel}>
             Tu alias para el ranking
@@ -129,7 +148,7 @@ export default function RouteLandingScreen() {
             placeholderTextColor={colors.slate}
             maxLength={18}
             autoCorrect={false}
-            autoFocus={Boolean(params.codigo) && !gateOpen}
+            autoFocus={Boolean(link.code) && !gateOpen}
             returnKeyType="go"
             onSubmitEditing={() => void join()}
             accessibilityLabel="Tu alias"
@@ -142,7 +161,7 @@ export default function RouteLandingScreen() {
           <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} />
 
           {error && (
-            <TelText variant="caption" color="danger" accessibilityLiveRegion="polite">
+            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
               {error}
             </TelText>
           )}

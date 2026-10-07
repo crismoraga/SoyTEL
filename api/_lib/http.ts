@@ -1,4 +1,5 @@
 // Utilidades HTTP de la API de SoyTEL (funciones de Vercel con la firma Web Request/Response).
+import { sqlState } from './db';
 
 const ALLOWED_ORIGINS = new Set([
   'https://soytel.vercel.app',
@@ -45,23 +46,58 @@ export function preflight(request: Request): Response {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
 
-// Lee un cuerpo JSON pequeño; null si no es JSON válido o supera el límite.
-export async function readJson<T>(request: Request, limitBytes = 4096): Promise<T | null> {
+// Error con respuesta definida: el manejador lo convierte en ese estado y código.
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+export const BODY_LIMIT_BYTES = 4096;
+
+// Lee un cuerpo JSON pequeño contando bytes mientras llega: al pasar el límite deja de leer.
+// Solo acepta un objeto (no listas ni valores sueltos). Los errores salen como HttpError:
+// 413 demasiado grande, 415 no es JSON, 400 JSON inválido.
+export async function readJson<T>(request: Request, limitBytes = BODY_LIMIT_BYTES): Promise<T> {
+  const type = (request.headers.get('content-type') ?? '').toLowerCase();
+  if (!type.startsWith('application/json')) throw new HttpError(415, 'unsupported_media_type', 'La solicitud debe enviarse como JSON.');
   const declared = Number(request.headers.get('content-length') ?? '0');
-  if (declared > limitBytes) return null;
-  let text: string;
-  try {
-    text = await request.text();
-  } catch {
-    return null;
+  if (Number.isFinite(declared) && declared > limitBytes) throw new HttpError(413, 'payload_too_large', 'La solicitud es demasiado grande.');
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = request.body?.getReader();
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limitBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new HttpError(413, 'payload_too_large', 'La solicitud es demasiado grande.');
+      }
+      chunks.push(value);
+    }
   }
-  if (text.length > limitBytes) return null;
-  try {
-    const value = JSON.parse(text) as unknown;
-    return value && typeof value === 'object' ? (value as T) : null;
-  } catch {
-    return null;
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
   }
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    throw new HttpError(400, 'bad_request', 'Solicitud no válida.');
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new HttpError(400, 'bad_request', 'Solicitud no válida.');
+  return value as T;
 }
 
 export function bearerToken(request: Request): string | null {
@@ -75,12 +111,37 @@ export function clientIp(request: Request): string {
   return forwarded.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
 }
 
-// Envuelve un manejador para que cualquier error inesperado responda 500 sin filtrar detalles.
+// Tope de lecturas por instancia (en memoria, sin tocar la base): frena ráfagas de consultas baratas
+// de un mismo origen. No reemplaza la protección de borde; evita que cada lectura abusiva llegue a Postgres.
+const readWindows = new Map<string, { startedAt: number; hits: number }>();
+
+export function allowRead(scope: string, key: string, limit: number, windowMs: number, now = Date.now()): boolean {
+  const id = `${scope}:${key}`;
+  const current = readWindows.get(id);
+  if (!current || now - current.startedAt >= windowMs) {
+    if (readWindows.size > 5000) readWindows.clear();
+    readWindows.set(id, { startedAt: now, hits: 1 });
+    return true;
+  }
+  current.hits += 1;
+  return current.hits <= limit;
+}
+
+export function resetReadLimits(): void {
+  readWindows.clear();
+}
+
+// Envuelve un manejador: los errores con respuesta definida salen como tales; una regla de la base
+// incumplida o un valor repetido salen como conflicto; lo inesperado, como 500 sin filtrar detalles.
 export function handler(run: (request: Request) => Promise<Response>) {
   return async (request: Request): Promise<Response> => {
     try {
       return await run(request);
     } catch (error) {
+      if (error instanceof HttpError) return fail(request, error.status, error.code, error.message);
+      const state = sqlState(error);
+      if (state === '23514') return fail(request, 422, 'contact_policy', 'Ese dato de contacto no se puede guardar con el curso indicado. Revisa el curso y la autorización.');
+      if (state === '23505') return fail(request, 409, 'conflict', 'Esos datos ya están en uso. Intenta de nuevo.');
       console.error('[api]', request.method, new URL(request.url).pathname, error instanceof Error ? error.message : error);
       return fail(request, 500, 'internal', 'Ocurrió un error en el servidor. Intenta de nuevo.');
     }

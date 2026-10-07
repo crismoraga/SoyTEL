@@ -8,11 +8,12 @@ import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { colors, spacing } from '@/theme';
+import { packetRushTarget } from '../packets';
 import type { MicroGameProps } from '../types';
 
 // Microjuego 8: toca lo más rápido posible para despachar los paquetes hacia el servidor.
 export function PacketRushGame({ active, level, onAnswer }: MicroGameProps) {
-  const target = 12 + Math.min(level, 3) * 2;
+  const target = packetRushTarget(level);
   const motion = useMotionEnabled();
   const [taps, setTaps] = useState(0);
   const [flying, setFlying] = useState<number[]>([]);

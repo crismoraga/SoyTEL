@@ -11,8 +11,6 @@ interface SheetProps {
   onClose: () => void;
   tone?: 'light' | 'dark';
   accessibilityLabel: string;
-  // Contenido largo (malla, privacidad): se desplaza dentro de la hoja.
-  scroll?: boolean;
 }
 
 const useNativeDriver = Platform.OS !== 'web';
@@ -20,7 +18,9 @@ const useNativeDriver = Platform.OS !== 'web';
 // Hoja inferior modal para detalles (logros, dato del día, ramos de la malla).
 // Usa Animated de React Native con driver nativo: las animaciones de layout de Reanimated dentro de
 // un Modal dejaban botones sin responder en Android.
-export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, scroll = false, children }: PropsWithChildren<SheetProps>) {
+// El contenido siempre se puede desplazar: con letra grande o en una pantalla baja, ningún botón queda
+// fuera de alcance.
+export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, children }: PropsWithChildren<SheetProps>) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const motionEnabled = useMotionEnabled();
@@ -40,13 +40,6 @@ export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, sc
 
   const translateY = offset.interpolate({ inputRange: [0, 1], outputRange: [0, 96] });
   const toneStyle = tone === 'dark' ? styles.dark : styles.light;
-  const body = scroll ? (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>
-      {children}
-    </ScrollView>
-  ) : (
-    children
-  );
 
   return (
     <Modal
@@ -70,7 +63,9 @@ export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, sc
         >
           <View style={[styles.handle, tone === 'dark' && styles.handleDark]} />
           <IconButton icon="close" tone={tone === 'dark' ? 'dark' : 'light'} size={36} accessibilityLabel="Cerrar hoja" onPress={onClose} style={styles.close} />
-          {body}
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
         </Animated.View>
       </GestureHandlerRootView>
     </Modal>
@@ -117,6 +112,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 0,
+    flexShrink: 1,
   },
   scrollContent: {
     gap: spacing.md,

@@ -54,11 +54,14 @@ export function journeyCodeFromSeed(seed: number): string {
   return code;
 }
 
-export function isValidJourneyCode(code: string): boolean {
-  return /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/.test(code.trim().toUpperCase());
+export function isValidJourneyCode(code: unknown): boolean {
+  return typeof code === 'string' && /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/.test(code.trim().toUpperCase());
 }
 
-export function sanitizeJourneyCode(raw: string): string {
+// Limpia lo que se escribe en el campo del código. Solo acepta texto: un parámetro de enlace repetido
+// llega como lista y no se intenta interpretar (ver route/joinLink).
+export function sanitizeJourneyCode(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
   return raw
     .toUpperCase()
     .replace(/[^23456789ABCDEFGHJKLMNPQRSTUVWXYZ]/g, '')

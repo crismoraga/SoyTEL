@@ -30,6 +30,17 @@ export function needsGuardianConsent(grade: string | null | undefined): boolean 
   return GRADES.some((item) => item.id === grade && item.young);
 }
 
+// Regla para guardar un dato de contacto (la misma en la app, la API y la base de datos):
+// hay que decir el curso y, en 7° y 8° básico, contar con la autorización del apoderado. Sin curso no
+// se sabe si quien escribe es menor de 14, así que no se guarda contacto (se puede jugar y tener cuenta
+// igual). Devuelve el motivo por el que no se puede, o null si está bien.
+export function contactPolicyProblem(grade: string | null | undefined, hasContact: boolean, guardianConsent: boolean): string | null {
+  if (!hasContact) return null;
+  if (!isGrade(grade)) return 'Para dejar tu contacto, elige tu curso. Si prefieres no decirlo, deja el contacto en blanco.';
+  if (needsGuardianConsent(grade) && !guardianConsent) return 'Para 7° y 8° básico se necesita la autorización de tu apoderado/a.';
+  return null;
+}
+
 export const CONTACT_KINDS = ['email', 'phone', 'instagram'] as const;
 export type ContactKind = (typeof CONTACT_KINDS)[number];
 
@@ -162,11 +173,39 @@ export function isRecoveryCode(raw: string): boolean {
   return /^TEL-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/.test(formatRecoveryCode(raw));
 }
 
-// Límites para aceptar el XP que informa un dispositivo (el juego corre en el teléfono).
-export const XP_SIGNUP_CAP = 6000;
-export const XP_BURST_ALLOWANCE = 400;
-export const XP_PER_SECOND = 3;
+// Credenciales de la cuenta. Las genera el dispositivo (con su generador criptográfico) y las guarda
+// antes de enviarlas: si la respuesta del servidor se pierde, repetir la misma solicitud devuelve la
+// misma cuenta en vez de dejar una cuenta sin dueño.
+export function isSessionToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
 
-export function allowedXp(storedXp: number, secondsSinceLastSync: number): number {
-  return storedXp + XP_BURST_ALLOWANCE + Math.max(0, secondsSinceLastSync) * XP_PER_SECOND;
+// Código de recuperación a partir de 12 bytes al azar.
+export function recoveryCodeFromBytes(bytes: ArrayLike<number>): string {
+  if (bytes.length < 12) throw new Error('Se necesitan 12 bytes');
+  const chars = Array.from({ length: 12 }, (_, index) => RECOVERY_ALPHABET[bytes[index] % RECOVERY_ALPHABET.length]).join('');
+  return `TEL-${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 12)}`;
+}
+
+// Límites para aceptar el XP que informa un dispositivo (el juego corre en el teléfono).
+// Cada cuenta tiene un presupuesto de XP que se gasta al sincronizar y se recarga con el tiempo:
+// sincronizar muchas veces seguidas no da más que sincronizar una.
+export const XP_SIGNUP_CAP = 6000;
+// Presupuesto con que parte una cuenta.
+export const XP_BURST_ALLOWANCE = 400;
+// Recarga por segundo (muy por encima de lo que se gana jugando sin parar).
+export const XP_PER_SECOND = 3;
+// Tope del presupuesto acumulado: cubre varios días de juego sin conexión.
+export const XP_BUDGET_CAP = 50_000;
+
+// Presupuesto disponible después de `elapsedSeconds` sin sincronizar.
+export function refillBudget(budget: number, elapsedSeconds: number): number {
+  return Math.min(XP_BUDGET_CAP, Math.max(0, budget) + Math.max(0, elapsedSeconds) * XP_PER_SECOND);
+}
+
+// XP que se acepta de lo que pide el dispositivo y presupuesto que queda. (La API hace esta misma
+// cuenta dentro de una sola sentencia SQL; esta función la documenta y la deja probada.)
+export function grantXp(storedXp: number, wantedXp: number, budget: number): { xp: number; budget: number; clamped: boolean } {
+  const granted = Math.max(0, Math.min(wantedXp - storedXp, Math.floor(budget)));
+  return { xp: storedXp + granted, budget: budget - granted, clamped: wantedXp > storedXp + granted };
 }

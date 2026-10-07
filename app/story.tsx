@@ -23,9 +23,10 @@ import { SvgDrawing } from '@/graphics/ShapeLayer';
 import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { now } from '@/lib/clock';
-import { recordGameResult } from '@/storage/profile';
+import { newRunId, useResultSaver } from '@/lib/resultSaver';
 import { completeChapter, loadStoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 import type { GameOutcome } from '@/types/game';
@@ -55,7 +56,7 @@ function useTypewriter(text: string, speed = 18) {
 
 export default function StoryScreen() {
   const entering = useEntering();
-  const { data: progress, setData: setProgress } = useFocusData(loadStoryProgress);
+  const { data: progress, setData: setProgress, error, reload } = useFocusData(loadStoryProgress);
   const [phase, setPhase] = useState<StoryPhase>('map');
   const [chapter, setChapter] = useState<StoryChapter | null>(null);
   const [line, setLine] = useState(0);
@@ -64,6 +65,9 @@ export default function StoryScreen() {
   const [attempts, setAttempts] = useState(0);
   const [startedAt, setStartedAt] = useState(0);
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
+  const saver = useResultSaver();
+  // Identidad de este intento del capítulo: completarlo dos veces seguidas suma una sola vez.
+  const [runId, setRunId] = useState('');
   const map = useMemo(() => campusMapDrawing(), []);
   const scroller = useScrollToEnd();
 
@@ -81,6 +85,8 @@ export default function StoryScreen() {
     setAnswered(false);
     setAttempts(0);
     setOutcome(null);
+    saver.reset();
+    setRunId(newRunId(`story-${target.id}`));
     setStartedAt(now());
     setPhase('dialogue');
   }
@@ -99,9 +105,9 @@ export default function StoryScreen() {
 
   async function complete() {
     if (!chapter) return;
-    const updated = await completeChapter(chapter.id);
-    setProgress(updated);
-    const result = await recordGameResult({
+    // Mientras se guarda, otro toque no hace nada (el guardado ya en curso devuelve null al segundo).
+    const result = await saver.save({
+      id: runId,
       gameId: 'story',
       score: chapter.rewardXp,
       accuracy: attempts <= 1 ? 1 : 0.6,
@@ -109,6 +115,13 @@ export default function StoryScreen() {
       completedAt: new Date().toISOString(),
       metadata: { chapter: chapter.number },
     });
+    if (!result) return;
+    try {
+      setProgress(await completeChapter(chapter.id));
+    } catch {
+      // El capítulo se vuelve a marcar al completar de nuevo (el resultado ya quedó y no se duplica).
+      return;
+    }
     setOutcome(result);
     setPhase('done');
   }
@@ -128,7 +141,9 @@ export default function StoryScreen() {
         footer={
           <ScreenFooter tone="dark">
             {!answered && <TelButton label="Responder" variant="cream" disabled={picked === null} onPress={() => void submit()} />}
-            {answered && correct && <TelButton label="Completar capítulo" variant="cream" iconRight="arrowRight" onPress={() => void complete()} />}
+            {answered && correct && (
+              <TelButton label={saver.status === 'failed' ? 'Reintentar' : 'Completar capítulo'} variant="cream" iconRight="arrowRight" loading={saver.status === 'saving'} onPress={() => void complete()} />
+            )}
             {answered && !correct && (
               <TelButton
                 label="Intentar de nuevo"
@@ -169,7 +184,8 @@ export default function StoryScreen() {
             );
           })}
         </View>
-        {answered && correct && <FeedbackPanel kind="success" title={`¡Exacto! +${chapter.rewardXp} XP`} body={chapter.challenge.explanation} />}
+        {answered && correct && <FeedbackPanel kind="success" title={`¡Exacto! +${chapter.rewardXp} puntos`} body={chapter.challenge.explanation} />}
+        {answered && correct && saver.status === 'failed' && <FeedbackPanel kind="error" title="No se pudo guardar el capítulo" body="Revisa el espacio del teléfono y toca Reintentar. No se sumará dos veces." />}
         {answered && !correct && (
           <FeedbackPanel kind="error" title="Casi… inténtalo otra vez" body={attempts >= 2 ? `Pista: ${chapter.challenge.hint}` : 'Piensa como telemático en terreno.'} />
         )}
@@ -229,6 +245,7 @@ export default function StoryScreen() {
         <AppHeader transparent onBack={() => router.back()} kicker="Modo historia" title="La señal perdida" subtitle="Alguien dejó el campus sin conexión. Ayuda a Rutix a restaurarla, capítulo a capítulo." />
       }
     >
+      {error && !progress && <LoadError tone="dark" onRetry={reload} />}
       <View style={styles.progressRow}>
         <TelText variant="label" color="cream">
           {completed.length} de {storyChapters.length} capítulos
@@ -289,7 +306,7 @@ export default function StoryScreen() {
                       {item.title}
                     </TelText>
                     <TelText variant="caption" color="accentSoft">
-                      {item.location} · +{item.rewardXp} XP
+                      {item.location} · +{item.rewardXp} pts
                     </TelText>
                   </View>
                   {done ? (

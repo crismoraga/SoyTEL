@@ -5,6 +5,7 @@ import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess } from '@/lib/feedback';
 import { colors, radius, spacing } from '@/theme';
+import { createPacketBag, PACKETS_NEEDED } from '../packets';
 import type { MicroGameProps } from '../types';
 
 interface Falling {
@@ -17,7 +18,7 @@ interface Falling {
 const HEIGHT = 320;
 const SIZE = 56;
 const LANES = 4;
-const NEED = 5;
+const NEED = PACKETS_NEEDED;
 
 // Microjuego 10: caen paquetes; atrapa los sanos y no toques los infectados.
 export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProps) {
@@ -31,11 +32,13 @@ export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProp
   useEffect(() => {
     if (!active) return;
     const pending = timers.current;
+    // Reparto con cuota de sanos: la ronda siempre se puede ganar.
+    const nextIsBad = createPacketBag(level);
     const spawn = () => {
       nextId.current += 1;
       const id = nextId.current;
       const duration = Math.round(Math.max(1500, 2500 - level * 170) * pace);
-      setPackets((items) => [...items, { id, lane: Math.floor(Math.random() * LANES), bad: Math.random() < 0.3 + level * 0.03, duration }]);
+      setPackets((items) => [...items, { id, lane: Math.floor(Math.random() * LANES), bad: nextIsBad(), duration }]);
       const timer = setTimeout(() => {
         pending.delete(timer);
         setPackets((items) => items.filter((item) => item.id !== id));

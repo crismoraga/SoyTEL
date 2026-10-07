@@ -163,7 +163,7 @@ export default function MallaScreen() {
       <TelButton label="Ver la carrera en usm.cl" icon="external" onPress={() => void openLink(LINKS.career)} />
       <TelButton label="Admisión USM" variant="outline" icon="school" onPress={() => void openLink(LINKS.admission)} />
 
-      <Sheet visible={open} onClose={() => setOpen(false)} accessibilityLabel="Detalle del ramo" scroll>
+      <Sheet visible={open} onClose={() => setOpen(false)} accessibilityLabel="Detalle del ramo">
         {selected && area && (
           <View style={styles.sheet}>
             <View style={styles.sheetTags}>

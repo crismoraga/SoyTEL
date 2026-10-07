@@ -9,7 +9,7 @@ import { feedbackSuccess, feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { mulberry32 } from '@/route/random';
 import { colors, radius, spacing } from '@/theme';
-import { createNetPuzzle, currentMasks, EAST, hintOrder, minimalMoves, netScore, NORTH, portCount, poweredCells, SOUTH, turnsToSolve, WEST } from './netwalk';
+import { createNetPuzzle, currentMasks, EAST, hintOrder, minimalMoves, netAccuracy, netScore, NORTH, portCount, poweredCells, SOUTH, turnsToSolve, WEST } from './netwalk';
 import type { PuzzleGameProps } from './types';
 
 const LIT = colors.accent;
@@ -78,6 +78,8 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
   const [turns, setTurns] = useState(puzzle.turns);
   const [moves, setMoves] = useState(0);
   const [hints, setHints] = useState(0);
+  // Giros que hicieron las pistas (no cuentan como resueltos por el jugador).
+  const [hintedMoves, setHintedMoves] = useState(0);
   const [hinted, setHinted] = useState<number | null>(null);
   const done = useRef(false);
   const optimal = minimalMoves(puzzle);
@@ -90,7 +92,7 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
   const terminalCount = terminals.filter(Boolean).length;
   const online = terminals.filter((isTerminal, index) => isTerminal && powered[index]).length;
 
-  function finish(nextTurns: number[], usedMoves: number, usedHints: number) {
+  function finish(nextTurns: number[], usedMoves: number, usedHints: number, helpedMoves: number) {
     if (done.current) return;
     const solved = poweredCells(puzzle.size, puzzle.server, currentMasks(puzzle, nextTurns)).every(Boolean);
     if (!solved) return;
@@ -99,7 +101,7 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
     const score = Math.max(300, netScore(optimal, usedMoves) - usedHints * 80);
     onSolved({
       score,
-      accuracy: Math.min(1, optimal / Math.max(usedMoves, optimal)),
+      accuracy: netAccuracy(optimal, usedMoves, helpedMoves),
       detail: `${usedMoves} giros (mínimo ${optimal})${usedHints ? ` · ${usedHints} ${usedHints === 1 ? 'pista' : 'pistas'}` : ''}`,
     });
   }
@@ -115,7 +117,7 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
     const lit = poweredCells(puzzle.size, puzzle.server, currentMasks(puzzle, next));
     const now = terminals.filter((isTerminal, position) => isTerminal && lit[position]).length;
     if (now > online) say(now === terminalCount ? '¡Todos los equipos en línea!' : `¡Equipo conectado! Van ${now} de ${terminalCount}.`, 'good');
-    finish(next, used, hints);
+    finish(next, used, hints, hintedMoves);
   }
 
   function hint() {
@@ -123,13 +125,15 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
     // La pista avanza desde el servidor hacia afuera: acomoda la primera pieza mal girada del camino.
     const target = hintOrder(puzzle).find((index) => turnsToSolve(puzzle.solved[index], turns[index]) > 0);
     if (target === undefined) return;
+    const helped = hintedMoves + turnsToSolve(puzzle.solved[target], turns[target]);
     const next = turns.map((value, index) => (index === target ? value + turnsToSolve(puzzle.solved[index], value) : value));
     const usedHints = hints + 1;
     setTurns(next);
     setHints(usedHints);
+    setHintedMoves(helped);
     setHinted(target);
     say(target === puzzle.server ? 'Giré el servidor hacia su cable. Desde ahí parte la señal.' : 'Te acomodé esa pieza. Sigue el cable encendido desde el servidor.', 'tip');
-    finish(next, moves, usedHints);
+    finish(next, moves, usedHints, helped);
   }
 
   function reset() {

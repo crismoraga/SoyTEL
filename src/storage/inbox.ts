@@ -1,12 +1,15 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tipForDate } from '@/data/tips';
+import { localDayKey } from '@/lib/day';
+import { storageGeneration, withLock } from './locks';
 
 const INBOX_KEY = '@soytel/inbox';
 const DAILY_KEY = '@soytel/inbox-daily';
 const MAX_ITEMS = 60;
 
 export type InboxKind = 'logro' | 'progreso' | 'rutix' | 'dato' | 'aviso';
+const KINDS: readonly InboxKind[] = ['logro', 'progreso', 'rutix', 'dato', 'aviso'];
 
 export interface InboxItem {
   id: string;
@@ -20,8 +23,13 @@ export interface InboxItem {
 
 export type NewInboxItem = Omit<InboxItem, 'id' | 'createdAt' | 'read'> & { createdAt?: string };
 
+// La lista en memoria es la referencia mientras la app está abierta: se lee del disco una sola vez
+// (por generación de datos) y todo cambio se guarda antes de mostrarse. Así una lectura que termina
+// tarde no puede pisar un aviso recién llegado.
 let cache: InboxItem[] = [];
-let loaded = false;
+let hydration: Promise<void> | null = null;
+let hydratedFor = -1;
+let hydrationToken = 0;
 const listeners = new Set<() => void>();
 let counter = 0;
 
@@ -36,29 +44,72 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-async function persist(items: InboxItem[]): Promise<void> {
-  cache = items.slice(0, MAX_ITEMS);
-  emit();
-  await AsyncStorage.setItem(INBOX_KEY, JSON.stringify(cache));
+// Acepta solo avisos bien formados; un tipo desconocido se muestra como aviso general.
+export function parseInbox(raw: unknown): InboxItem[] {
+  if (!Array.isArray(raw)) return [];
+  const items: InboxItem[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const item = entry as Record<string, unknown>;
+    if (typeof item.id !== 'string' || typeof item.title !== 'string' || typeof item.body !== 'string') continue;
+    // Los avisos antiguos de la mascota usaban el tipo 'telix' (ahora Rutix).
+    const kind = item.kind === 'telix' ? 'rutix' : KINDS.includes(item.kind as InboxKind) ? (item.kind as InboxKind) : 'aviso';
+    const parsed: InboxItem = {
+      id: item.id,
+      kind,
+      title: item.title,
+      body: item.body,
+      createdAt: typeof item.createdAt === 'string' && Number.isFinite(new Date(item.createdAt).getTime()) ? item.createdAt : new Date(0).toISOString(),
+      read: item.read === true,
+    };
+    if (typeof item.route === 'string') parsed.route = item.route;
+    items.push(parsed);
+  }
+  return items.slice(0, MAX_ITEMS);
 }
 
+function hydrate(): Promise<void> {
+  const generation = storageGeneration();
+  if (hydration && hydratedFor === generation) return hydration;
+  hydratedFor = generation;
+  hydrationToken += 1;
+  const token = hydrationToken;
+  hydration = (async () => {
+    let items: InboxItem[] = [];
+    try {
+      const raw = await AsyncStorage.getItem(INBOX_KEY);
+      items = raw ? parseInbox(JSON.parse(raw)) : [];
+    } catch {
+      items = [];
+    }
+    // Si mientras se leía hubo un borrado total (u otra carga), esta lectura ya no vale.
+    if (token === hydrationToken && generation === storageGeneration()) {
+      cache = items;
+      emit();
+    }
+  })();
+  return hydration;
+}
+
+// Avisos vigentes (lee del disco solo la primera vez).
 export async function loadInbox(): Promise<InboxItem[]> {
-  const raw = await AsyncStorage.getItem(INBOX_KEY);
-  try {
-    // Los avisos antiguos de la mascota usaban el tipo 'telix' (ahora Rutix).
-    const parsed = raw ? (JSON.parse(raw) as InboxItem[]).map((item) => ((item.kind as string) === 'telix' ? { ...item, kind: 'rutix' as const } : item)) : [];
-    cache = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    cache = [];
-  }
-  loaded = true;
-  emit();
+  await hydrate();
   return cache;
+}
+
+// Cambia la lista: lee la versión vigente, guarda en disco y recién entonces la muestra.
+function mutate(change: (items: InboxItem[]) => InboxItem[]): Promise<void> {
+  return withLock('inbox', async () => {
+    await hydrate();
+    const next = change(cache).slice(0, MAX_ITEMS);
+    await AsyncStorage.setItem(INBOX_KEY, JSON.stringify(next));
+    cache = next;
+    emit();
+  });
 }
 
 export async function pushInbox(items: NewInboxItem[]): Promise<void> {
   if (items.length === 0) return;
-  if (!loaded) await loadInbox();
   const now = new Date().toISOString();
   const created: InboxItem[] = items.map((item) => {
     counter += 1;
@@ -69,31 +120,32 @@ export async function pushInbox(items: NewInboxItem[]): Promise<void> {
       read: false,
     };
   });
-  await persist([...created, ...cache]);
+  await mutate((current) => [...created, ...current]);
 }
 
-export async function markInboxRead(id: string): Promise<void> {
-  if (!loaded) await loadInbox();
-  await persist(cache.map((item) => (item.id === id ? { ...item, read: true } : item)));
+export function markInboxRead(id: string): Promise<void> {
+  return mutate((current) => current.map((item) => (item.id === id ? { ...item, read: true } : item)));
 }
 
-export async function markAllInboxRead(): Promise<void> {
-  if (!loaded) await loadInbox();
-  await persist(cache.map((item) => ({ ...item, read: true })));
+export function markAllInboxRead(): Promise<void> {
+  return mutate((current) => current.map((item) => ({ ...item, read: true })));
 }
 
 // Un dato curioso al día y un recordatorio si Rutix tiene poca señal.
-export async function ensureDailyInbox(mascotMood: number, today = new Date()): Promise<void> {
-  const day = today.toISOString().slice(0, 10);
-  const last = await AsyncStorage.getItem(DAILY_KEY);
-  if (last === day) return;
-  await AsyncStorage.setItem(DAILY_KEY, day);
-  const tip = tipForDate(today);
-  const items: NewInboxItem[] = [{ kind: 'dato', title: '¿Sabías que…?', body: tip.text, route: '/career' }];
-  if (mascotMood < 45) {
-    items.push({ kind: 'rutix', title: 'Rutix tiene poca señal', body: 'Pasa a saludarlo o juega una ráfaga corta para subirle el ánimo.', route: '/mascot' });
-  }
-  await pushInbox(items);
+export function ensureDailyInbox(mascotMood: number, today = new Date()): Promise<void> {
+  return withLock('inbox-daily', async () => {
+    const day = localDayKey(today);
+    const last = await AsyncStorage.getItem(DAILY_KEY);
+    if (last === day) return;
+    const tip = tipForDate(today);
+    const items: NewInboxItem[] = [{ kind: 'dato', title: '¿Sabías que…?', body: tip.text, route: '/career' }];
+    if (mascotMood < 45) {
+      items.push({ kind: 'rutix', title: 'Rutix tiene poca señal', body: 'Pasa a saludarlo o juega una ráfaga corta para subirle el ánimo.', route: '/mascot' });
+    }
+    await pushInbox(items);
+    // El día se marca cuando el aviso ya quedó guardado.
+    await AsyncStorage.setItem(DAILY_KEY, day);
+  });
 }
 
 export function getInboxSnapshot(): InboxItem[] {
@@ -111,7 +163,9 @@ export function useUnreadCount(): number {
 
 export function resetInboxCache(): void {
   cache = [];
-  loaded = false;
+  hydration = null;
+  hydratedFor = -1;
+  hydrationToken += 1;
   emit();
 }
 

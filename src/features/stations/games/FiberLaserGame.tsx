@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle, Line, Polygon, Polyline, Rect } from 'react-native-svg';
 import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { now as clockNow } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { clamp, GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useDeadline, useGamePaused, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   acceptanceAngle,
   ANGLE_MAX,
@@ -50,7 +49,7 @@ const ACCENT = '#6FB3D9';
 const LASER_RED = '#FF5A5A';
 
 // B213 · Telecomunicaciones: fibra óptica, reflexión total interna y modulación on-off.
-export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
+export function FiberLaserGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [word] = useState(() => pickWord(mulberry32(seed ^ 0xf1be)));
   const [stageIndex, setStageIndex] = useState(0);
@@ -65,7 +64,7 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
   }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
@@ -79,9 +78,11 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
   }, [stageIndex]);
 
   const total = anglePoints + pulse.points;
+  const accuracy = ((angleShots.total ? angleShots.ok / angleShots.total : 0) + (pulse.total ? pulse.correct / pulse.total : 0)) / 2;
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score: total, accuracy }));
 
   if (finished) {
-    const accuracy = ((angleShots.total ? angleShots.ok / angleShots.total : 0) + (pulse.total ? pulse.correct / pulse.total : 0)) / 2;
     return (
       <StationSummary
         title="Viaje de la luz"
@@ -93,7 +94,7 @@ export function FiberLaserGame({ seed, onComplete }: StationGameProps) {
           { label: 'Bits transmitidos', value: pulse.points, max: PULSES_MAX, icon: 'fiber' },
         ]}
         learned="La fibra guía la luz porque su núcleo tiene mayor índice de refracción que el revestimiento: si el ángulo es pequeño, la luz rebota adentro. Los datos viajan como pulsos: luz = 1, sin luz = 0."
-        onSubmit={() => onComplete({ score: total, accuracy })}
+        onSubmit={() => submit({ score: total, accuracy })}
       />
     );
   }
@@ -133,7 +134,7 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
   const [failed, setFailed] = useState(0);
   const [shot, setShot] = useState<RayTrace | null>(null);
   const [visible, setVisible] = useState(0);
-  const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState(() => gameNow());
   const done = useRef(false);
   const dragStart = useRef(0);
   const config = fiberLevels[level];
@@ -149,14 +150,11 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
   };
 
   const askContinue = useAskContinue();
-  useEffect(() => {
+  useGameTimeout(endsAt, () => {
     if (done.current) return;
-    const timer = setTimeout(() => {
-      done.current = true;
-      askContinue(onFinish);
-    }, Math.max(0, endsAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [askContinue, endsAt, onFinish]);
+    done.current = true;
+    askContinue(onFinish);
+  });
 
   // Dibuja el rayo por tramos para que se vea viajar.
   useEffect(() => {
@@ -182,7 +180,7 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
     const ok = trace.outcome === 'delivered';
     if (ok) {
       void feedbackSuccess();
-      const ratio = (endsAt - clockNow()) / (endsAt - startedAt);
+      const ratio = (endsAt - gameNow()) / (endsAt - startedAt);
       onLevel(levelScore(failed, ratio), true);
       if (level + 1 >= fiberLevels.length) {
         done.current = true;
@@ -195,7 +193,7 @@ function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (
         setFailed(0);
         setShot(null);
         setAngle(level % 2 === 0 ? -26 : 22);
-        setStartedAt(clockNow());
+        setStartedAt(gameNow());
       }, 1500);
     } else {
       void feedbackWarning();
@@ -302,7 +300,7 @@ function PulsesStage({
   const pace = usePace();
   // Cada pulso dura más con un ritmo tranquilo: hay más margen para tocar a tiempo.
   const bitMs = BIT_MS * pace;
-  const [startAt] = useState(() => Date.now() + LEAD_MS);
+  const [startAt] = useState(() => gameNow() + LEAD_MS);
   const [sent, setSent] = useState<boolean[]>(() => bits.map(() => false));
   const [flash, setFlash] = useState(0);
   const done = useRef(false);
@@ -314,33 +312,38 @@ function PulsesStage({
   const correct = bits.slice(0, evaluated).filter((bit, index) => bit === (sent[index] ? 1 : 0)).length;
   const received = bits.slice(0, evaluated).map((_, index) => (sent[index] ? 1 : 0));
 
+  // La cinta de pulsos sigue al reloj del juego: en pausa se detiene y al volver retoma donde iba.
+  const paused = useGamePaused();
   useEffect(() => {
-    const delay = Math.max(0, startAt - Date.now());
-    const timer = setTimeout(() => {
-      progress.set(withTiming(bits.length + 1, { duration: (bits.length + 1) * bitMs, easing: Easing.linear }));
-    }, delay);
+    if (paused) {
+      cancelAnimation(progress);
+      return;
+    }
+    const total = (bits.length + 1) * bitMs;
+    const run = () => {
+      const done = clamp(gameNow() - startAt, 0, total);
+      progress.set(done / bitMs);
+      progress.set(withTiming(bits.length + 1, { duration: total - done, easing: Easing.linear }));
+    };
+    const timer = setTimeout(run, Math.max(0, startAt - gameNow()));
     return () => clearTimeout(timer);
-  }, [bitMs, bits.length, progress, startAt]);
+  }, [bitMs, bits.length, paused, progress, startAt]);
 
   useEffect(() => {
     onProgress({ points: Math.round((correct / bits.length) * PULSES_MAX), correct, total: evaluated });
   }, [bits.length, correct, evaluated, onProgress]);
 
   const askContinue = useAskContinue();
-  useEffect(() => {
+  useGameTimeout(Math.min(endsAt, startAt + (bits.length + 1) * bitMs + 900), () => {
     if (done.current) return;
-    const finishAt = Math.min(endsAt, startAt + (bits.length + 1) * bitMs + 900);
-    const timer = setTimeout(() => {
-      done.current = true;
-      askContinue(onFinish, 'Ver resultado');
-    }, Math.max(0, finishAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [askContinue, bitMs, bits.length, endsAt, onFinish, startAt]);
+    done.current = true;
+    askContinue(onFinish, 'Ver resultado');
+  });
 
   const trackStyle = useAnimatedStyle(() => ({ transform: [{ translateX: HIT_X - progress.value * CELL }] }));
 
   function tap() {
-    const index = Math.floor((clockNow() - startAt) / bitMs);
+    const index = Math.floor((gameNow() - startAt) / bitMs);
     setFlash((value) => value + 1);
     void feedbackTap();
     if (index < 0 || index >= bits.length || sent[index]) return;

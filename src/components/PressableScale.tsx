@@ -1,5 +1,5 @@
-import type { PropsWithChildren } from 'react';
-import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import type { PropsWithChildren, Ref } from 'react';
+import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type View, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
@@ -11,6 +11,7 @@ export interface PressableScaleProps extends Omit<PressableProps, 'style' | 'chi
   style?: StyleProp<ViewStyle>;
   scaleTo?: number;
   haptic?: boolean;
+  ref?: Ref<View>;
 }
 
 // Botón con leve encogimiento al presionar (resorte en el hilo de UI).
@@ -23,6 +24,7 @@ export function PressableScale({
   onPress,
   disabled,
   children,
+  ref,
   ...props
 }: PropsWithChildren<PressableScaleProps>) {
   const enabled = useMotionEnabled();
@@ -47,6 +49,7 @@ export function PressableScale({
   return (
     <AnimatedPressable
       {...props}
+      ref={ref}
       disabled={disabled}
       onPress={handlePress}
       onPressIn={handlePressIn}

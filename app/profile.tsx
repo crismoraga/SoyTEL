@@ -27,6 +27,7 @@ import { formatNumber, relativeTime } from '@/lib/format';
 import { LINKS, openLink } from '@/lib/links';
 import { useEntering } from '@/lib/motion';
 import { levelTitle, progressToNextLevel, xpToNextLevel } from '@/lib/progression';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadProfile, loadResults } from '@/storage/profile';
 import { colors, font, radius, spacing } from '@/theme';
@@ -71,7 +72,7 @@ export default function ProfileScreen() {
   const [aliasError, setAliasError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const { data, reload } = useFocusData(async () => {
+  const { data, error, reload } = useFocusData(async () => {
     const [profile, results] = await Promise.all([loadProfile(), loadResults()]);
     return { profile, results };
   });
@@ -144,6 +145,7 @@ export default function ProfileScreen() {
         </AppHeader>
       }
     >
+      {error && !data && <LoadError onRetry={reload} />}
       <Animated.View entering={entering.fadeUp()} style={styles.stats}>
         <StatTile icon="sparkle" value={profile ? formatNumber(profile.xp) : '—'} label="XP total" />
         <StatTile icon="flame" value={profile?.streakDays ?? '—'} label="Racha" />
@@ -160,7 +162,7 @@ export default function ProfileScreen() {
             </TelText>
             <TelButton label={account.syncing ? 'Sincronizando' : 'Sincronizar'} variant="subtle" size="sm" icon="refresh" fullWidth={false} loading={account.syncing} onPress={() => void syncNow()} />
           </View>
-          <TelText variant="caption" color={account.syncError ? 'danger' : 'inkSoft'}>
+          <TelText variant="caption" color={account.syncError ? 'dangerText' : 'inkSoft'}>
             {account.syncError ?? (account.lastSyncAt ? `Puntaje registrado ${relativeTime(account.lastSyncAt)}.` : 'Tu puntaje se registra cada vez que juegas.')}
           </TelText>
           <View style={styles.buttonRow}>
@@ -233,7 +235,7 @@ export default function ProfileScreen() {
           <TelButton label={saved ? 'Guardado' : 'Guardar'} icon={saved ? 'check' : undefined} variant="secondary" size="sm" fullWidth={false} onPress={() => void saveAlias()} />
         </View>
         {aliasError && (
-          <TelText variant="small" color="danger">
+          <TelText variant="small" color="dangerText">
             {aliasError}
           </TelText>
         )}
@@ -248,7 +250,7 @@ export default function ProfileScreen() {
         <TelButton label="La carrera en usm.cl" variant="ghost" size="sm" icon="external" fullWidth={false} onPress={() => void openLink(LINKS.career)} />
       </View>
 
-      <Sheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} accessibilityLabel="Elige tu avatar" scroll>
+      <Sheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} accessibilityLabel="Elige tu avatar">
         <TelText variant="title" color="ink">
           Elige tu avatar
         </TelText>

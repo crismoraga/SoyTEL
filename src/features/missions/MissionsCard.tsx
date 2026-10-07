@@ -6,7 +6,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { dailyKey } from '@/features/burst/daily';
+import { localDayKey, msUntilNextLocalDay } from '@/lib/day';
 import { MISSION_REWARD_DATA, missionStates } from '@/lib/dailyMissions';
 import { feedbackSuccess } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
@@ -22,27 +22,51 @@ interface MissionsCardProps {
 
 // Misiones de hoy: tres metas que propone Rutix. Va sobre fondos azul noche.
 export function MissionsCard({ results, onClaimed }: MissionsCardProps) {
-  const [today] = useState(() => new Date());
-  const day = dailyKey(today);
+  const [today, setToday] = useState(() => new Date());
+  const day = localDayKey(today);
   const [claimedOn, setClaimedOn] = useState<string | null | undefined>(undefined);
+  const [claiming, setClaiming] = useState(false);
+  const [failed, setFailed] = useState(false);
   const states = missionStates(results, today);
   const done = states.filter((state) => state.done).length;
   const claimed = claimedOn === day;
 
+  // Al pasar la medianoche (con la tarjeta abierta) las misiones cambian al día nuevo.
+  useEffect(() => {
+    const timer = setTimeout(() => setToday(new Date()), msUntilNextLocalDay(today));
+    return () => clearTimeout(timer);
+  }, [today]);
+
   useEffect(() => {
     let active = true;
-    void loadMissionClaim().then((value) => {
-      if (active) setClaimedOn(value);
-    });
+    loadMissionClaim().then(
+      (value) => {
+        if (active) setClaimedOn(value);
+      },
+      () => {
+        if (active) setClaimedOn(null);
+      },
+    );
     return () => {
       active = false;
     };
-  }, []);
+  }, [day]);
 
   async function claim() {
-    if (await claimMissionReward(day)) void feedbackSuccess();
-    setClaimedOn(day);
-    onClaimed?.();
+    if (claiming) return;
+    setClaiming(true);
+    setFailed(false);
+    try {
+      // Devuelve false si ya estaba reclamada (por ejemplo, desde otra pantalla): igual queda marcada.
+      if (await claimMissionReward(day)) void feedbackSuccess();
+      setClaimedOn(day);
+      onClaimed?.();
+    } catch {
+      // No se alcanzó a entregar todo: no se anuncia como guardada y se puede reintentar sin duplicar.
+      setFailed(true);
+    } finally {
+      setClaiming(false);
+    }
   }
 
   return (
@@ -87,7 +111,12 @@ export function MissionsCard({ results, onClaimed }: MissionsCardProps) {
         </PressableScale>
       ))}
       {done === states.length && claimedOn !== undefined && !claimed && (
-        <TelButton label={`Reclamar ${MISSION_REWARD_DATA} paquetes`} variant="cream" icon="packet" size="sm" onPress={() => void claim()} />
+        <TelButton label={failed ? 'Reintentar' : `Reclamar ${MISSION_REWARD_DATA} paquetes`} variant="cream" icon={failed ? 'refresh' : 'packet'} size="sm" loading={claiming} onPress={() => void claim()} />
+      )}
+      {failed && !claimed && (
+        <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+          No se pudo guardar la recompensa. Inténtalo de nuevo: no se entregará dos veces.
+        </TelText>
       )}
       {claimed && (
         <TelText variant="caption" color="accentSoft" align="center">

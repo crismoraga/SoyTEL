@@ -1,0 +1,3257 @@
+{
+  "baseline_commit": "9eeda63ca123ee69eaefec8f671ffebc6956ae8a",
+  "count_observations": 90,
+  "priority_counts": {
+    "P1": 16,
+    "P2": 60,
+    "P3": 14
+  },
+  "semantically_deduplicated": false,
+  "findings": [
+    {
+      "id": "BE-01",
+      "title": "Cambiar solamente el curso permite conservar contacto de 7°/8° sin autorización de apoderado",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/_lib/players.ts",
+          "line": 83,
+          "detail": "grade se valida independientemente."
+        },
+        {
+          "file": "api/_lib/players.ts",
+          "line": 96,
+          "detail": "La autorización solo se comprueba si se toca contact/contactConsent/guardianConsent."
+        },
+        {
+          "file": "api/v1/me.ts",
+          "line": 19,
+          "detail": "Valida sobre la fila leída previamente; UPDATE posterior por id."
+        },
+        {
+          "file": "scripts/db/schema.sql",
+          "line": 31,
+          "detail": "La única restricción de consentimiento no contempla curso ni guardian_consent."
+        },
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 28,
+          "detail": "La exportación selecciona todo contact_consent sin comprobar tutor."
+        }
+      ],
+      "scenario": "Crear con grade=4m, contacto autorizado y guardianConsent=false; PATCH /me {\"grade\":\"7b\"}. La respuesta de validación es ok con solo grade; quedan contacto y consentimiento previos. Variante concurrente: PATCH de curso y PATCH de contacto validan ambos contra el curso anterior.",
+      "impact": "Persistencia y exportación de datos de contacto de alumnos a quienes la propia política requiere tutor. El formulario normal envía todo, pero no protege la API frente al PATCH parcial.",
+      "fix": "Validar el estado efectivo completo en cualquier cambio de curso/contacto; exigir tutor o borrar contacto al pasar a curso protegido. Aplicar la invariancia en una operación atómica y restricción SQL para evitar TOCTOU.",
+      "acceptance": "Registro sin tutor en 7b/8b falla; cambio 4m→7b/8b con contacto existente no deja contacto no autorizado; prueba con dos PATCH simultáneos mantiene invariancia; admin no exporta filas inconsistentes.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-02",
+      "title": "La franquicia de XP se renueva por cada sync: el anti-cheat se elude sin jugar",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/rules.ts",
+          "line": 166,
+          "detail": "Alta permite 6000 XP; cada allowedXp agrega 400 más 3/seg."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 21,
+          "detail": "El cálculo se rehace usando el XP anterior en cada solicitud."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 14,
+          "detail": "Se permiten 30 sync por 60 segundos."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 23,
+          "detail": "Enviar exactamente allowed no añade flag."
+        },
+        {
+          "file": "api/v1/players.ts",
+          "line": 20,
+          "detail": "El XP inicial enviado por cliente solo se topa, no se verifica."
+        }
+      ],
+      "scenario": "Obtener una cuenta con 6000 XP declarados y enviar repetidamente progress.xp=XP_actual+400, con resto de métricas plausible. Incluso con elapsedSeconds=0 cada solicitud suma 400 y no se marca. Cálculo aislado: 30 solicitudes suman 12000 XP, final 18000; el tiempo transcurrido suma además.",
+      "impact": "Ranking manipulable desde un cliente/API sin evidencia de partidas; límite de velocidad efectivo dominado por frecuencia de llamadas, no por juego. flags no corrige este recorrido.",
+      "fix": "Usar presupuesto persistente tipo token-bucket con burst único y recarga temporal, consumido atómicamente. Para premios/invitaciones basados en puntaje, aceptar resultados verificables/idempotentes o separar XP no verificado del competitivo; revisar importación inicial.",
+      "acceptance": "Variar frecuencia de sync no modifica el máximo aceptable por el mismo intervalo; 30 llamadas inmediatas consumen una sola franquicia. Un resultado repetido no suma. Política de XP importado documentada y cubierta.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-03",
+      "title": "Dos sync concurrentes pueden bajar el XP pese al contrato monotónico",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/sync.ts",
+          "line": 12,
+          "detail": "requirePlayer lee una instantánea fuera del UPDATE."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 22,
+          "detail": "Math.max usa la instantánea leída."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 27,
+          "detail": "UPDATE asigna xp=$1 y level=$2, sin greatest/CAS/lock."
+        },
+        {
+          "file": "api/_lib/db.ts",
+          "line": 17,
+          "detail": "Cada query es una llamada independiente."
+        }
+      ],
+      "scenario": "Dos peticiones válidas leen xp=1000; una calcula 1400 y otra 1100. Si el UPDATE de 1100 llega último, la BD termina con 1100. El rate-limit permite ambas. No se ejecutó Postgres: es un interleaving deducido del código.",
+      "impact": "Pérdida de progreso ya confirmado, nivel regresivo y ranking incorrecto. También elapsed/flags se calcula sobre filas obsoletas.",
+      "fix": "Consumir presupuesto y actualizar progreso en transacción con bloqueo de fila o UPDATE atómico/CAS que derive XP y nivel del estado actual. No basta greatest(xp,$1) si level y presupuesto quedan inconsistentes.",
+      "acceptance": "Prueba de integración con barrera después de ambas lecturas y orden invertido de commits: XP nunca baja y level corresponde al XP final; presupuesto anti-cheat no se duplica.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-04",
+      "title": "Respuestas y escrituras tardías atraviesan logout, borrado local y cambio de cuenta",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/store.ts",
+          "line": 204,
+          "detail": "forgetAccount borra stored y timer, no cancela solicitudes ni escrituras."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 217,
+          "detail": "refreshAccount usa el token previo y al volver mezcla con stored global actual."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 163,
+          "detail": "editAccount hace la misma mezcla con respuesta antigua."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 246,
+          "detail": "syncProgress pendiente al volver sustituye player/rank del stored actual."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 99,
+          "detail": "persist guarda en vault sin barrera de generación/serialización."
+        },
+        {
+          "file": "src/security/vault.ts",
+          "line": 155,
+          "detail": "setItem se ejecuta después de await sealText."
+        },
+        {
+          "file": "src/storage/reset.ts",
+          "line": 23,
+          "detail": "Borrado local no drena escrituras ya iniciadas."
+        }
+      ],
+      "scenario": "A inicia sync/PATCH/refresh. Antes de la respuesta se recupera B; cuando responde A se guarda token de B con player/contact/rank de A. Alternativa: logout deja stored=null, una respuesta tardía reconstruye datos parciales y los persiste; o persist(A) ya cifrando completa setItem después de removeItem de logout y restaura la sesión completa en disco.",
+      "impact": "Datos de cuenta A visibles o persistidos bajo B; sesión que reaparece al reiniciar después de cerrar/borrar; carreras pueden sobrescribir revocación local y consentimiento visible. No implica acceso a terceros sin usar el dispositivo compartido.",
+      "fix": "Introducir epoch de sesión y capturar token/id al iniciar cada operación; descartar respuestas de otra generación; abortar/drain solicitudes y serializar persist/remove. Cambio de identidad de cuenta debe invalidar operaciones previas y caches.",
+      "acceptance": "Con promesas diferidas: respuesta A tras logout no restaura datos; A→B no sustituye player de B ni token; setItem antiguo posterior al borrado se impide; reinicio tras reset permanece guest; 401 tardío de A no expira B.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-05",
+      "title": "Fallback a llave en memoria escribe cuentas persistentes que se pierden al reiniciar",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/security/vault.ts",
+          "line": 119,
+          "detail": "Fallo/ausencia de SecureStore o IndexedDB cae a memory."
+        },
+        {
+          "file": "src/security/vault.ts",
+          "line": 124,
+          "detail": "Se genera una llave efímera sin comunicar degradación."
+        },
+        {
+          "file": "src/security/vault.ts",
+          "line": 155,
+          "detail": "Se escribe igualmente cifrado a AsyncStorage persistente."
+        },
+        {
+          "file": "src/security/vault.ts",
+          "line": 169,
+          "detail": "Con nueva llave la lectura devuelve null."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 147,
+          "detail": "Alta adopta sin comprobar vaultKind y puede presentar éxito."
+        }
+      ],
+      "scenario": "SecureStore/IndexedDB no está disponible al crear o recuperar cuenta, o falla transitoriamente al iniciar. Se guarda sv1 con llave de sesión y se considera cuenta registrada. En el siguiente proceso la llave cambia (o se recupera el proveedor anterior) y el registro ya no es descifrable. Un fallo temporal puede causar nuevas escrituras ilegibles con proveedor definitivo.",
+      "impact": "Pérdida de token y código guardado; cuentas huérfanas si no se copió el código; datos remotos persisten aunque el cliente aparenta invitado. Pruebas actuales solo hacen round-trip en el mismo runtime.",
+      "fix": "No persistir secretos con llave efímera de forma silenciosa. Distinguir modo sesión, avisar/confirmar y garantizar respaldo del código antes del éxito; ante proveedor temporalmente bloqueado preservar ciphertext, ofrecer reintento, no reemplazarlo. Preferible fallar el alta persistente antes de producir cuenta remota.",
+      "acceptance": "Pruebas memory→reinicio, proveedor temporalmente rechazado→recuperado, y SecureStore/IndexedDB denegados: ningún éxito duradero falso ni sobrescritura de ciphertext recuperable; UI informa y conserva vía de recuperación.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-06",
+      "title": "El alta confirma INSERT antes de operaciones falibles: una respuesta perdida deja cuenta inaccesible",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/players.ts",
+          "line": 39,
+          "detail": "INSERT returning * confirma por HTTP separado."
+        },
+        {
+          "file": "api/v1/players.ts",
+          "line": 41,
+          "detail": "rankOf se ejecuta después del INSERT antes de entregar token y recoveryCode."
+        },
+        {
+          "file": "api/_lib/http.ts",
+          "line": 85,
+          "detail": "Error posterior se devuelve como 500 genérico."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 146,
+          "detail": "updateIdentity y persist pueden fallar después de recibir las credenciales."
+        },
+        {
+          "file": "src/account/api.ts",
+          "line": 99,
+          "detail": "Timeout/desconexión de POST se presenta como offline, sin idempotencia."
+        }
+      ],
+      "scenario": "Inyectar error en rankOf después de INSERT. La cuenta ya existe pero el cliente recibe 500 sin secretos (la BD solo almacena hashes). Reintentar crea otra. Igual ocurre si se pierde la respuesta; o updateIdentity/persist falla antes de mostrar el código aunque el servidor confirmó.",
+      "impact": "Cuenta/contacto consentido quedan almacenados sin que el dueño pueda recuperar o borrar fácilmente; registros y ranking duplicados; rotulación de error no distingue commit desconocido.",
+      "fix": "Hacer rank accesorio y no condicionar entrega de credenciales a su disponibilidad; adoptar/persistir secretos antes de tareas locales opcionales. Implementar clave idempotente por intento de alta y reentrega segura de resultado (p.ej. secretos generados del lado cliente con esquema seguro o registro temporal cifrado) para fallo de transporte.",
+      "acceptance": "Simular INSERT exitoso + rank rechazado, escritura local fallida y respuesta perdida: un reintento no crea segunda fila, el usuario recibe/recupera la misma cuenta y su código, y puede eliminar sus datos.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-07",
+      "title": "La revocación de token no se verifica al aplicar PATCH/sync/DELETE",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/_lib/auth.ts",
+          "line": 8,
+          "detail": "Autenticación y selección de fila preceden a la mutación."
+        },
+        {
+          "file": "api/v1/recover.ts",
+          "line": 17,
+          "detail": "Recuperación rota token_hash."
+        },
+        {
+          "file": "api/v1/me.ts",
+          "line": 25,
+          "detail": "PATCH actualiza solo por id."
+        },
+        {
+          "file": "api/v1/me.ts",
+          "line": 35,
+          "detail": "DELETE elimina solo por id."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 37,
+          "detail": "sync actualiza solo por id."
+        }
+      ],
+      "scenario": "Pausar una petición del dispositivo A después de requirePlayer; recuperar en B (rota token), después continuar PATCH/DELETE de A. La operación usa id y se ejecuta con sesión revocada. El alcance es la petición que ya pasó auth, no peticiones nuevas con token antiguo.",
+      "impact": "El aviso de desconectar el dispositivo anterior no impide mutaciones en vuelo; una eliminación o nueva escritura de contacto puede ocurrir después del cambio de control. La aceptabilidad depende del contrato de revocación.",
+      "fix": "Predicar mutaciones también por hash del token autenticado, o serializar auth y mutación mediante transacción; manejar fila ausente como 401/conflicto, no 500. Definir semántica explícita para solicitudes en vuelo.",
+      "acceptance": "Barrera auth(A)→recover(B)→DELETE/PATCH/sync(A): si se exige revocación inmediata, A recibe 401 y no cambia la fila. Una petición autenticada con B funciona.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-08",
+      "title": "Recuperar no restaura racha/rutas/mejor ruta y el primer sync borra la racha remota",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/store.ts",
+          "line": 154,
+          "detail": "restoreAccount llama mergeAccountProgress."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 234,
+          "detail": "La mezcla solo contempla alias/avatar/xp/games/achievements."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 226,
+          "detail": "streak se toma de streakDays local; rutas/mejor ruta del historial local."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 30,
+          "detail": "streak=$4 sustituye la racha remota incondicionalmente."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 156,
+          "detail": "Se agenda sync 300ms tras recuperar."
+        }
+      ],
+      "scenario": "Cuenta remota con streak=50, bestRoute>0 y routes>0 recuperada en instalación limpia con racha=0 e historial vacío. Se preservan XP/games/logros, no el resto. El primer sync envía streak=0 y la BD pierde 50; las rutas no bajan en BD por greatest pero no vuelven al resumen local.",
+      "impact": "Recuperación incompleta y pérdida remota de racha, aunque se ofrece recuperar progreso. Métricas y logros dependientes de historia pueden divergir.",
+      "fix": "Definir qué progreso se recupera y persistir la totalidad necesaria, con fechas de actividad/racha para no usar max ciegamente. Mantener estadísticas agregadas de rutas independientes del historial limitado; evitar overwrite inicial con valores por defecto.",
+      "acceptance": "Recuperar en limpio racha/rutas/mejor ruta conocidos, ejecutar sync: se mantienen los valores válidos; racha expiraba de acuerdo a fechas reales y no por defaults de instalación; resumen local muestra los agregados remotos.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-09",
+      "title": "Eventos durante un sync en curso pueden quedarse sin sincronizar ni reintento",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/store.ts",
+          "line": 226,
+          "detail": "scheduleSync usa un solo timer y lo consume."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 236,
+          "detail": "syncNow retorna si syncing=true sin marcar trabajo pendiente."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 245,
+          "detail": "El progreso se captura una vez."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 252,
+          "detail": "finally solo quita syncing; no reprograma cambios o errores."
+        }
+      ],
+      "scenario": "Sync lento captura progreso P1; una partida produce P2 y agenda timer. Si el timer vence antes de acabar el primer sync, el segundo syncNow retorna porque syncing=true. Tras completar P1 no hay nueva agenda; P2 no se envía hasta otro evento, reinicio o botón manual. Errores offline tampoco tienen retry propio.",
+      "impact": "Ranking queda obsoleto tras la última partida y tras conectividad recuperada sin nuevo evento; progreso local existe pero el usuario puede cerrar y cambiar de dispositivo antes de subirlo.",
+      "fix": "Marcar dirty/pending durante sync y en fallos recuperables; al completar ejecutar otro sync si la revisión local cambió, con backoff y recuperación de conectividad. No hacer bucles inmediatos ante 429/401.",
+      "acceptance": "Con red diferida y evento entre captura y final, se envía P2 aunque no ocurran más eventos; offline→online reintenta; 401 no provoca retry infinito.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-10",
+      "title": "Logros arbitrarios y unión no acotada permiten crecimiento permanente de una fila",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/_lib/players.ts",
+          "line": 139,
+          "detail": "Solo valida regexp, deduplica y limita 64 por payload, no catálogo."
+        },
+        {
+          "file": "api/v1/sync.ts",
+          "line": 33,
+          "detail": "La unión de logros de la fila y payload no tiene límite global."
+        },
+        {
+          "file": "api/v1/players.ts",
+          "line": 35,
+          "detail": "Alta también acepta esos identificadores."
+        },
+        {
+          "file": "scripts/db/schema.sql",
+          "line": 23,
+          "detail": "No hay restricción al tamaño del array."
+        },
+        {
+          "file": "src/account/api.ts",
+          "line": 81,
+          "detail": "Las respuestas tienen timeout por fetch sin límite de tamaño del JSON."
+        }
+      ],
+      "scenario": "Cada sync envía 64 IDs sintácticamente válidos nuevos (invented-0-0, etc.). Tres lotes distintos dejan 192 entradas por cálculo aislado y la unión sigue creciendo aunque cada solicitud cabe bajo el límite. Puede reclamar IDs reales como route-champion sin evidencia.",
+      "impact": "Amplificación de almacenamiento/CPU/respuestas y logros competitivos falsos; la cuenta crece permanentemente y toda lectura ownerView serializa el array.",
+      "fix": "Validar contra catálogo compartido, acotar unión total a su tamaño y derivar los logros verificables de eventos válidos. Distinguir logros solo locales/no verificados; limpiar datos históricos ajenos al catálogo.",
+      "acceptance": "IDs desconocidos rechazados/ignorados; el array nunca supera catálogo aunque lleguen lotes distintos; logros competitivos requieren evidencia o quedan marcados no verificados.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-11",
+      "title": "Lecturas públicas y de cuenta consultan BD sin límite de aplicación",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/leaderboard.ts",
+          "line": 19,
+          "detail": "GET sin auth dispara top y count; con token además findPlayer/rank."
+        },
+        {
+          "file": "api/v1/health.ts",
+          "line": 7,
+          "detail": "Cada petición pública hace select 1."
+        },
+        {
+          "file": "api/v1/me.ts",
+          "line": 7,
+          "detail": "GET ejecuta lookup/ranking sin rate-limit; PATCH y DELETE tampoco lo aplican."
+        },
+        {
+          "file": "api/_lib/http.ts",
+          "line": 32,
+          "detail": "no-store impide caché HTTP compartida por defecto."
+        },
+        {
+          "file": "api/_lib/security.ts",
+          "line": 63,
+          "detail": "Los límites existentes solo se llaman desde alta/recover/sync/admin."
+        }
+      ],
+      "scenario": "Un cliente solicita /leaderboard o /health repetidamente, incluso sin cuenta. No hay admisión/caché a nivel de código: cada GET hace consultas reales; un token válido añade counts de ranking. No se probó carga ni se inspeccionó un WAF externo.",
+      "impact": "Camino verificable de amplificación de consultas/costo y potencial degradación; no se afirma DoS efectivo en producción ni ausencia de protección externa.",
+      "fix": "Caché breve de top/totales sin identidad, presupuesto de lectura por IP confiable/account y protección edge; health público cacheado/ligero y readiness DB restringido. Moderar PATCH para evitar abuso sin bloquear redes de un stand.",
+      "acceptance": "Con DB mock contar consultas: ráfaga de GET anónimos no hace una consulta por solicitud sin límite; cache global no incluye me/token; validar admisión también en PATCH/DELETE y despliegue edge.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-12",
+      "title": "readJson limita caracteres, no bytes, y solo después de cargar el cuerpo completo",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/_lib/http.ts",
+          "line": 49,
+          "detail": "Se anuncia limitBytes=4096."
+        },
+        {
+          "file": "api/_lib/http.ts",
+          "line": 54,
+          "detail": "request.text lee todo antes de la comprobación."
+        },
+        {
+          "file": "api/_lib/http.ts",
+          "line": 58,
+          "detail": "text.length cuenta unidades UTF-16, no UTF-8."
+        }
+      ],
+      "scenario": "POST sin Content-Length con {school: \"ñ\" repetido 3000}: cálculo aislado 3013 caracteres y 6013 bytes; pasa el control de tamaño. Un stream más grande sin Content-Length se materializa antes de ser rechazado. El límite duro de la plataforma no se inspeccionó.",
+      "impact": "El contrato de 4KB no se cumple y no limita memoria durante la lectura. No se afirma un agotamiento práctico sin conocer límite de Vercel.",
+      "fix": "Leer stream con contador de bytes, cancelar al superar tope, validar Content-Type y objeto plano según endpoint. Diferenciar 413 de JSON inválido 400; aplicar límite de plataforma como defensa adicional.",
+      "acceptance": "Cuerpo UTF-8 de más de4096 bytes rechazado aunque tenga menos caracteres; stream sin longitud se cancela al límite; array/no JSON tiene error definido.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-13",
+      "title": "Campos POST de UUID y límite del ranking llegan malformados a SQL",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 68,
+          "detail": "Regex [0-9a-f-]{36} permite guiones en cualquier posición, incluso 36 guiones."
+        },
+        {
+          "file": "api/v1/leaderboard.ts",
+          "line": 17,
+          "detail": "Number(limit) se topa pero no fuerza entero."
+        },
+        {
+          "file": "api/v1/leaderboard.ts",
+          "line": 21,
+          "detail": "LIMIT recibe ese parámetro."
+        },
+        {
+          "file": "api/_lib/http.ts",
+          "line": 85,
+          "detail": "El error SQL acaba como 500."
+        }
+      ],
+      "scenario": "Admin autenticado envía id=\"------------------------------------\" o GET público /leaderboard?limit=5.5. Pasa validación de aplicación; UUID inválido / parámetro no entero no representan entradas válidas para esas consultas. La respuesta exacta de PostgreSQL no se ejecutó.",
+      "impact": "Errores de usuario convierten peticiones en fallos internos y consultas innecesarias; ruido operativo. No es inyección SQL porque se parametriza.",
+      "fix": "Regex UUID con grupos y versión/variante apropiados o validador; limit entero finito con política explícita (rechazar o floor). Responder 400/422 antes de DB.",
+      "acceptance": "Mock de query no se invoca para UUID malformado o fracciones no permitidas; formato correcto, enteros y límites negativos/grandes/Infinity se comportan según contrato.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-14",
+      "title": "La exportación de contactos se corta a 5000 sin indicar que faltan jugadores",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 28,
+          "detail": "SELECT tiene limit5000 sin cursor."
+        },
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 60,
+          "detail": "count informa solo filas entregadas, sin total/hasMore."
+        },
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 51,
+          "detail": "CSV no indica truncamiento ni permite paginar."
+        }
+      ],
+      "scenario": "Cuando hay más de5000 jugadores elegibles, GET JSON/CSV muestra los primeros por XP; los demás, incluyendo quienes consintieron contacto, quedan fuera sin señal de exportación parcial.",
+      "impact": "Exportación operativamente incompleta y sesgada por XP; el conteo es correcto para el lote pero no permite conocer la omisión. Escenario de volumen, no volumen actual confirmado.",
+      "fix": "Paginación por cursor estable y total/hasMore, o export streaming completo con límites visibles. Mostrar si el CSV es parcial y permitir continuación.",
+      "acceptance": "Con5001 filas elegibles, se obtienen todas sin duplicados/omisiones o se declara truncamiento y cursor; retiro de consentimiento durante export respeta política de snapshot.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-15",
+      "title": "Recuperación admite submissions paralelos desde Enter y puede adoptar un token ya revocado",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "app/cuenta/recuperar.tsx",
+          "line": 35,
+          "detail": "submit solo comprueba valid, no loading ni mutex."
+        },
+        {
+          "file": "app/cuenta/recuperar.tsx",
+          "line": 91,
+          "detail": "onSubmitEditing sigue llamando submit aun con botón loading."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 152,
+          "detail": "restoreAccount no serializa intentos."
+        },
+        {
+          "file": "api/v1/recover.ts",
+          "line": 17,
+          "detail": "Cada intento rota token aun con mismo código."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 155,
+          "detail": "La respuesta que adopta última gana localmente."
+        }
+      ],
+      "scenario": "Presionar Enter dos veces en el campo o recuperar desde dos contextos casi simultáneos. Las rotaciones R1/R2 dejan R2 vigente; si la respuesta/local merge de R1 completa última, cliente adopta R1 y enseguida aparece expired. También puede haber resultado local de una cuenta mezclado con otro intento.",
+      "impact": "Flujo ofrece éxito de recuperación y luego sesión inválida; agota intentos y produce carreras adicionales. No necesita adivinar código ni DB comprometida.",
+      "fix": "Mutex/ref para submit y en store; invalidar intentos previos por generación; recuperación idempotente por intento y contrato para concurrencia entre dispositivos. Deshabilitar envío por teclado mientras loading.",
+      "acceptance": "Doble Enter genera una sola petición; respuesta retrasada del intento anterior nunca reemplaza token nuevo; concurrencia de recuperación muestra conflicto/resolución, no éxito con token inútil.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-16",
+      "title": "Un código de recuperación expuesto sigue tomando control después de cada recuperación legítima",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/v1/recover.ts",
+          "line": 17,
+          "detail": "Solo se rota token_hash, no recovery_hash."
+        },
+        {
+          "file": "api/v1/me.ts",
+          "line": 13,
+          "detail": "PATCH no expone regeneración de recovery_hash."
+        },
+        {
+          "file": "src/features/account/RecoveryCodeCard.tsx",
+          "line": 20,
+          "detail": "El código se trata como acceso permanente y se recomienda guardar foto."
+        },
+        {
+          "file": "src/features/account/RecoveryCodeCard.tsx",
+          "line": 28,
+          "detail": "Copiar lo deja en portapapeles general."
+        }
+      ],
+      "scenario": "El usuario detecta que su foto/portapapeles/código quedó expuesto y recupera su cuenta para desconectar a quien lo usó. El mismo código antiguo sigue autenticando y obteniendo ownerView (contacto incluido); la API no permite revocarlo, salvo eliminar cuenta.",
+      "impact": "No hay remediación del compromiso de la credencial raíz manteniendo cuenta/progreso. No se afirma fuga real ni que copiar sea por sí solo vulnerabilidad; el defecto es que exposición conocida no puede revocarse.",
+      "fix": "Ofrecer regeneración autenticada y confirmada de código con invalidez atómica del anterior; considerar rotación en recuperación y entrega segura/idempotente del nuevo secreto. Advertir y permitir ocultar código; tratar clipboard como acción consciente.",
+      "acceptance": "Después de regeneración, código antiguo devuelve not_found/unauthorized y nuevo funciona; la entrega fallida no bloquea al dueño ni crea credencial irrecuperable; no se registra código en logs.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-17",
+      "title": "Descifrado de contacto falla silenciosamente y health sigue verde con llave incorrecta",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "api/_lib/security.ts",
+          "line": 32,
+          "detail": "Clave ausente o incorrecta falla al cifrar."
+        },
+        {
+          "file": "api/_lib/security.ts",
+          "line": 50,
+          "detail": "Cualquier fallo al descifrar se convierte en null."
+        },
+        {
+          "file": "api/_lib/players.ts",
+          "line": 171,
+          "detail": "ownerView conserva contactConsent pero presenta contacto null."
+        },
+        {
+          "file": "api/v1/admin/players.ts",
+          "line": 37,
+          "detail": "Export imprime null sin distinguir corrupción/configuración."
+        },
+        {
+          "file": "api/v1/health.ts",
+          "line": 7,
+          "detail": "health solo comprueba select1."
+        }
+      ],
+      "scenario": "Despliegue accidental con SOYTEL_DATA_KEY incorrecta/no configurada: health devuelve ok; contacto ya guardado no aparece en owner/admin, nuevas altas con contacto fallan. En una edición nueva el formulario parte wantsContact=true pero contactValue vacío. No se leyeron llaves de despliegue.",
+      "impact": "Pérdida aparente de contactos y exportación incompleta sin diagnóstico; consentimiento=true/contact=null ambiguo. Una rotación no planificada impide recuperar los datos.",
+      "fix": "Validación fail-fast de configuración y readiness para operaciones sensibles; identificar versión de llave y errores de descifrado sin revelar PII. No presentar corrupción como ausencia; implementar rotación con keyring y migración verificable.",
+      "acceptance": "Llave ausente/incorrecta produce alerta/readiness no verde y error controlado del contacto, no falso null silencioso; rotación descifra antiguas y nuevas filas; logs contienen solo metadata segura.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-18",
+      "title": "Editar alias offline puede perder identityDirty frente a un PATCH/sync anterior",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/store.ts",
+          "line": 177,
+          "detail": "Identidad local cambia antes de request."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 183,
+          "detail": "Fallo offline solo marca un boolean identityDirty."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 164,
+          "detail": "Cualquier respuesta de editAccount pone identityDirty=false."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 243,
+          "detail": "sync de identidad también limpia el boolean sin revisión."
+        },
+        {
+          "file": "app/profile.tsx",
+          "line": 233,
+          "detail": "Guardar alias no tiene loading/mutex."
+        }
+      ],
+      "scenario": "Edición A de alias queda pendiente. Edición B posterior escribe alias local nuevo, falla offline y deja identityDirty=true. Cuando respuesta de A llega, pone false y actualiza identidad al alias A; o un sync de identidad anterior pone false mientras el local ya cambió. No hay revisión ni cola.",
+      "impact": "Cambios del usuario perdidos o perfil local distinto del ranking sin reparación automática. Misma familia de carreras que BE-04, pero ocurre sin cambio de sesión y exige revisión por campo/operación.",
+      "fix": "Cola de mutaciones o número de revisión de identidad; solo limpiar dirty si la revisión enviada sigue vigente, no sobrescribir draft más nuevo con respuesta vieja. Serializar setIdentity y guardar junto a revisión.",
+      "acceptance": "Con A pendiente y B offline, al volver la red el alias B prevalece y se sincroniza; respuesta antigua no limpia dirty de B; pruebas para alias y avatar simultáneos.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-19",
+      "title": "Curso omitido permite contacto sin tutor: la política para edad desconocida queda abierta",
+      "priority": "P2",
+      "confidence": "hipótesis",
+      "evidence": [
+        {
+          "file": "src/features/account/AccountForm.tsx",
+          "line": 49,
+          "detail": "Prefiero no decir selecciona grade=null."
+        },
+        {
+          "file": "src/features/account/AccountForm.tsx",
+          "line": 74,
+          "detail": "Tutor solo se requiere si needsGuardianConsent devuelve true."
+        },
+        {
+          "file": "src/account/rules.ts",
+          "line": 29,
+          "detail": "needsGuardianConsent(null) devuelve false."
+        },
+        {
+          "file": "api/_lib/players.ts",
+          "line": 100,
+          "detail": "API usa grade nulo cuando el alta lo omite."
+        },
+        {
+          "file": "app/privacidad.tsx",
+          "line": 50,
+          "detail": "El aviso requiere autorización para 7°/8°, no describe la excepción de curso no declarado."
+        }
+      ],
+      "scenario": "Un alumno de7°/8° elige Prefiero no decir (default del formulario) y activa invitaciones: UI/API aceptan contacto con guardianConsent=false. El código cumple una política basada únicamente en curso declarado, pero no prueba edad. Se requiere confirmar si la organización acepta este riesgo o pretende cubrir a todos los menores.",
+      "impact": "Posibilidad de eludir la intención de autorización parental con el flujo normal. No se emite conclusión legal ni se afirma que todo contacto de edad desconocida sea ilícito.",
+      "fix": "Definir política de edad desconocida con responsable de privacidad. Si se debe proteger a menores, preguntar una franja mínima de edad/confirmación o requerir tutor para contacto sin curso, manteniendo juego anónimo disponible; no inferir edad exacta del curso.",
+      "acceptance": "Casos grade=null/omitido/otro y curso conocido tienen comportamiento explícito, documentado y aprobado; si política protege edad desconocida, contacto no se guarda sin la autorización definida.",
+      "area": "backend"
+    },
+    {
+      "id": "BE-20",
+      "title": "Timeout HTTP termina al recibir cabeceras: JSON lento puede dejar operaciones colgadas",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/account/api.ts",
+          "line": 85,
+          "detail": "Abort timer controla fetch."
+        },
+        {
+          "file": "src/account/api.ts",
+          "line": 100,
+          "detail": "finally cancela timer tan pronto fetch devuelve Response."
+        },
+        {
+          "file": "src/account/api.ts",
+          "line": 105,
+          "detail": "response.json se espera fuera del tiempo límite."
+        },
+        {
+          "file": "src/account/store.ts",
+          "line": 253,
+          "detail": "syncing solo se libera cuando termina ese await."
+        }
+      ],
+      "scenario": "En web, responder con headers200 y comenzar un JSON sin cerrar el stream. fetch resuelve, se limpia el timer12s y response.json queda esperando indefinidamente. También ocurre con desconexión que no finaliza el body a tiempo.",
+      "impact": "Botón de alta/recuperación o estado syncing puede quedar ocupado sin timeout; llamadas siguientes se bloquean. El límite declarado12s no cubre la operación completa.",
+      "fix": "Mantener abort timer hasta consumir/validar body y finalizar request; finally envolviendo ambos pasos. Distinguir abort/JSON inválido de error de dominio, y acotar respuesta si el contrato lo requiere.",
+      "acceptance": "Fetch mock devuelve Response con stream de JSON que no cierra; request rechaza como timeout al límite y libera loading/syncing; JSON completo normal se procesa sin timer residual.",
+      "area": "backend"
+    },
+    {
+      "id": "RT-01",
+      "title": "Un participante puede sumar juegos inventados sin límite al ranking",
+      "priority": "P1",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/host.ts",
+          "line": 418,
+          "detail": "Tras autenticar token y secuencia, se castea action sin validar su unión discriminada."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 297,
+          "detail": "acceptsScore acepta cualquier game distinto de red-b215 en projects/checkin hall; falta allowlist de pillarIds."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 326,
+          "detail": "La deduplicación solo consulta player.games[action.game], por lo que cada clave nueva es un juego distinto."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 338,
+          "detail": "Se inserta una clave arbitraria en games con hasta 1000 puntos."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 100,
+          "detail": "playerTotal suma TODOS los valores de games, incluyendo juegos ajenos al catálogo."
+        },
+        {
+          "file": "tests/route-engine.test.ts",
+          "line": 141,
+          "detail": "El test existente deduplica un game válido; no cubre IDs desconocidos ni payloads fuera del tipo TS."
+        }
+      ],
+      "scenario": "Un miembro legítimo, dueño de su sessionKey/token, publica scores cifrados con game=\"extra-1\", \"extra-2\", etc. durante B213, con secuencias crecientes. Las claves extra no participan en el cálculo de previous de scoreEarliest, así que después del mínimo de apertura se pueden enviar juntas. No necesita falsificar firma del host ni conocer tokens de otros.",
+      "impact": "Inflación arbitraria del puntaje y del ranking de la ruta; crecimiento de estado/snapshots y coste de publicación. El tope de 1000 por juego no limita el total de claves. No se afirma inflación ilimitada de XP: calculateGameXp tiene su propio tope.",
+      "fix": "Validar PlayerAction en frontera de red, exigir game en {red-b215,...pillarIds}; usar estructuras sin prototipo para mapas indexados por IDs y limitar claves/total según catálogo.",
+      "acceptance": "Scores con game desconocido, ausente, objeto, __proto__ y constructor no mutan estado ni lanzan excepción; juegos válidos conservan idempotencia y límites. En proyectos, múltiples IDs inventados nunca incrementan total.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-02",
+      "title": "Estados firmados pueden reproducirse con igual revisión y retrasar reloj/failover",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/member.ts",
+          "line": 474,
+          "detail": "Solo rechaza si rev Y now son menores: misma revisión y now antiguo se aceptan."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 475,
+          "detail": "Cada aceptación actualiza lastStateAt incluso si es repetición exacta."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 476,
+          "detail": "offset se recalcula usando now del ciphertext reproducido."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 343,
+          "detail": "El cambio de broker depende de tiempo desde el último estado aceptado."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 369,
+          "detail": "El estado se publica retenido; los heartbeats mantienen rev y aumentan now."
+        }
+      ],
+      "scenario": "Un observador del broker captura un state opaco auténtico y lo republica en el mismo topic. Si el miembro permanece en esa revisión, el replay exacto se acepta indefinidamente, renueva lastStateAt y hace que hostNow vuelva a la hora capturada. Tras restaurar sin snapshot previo también acepta un retained antiguo sin evaluar edad. Un host restaurado con rev menor pero now mayor se acepta por el mismo AND.",
+      "impact": "Reloj/cuentas regresivas atrasados, presencia falsa y detección de host caído anulada para ese miembro; estados antiguos retenidos influyen al reabrir. No permite inventar puntajes ni estados: la firma Ed25519 y el cifrado siguen siendo necesarios.",
+      "fix": "Añadir epoch/session ID firmado y número de publicación estrictamente monótono; rechazar duplicados sin refrescar liveness. Definir política explícita para rollback/host restart, y frescura inicial sin depender ciegamente del reloj local.",
+      "acceptance": "Replays de mismo rev/now y mismo rev con now anterior no cambian snapshot, offset ni lastStateAt. Rev menor no retrocede silenciosamente: requiere nuevo epoch autenticado/resync. Retained histórico no mantiene un host ausente en línea. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-03",
+      "title": "Replay de join permite clonar participantes y renovar su presencia desde el broker",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/protocol.ts",
+          "line": 71,
+          "detail": "JoinRequest contiene alias/avatar, pero no clientId, challenge, timestamp ni session/epoch."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 386,
+          "detail": "El clientId proviene del topic, no del plaintext autenticado."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 395,
+          "detail": "Solo exige poder abrir el box y alias string; no verifica replay ni unión a topic."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 127,
+          "detail": "Repetir el saludo existente refresca lastSeen sin un heartbeat con token."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 130,
+          "detail": "Las altas ocupan cupo aunque el miembro no continúe el handshake."
+        }
+      ],
+      "scenario": "Un tercero que solo observa MQTT copia un join cifrado válido. Lo publica en /join/ con distintos IDs alfanuméricos para crear clones, o repite el mismo ID para mantener presencia; también puede recrear un jugador después de leave. El plaintext no vincula el ID al topic. Los DM quedan cifrados a la clave original: el observador no obtiene las credenciales.",
+      "impact": "Cupos agotados y bloqueo de checkins/avance por participantes fantasma; presencia renovable sin token. Es DoS/replay real sin romper NaCl, no takeover del participante ni lectura de DM.",
+      "fix": "Incluir clientId y epoch/challenge del host en el box y comprobarlos contra el topic; completar alta tras prueba de posesión fresca, cachear/deduplicar request IDs y aplicar rate limits/expiración de reservas. Reintentos legítimos deben ser idempotentes.",
+      "acceptance": "El mismo join no crea jugadores bajo otros topics ni refresca lastSeen indefinidamente. Replay tras leave no revive la identidad sin challenge nuevo. Sesenta copias de un ciphertext no consumen sesenta plazas; retries normales siguen funcionando. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-04",
+      "title": "La unión queda sin timeout ni búsqueda de broker después de aceptar hello",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/member.ts",
+          "line": 330,
+          "detail": "Rota brokers y llega a not-found únicamente cuando credentials.hostBox está vacío."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 340,
+          "detail": "Con hostBox fijado reenvía join indefinidamente."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 326,
+          "detail": "No considera unido al miembro hasta tener sessionKey."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 343,
+          "detail": "El detector STALE que rota brokers solo se activa con sessionKey."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 411,
+          "detail": "pin fija hostBox y hostSign, sin validar edad de hello.at."
+        },
+        {
+          "file": "src/route/protocol.ts",
+          "line": 105,
+          "detail": "openHello verifica firma autocontenida pero no vigencia de hello.at."
+        }
+      ],
+      "scenario": "El miembro recibe el hello retenido, pero el host se apaga o migra de broker antes del welcome. También ocurre al introducir un código de una ruta abandonada cuyo hello sigue retenido. Con hostBox ya fijado, no entra al timeout de descubrimiento ni al failover de miembros unidos.",
+      "impact": "Pantalla Buscando la ruta… permanente y reintentos/colas sin un resultado not-found útil. El pin correcto protege contra otro host, pero se convierte en un bloqueo de recuperación.",
+      "fix": "Separar identidad pinned de disponibilidad del broker; establecer deadline global para JOIN/DM y buscar otros brokers preservando las claves pinned. Validar freshness del hello firmado y limpiar retained al cerrar/expirar.",
+      "acceptance": "Con hello válido y ningún welcome, la UI sale a un error recuperable en tiempo acotado. Si host cambia de broker antes del welcome, el miembro lo encuentra sin aceptar claves distintas. Hello de ruta extinta no causa espera ilimitada. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-05",
+      "title": "CONNACK publica estado nuevo antes de vaciar estados retenidos antiguos",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 218,
+          "detail": "setStatus(online) invoca sincrónicamente el callback del host antes de replay de inflight/outbox."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 315,
+          "detail": "onLinkStatus(online) publica inmediatamente hello y state actuales."
+        },
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 224,
+          "detail": "Después de ese callback se reenvía inflight (incluidas publicaciones recién emitidas) y luego outbox."
+        },
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 142,
+          "detail": "Durante offline acumula publicaciones sin coalescer retain por topic."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 219,
+          "detail": "El host sigue publicando state cada cinco segundos durante la desconexión."
+        }
+      ],
+      "scenario": "Tras una caída hay state antiguos en outbox. Al recibir CONNACK, el host envía el snapshot fresco desde onStatus; después MQTT reenvía pendientes antiguos, con retain=true, y deja al final uno viejo como retained. Un callback que publica se incorpora también al mapa inflight que se recorre inmediatamente.",
+      "impact": "Retained retrocede hasta el siguiente heartbeat, ráfagas redundantes y posible regresión de reloj/estado al reconectar o hacer join tardío. Las revisiones ayudan parcialmente a clientes existentes, pero no al recién abierto y no con rev iguales (RT-02).",
+      "fix": "Reordenar handshake: preparar/reanudar transporte y cola antes de notificar disponibilidad de aplicación, evitando incluir nuevas publicaciones en el snapshot de replay. Coalescer state/hello retenidos por topic y publicar solo el snapshot actual tras reconectar.",
+      "acceptance": "Con outbox old y onStatus que publica new, el último PUBLISH retained en wire es new, no old; new no se reenvía por haber sido creado dentro del callback. Probar offline prolongado, reconexión y nuevo miembro leyendo retained. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-06",
+      "title": "Welcome/scores confirmados no son durables y el miembro restaurado no repara altas perdidas",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/host.ts",
+          "line": 405,
+          "detail": "Se envía welcome y state antes de completar persistencia de la alta."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 373,
+          "detail": "saveHost se retrasa 800 ms y se lanza con void; no hay confirmación durable."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 481,
+          "detail": "Un snapshot que refleja score elimina la acción pendiente."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 161,
+          "detail": "restore conserva sessionKey/token y conecta sin un nuevo JOIN de recuperación."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 382,
+          "detail": "Con hostSign y sessionKey conocidos no vuelve a sendJoin al recibir hello."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 478,
+          "detail": "Acepta status joined aunque su ID ya no exista en snap.players."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 67,
+          "detail": "Sin view.me vuelve a ConnectingView incluso si status es joined."
+        }
+      ],
+      "scenario": "El host muere dentro de la ventana de persistencia, después de que el teléfono guardó welcome o eliminó su pendiente por score reflejado. Al reiniciar desde el record anterior se pierde el jugador/score. Si se perdió el alta, el miembro conserva la sesión y manda solo acciones que el host ignora porque player no existe.",
+      "impact": "Pérdida de puntuación ya confirmada o participante permanentemente en Conectando… tras host restart; heartbeat publicado no repara el registro. También explica el riesgo de tomar control desde un record todavía atrasado.",
+      "fix": "Persistir eventos críticos antes de confirmar la aceptación, o usar log durable con ACK de aplicación. Añadir handshake de reanudación/autenticación y resync cuando una sesión restaurada no encuentra su ID; persistir acciones pendientes hasta ACK durable.",
+      "acceptance": "Matar/restaurar host inmediatamente después de welcome y score no pierde acciones confirmadas. Miembro con sessionKey cuyo ID falta obtiene reanudación segura o rechazo explícito, nunca estado joined sin me indefinido. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-07",
+      "title": "La exclusión del host tiene carreras en aperturas concurrentes y fallback de lease",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/storage.ts",
+          "line": 128,
+          "detail": "Web Locks se usa cuando existe; la carrera solo afecta navegadores sin esa API."
+        },
+        {
+          "file": "src/route/storage.ts",
+          "line": 167,
+          "detail": "El fallback lee lease y escribe en pasos separados sin CAS ni verificación posterior."
+        },
+        {
+          "file": "src/route/storage.ts",
+          "line": 171,
+          "detail": "La pérdida de control solo se detecta en el intervalo posterior de cinco segundos."
+        },
+        {
+          "file": "src/route/storage.ts",
+          "line": 182,
+          "detail": "release elimina lease sin comprobar que todavía pertenezca al owner."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 185,
+          "detail": "Cada controller que recibe lock empieza a conducir/publicar inmediatamente."
+        },
+        {
+          "file": "src/route/hostManager.ts",
+          "line": 16,
+          "detail": "open comprueba controllers antes de await loadHost; no cachea una promesa in-flight y dos llamadas simultáneas pueden crear dos controllers."
+        },
+        {
+          "file": "src/route/storage.ts",
+          "line": 164,
+          "detail": "En native el lock es no-op: se confía en que HostManager ya evitó duplicados."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 65,
+          "detail": "OWNER es único por módulo, no por controller; duplicados dentro del proceso comparten owner en fallback."
+        }
+      ],
+      "scenario": "Dos pestañas sin navigator.locks leen simultáneamente lease vacío/vencido y ambas obtienen lock. Conducen desde sus records durante el intervalo de renovación. Si una pestaña libera antes de detectar que otra ganó, puede borrar la concesión ajena. Además, dos open(code) simultáneos dentro del mismo proceso pueden pasar la comprobación de controllers antes de await loadHost. Native concede ambos locks; en fallback comparten OWNER y ni siquiera se expulsan entre sí. Una instancia sobrescribe la referencia del Map mientras la otra queda ejecutándose fuera del manager.",
+      "impact": "Split-brain temporal, estados distintos firmados por las mismas claves y escrituras que pisan avances/puntajes. No es un ataque de un usuario externo del broker: requiere las pestañas del mismo origen/dispositivo con el record del host. En el caso intra-proceso puede quedar un controller/timers huérfano permanente que stopAll/nudgeAll no alcanzan.",
+      "fix": "Usar arbitraje atómico de IndexedDB/BroadcastChannel con fencing token persistente; verificar ownership antes de cada escritura/publicación y de borrar lease. Si no puede garantizar exclusividad, deshabilitar escritura de host en ese navegador. Serializar/cachear la promesa de apertura por code y transferir controllers de forma explícita, también en native.",
+      "acceptance": "Forzar dos acquisitions concurrentes sin Web Locks concede solo un writer. release de un owner obsoleto no borra lease nuevo; pruebas cubren steal, pestaña congelada, renovación tardía y fencing de saves. Dos open simultáneos en Android/iOS o fallback devuelven la misma instancia y dejan un solo juego de timers; stopAll realmente detiene todas las instancias. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-08",
+      "title": "Salir offline o cambiar de ruta deja jugadores/cupos huérfanos",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/member.ts",
+          "line": 223,
+          "detail": "leave envía la acción y cierra inmediatamente; no espera ACK de aplicación."
+        },
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 142,
+          "detail": "El leave offline se agrega a una cola solo en memoria."
+        },
+        {
+          "file": "src/route/link.ts",
+          "line": 75,
+          "detail": "stop cierra y descarta el MqttClient, con su cola/inflight."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 171,
+          "detail": "join empieza con leave(false), sin notificar salida de la ruta anterior."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 130,
+          "detail": "El cupo se calcula con jugadores no kicked, incluidos offline indefinidos."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 105,
+          "detail": "offline solo cambia presencia; no elimina ni libera cupo."
+        }
+      ],
+      "scenario": "El teléfono pulsa Salir sin red: se encola leave y se destruye el transporte antes de poder entregarlo. O el usuario vuelve al landing e inicia otra ruta: join hace leave(false) y deja el jugador anterior. Las identidades antiguas dejan de bloquear el avance por timeout, pero siguen ocupando plazas.",
+      "impact": "Ranking con participantes que ya salieron, cupos consumidos hasta MAX_PLAYERS aunque estén offline, y mensajes/expectativas de abandono distintos del estado real. MQTT PUBACK por sí solo tampoco confirma que engine procesó leave.",
+      "fix": "Confirmar leave con ACK de aplicación cuando online y conservar tombstone/reintento durable cuando offline; usar abandono/TTL explícito para liberar reservas, preservando resultados si es política de producto. Cambiar de sala debe abandonar la anterior de forma explícita.",
+      "acceptance": "Salir durante offline y luego recuperar red elimina/libera correctamente el lugar anterior sin reintroducirlo. Cambiar de ruta no deja una identidad permanente. Cupo no se agota con ciclos de desconexión/entrada; no asumir que LocalBus reproduce la pérdida real al cerrar socket. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-09",
+      "title": "Las acciones pendientes expiran silenciosamente y la UI puede afirmar éxito sin ACK",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/member.ts",
+          "line": 349,
+          "detail": "Después de 90 s borra pending sin error ni refresh inmediato."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 119,
+          "detail": "pending existe solo en memoria y no forma parte de MemberCredentials."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 422,
+          "detail": "Al terminar B215 fija done antes de confirmación y luego muestra WaitingView."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 439,
+          "detail": "Sin pending, puntaje ausente se muestra como ¡0 puntos!, no como envío fallido."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 532,
+          "detail": "Proyecto se marca localDone y deshabilita antes de score aceptado."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 624,
+          "detail": "Trivia marca chosen y bloquea alternativas antes de ACK."
+        },
+        {
+          "file": "src/features/route/QuizViews.tsx",
+          "line": 94,
+          "detail": "chosen != null muestra ¡Respuesta enviada!, aunque solo fue encolada."
+        }
+      ],
+      "scenario": "Durante una caída prolongada el jugador termina juegos o elige una alternativa. Después del timeout se borra la acción; proyectos siguen localmente completados y pueden mostrar cero, y trivia afirma enviada aunque el host nunca la recibió. Si la app muere, pending desaparece sin persistencia. Mientras no llega otro refresh, view.pending puede incluso quedarse desfasado respecto del Map.",
+      "impact": "Pérdida silenciosa de puntajes/respuestas y bloqueo de recuperación/reintento en UI; estados visuales optimistas que no distinguen encolado, recibido, rechazado y expirado.",
+      "fix": "Modelar lifecycle de acción con ID y ACK/NACK/motivo; persistir pendientes que deban sobrevivir restart, hacer refresh en expiración y ofrecer reintento/error. No usar localDone/chosen como confirmación del host ni mostrar éxito al agotar retry.",
+      "acceptance": "Sin entregar publicaciones durante más de GIVE_UP_MS, UI muestra fallo recuperable y no éxito falso. El usuario puede reintentar si la fase sigue permitiéndolo. Reinicio conserva pendientes o informa la pérdida explícitamente. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-10",
+      "title": "Deeplinks asumen parámetros escalares y canonizan códigos inválidos sin validarlos",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 32,
+          "detail": "El genérico declara codigo/k como string, pero no convierte/valida los valores runtime."
+        },
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 34,
+          "detail": "Llama sanitizeJourneyCode directamente desde params.codigo en initializer de render."
+        },
+        {
+          "file": "src/lib/progression.ts",
+          "line": 61,
+          "detail": "sanitizeJourneyCode ejecuta raw.toUpperCase; un array no tiene ese método. Además elimina/trunca caracteres de un token externo."
+        },
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 69,
+          "detail": "k se pasa literalmente como fingerprint sin formato, tipo ni normalización controlada; igualdad se decide con codigo sanitizado."
+        },
+        {
+          "file": "app/ruta/stand.tsx",
+          "line": 49,
+          "detail": "El deep link del stand también llama toUpperCase sin guard de tipo."
+        },
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 34,
+          "detail": "code solo se deriva una vez: otro enlace en el mismo componente no actualiza el formulario automáticamente."
+        },
+        {
+          "file": "release-run/node_modules/expo-router/build/hooks/useLocalSearchParams.js",
+          "line": 21,
+          "detail": "El hook conserva params de tipo array; el genérico TS no cambia esto."
+        },
+        {
+          "file": "release-run/node_modules/expo-router/build/fork/getStateFromPath-forks.js",
+          "line": 388,
+          "detail": "Parámetros query repetidos producen values.length>1 y se conservan como array."
+        }
+      ],
+      "scenario": "Un enlace con parámetros repetidos codigo=ABC234&codigo=XYZ789 puede producir string[] en Expo Router y causar excepción al abrir landing/stand. Un codigo más largo o con caracteres prohibidos se convierte en otra sala en vez de rechazarse. k inválido o repetido queda como pin imposible y se manifiesta como ruta no encontrada. El cambio de parámetros sobre un componente reutilizado deja el code previo.",
+      "impact": "Crash de navegación externa, unión a sala distinta del token recibido, o fallos de QR explicados erróneamente como conectividad. No es ejecución de código ni exposición de claves.",
+      "fix": "Parsear datos externos como unknown: exigir un único codigo escalar de formato completo y un único k de 12 hex cuando presente; rechazar duplicados antes de derivar sala. Mantener sanitización flexible solo para escritura manual. Sincronizar formulario con nuevas invitaciones y mostrar error de enlace inválido.",
+      "acceptance": "Repeated query params, valores no string, codigo inválido/sobre-largo, k no hexadecimal/longitud incorrecta y nuevas invitaciones sobre pantalla montada no causan excepción ni cambio silencioso de sala. QR canónico mantiene su fingerprint. La API real de useLocalSearchParams conserva arrays (dependencia inspeccionada).",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-11",
+      "title": "Secuencia basada en Date.now no garantiza monotonicidad tras reinicio/cambio de reloj",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/member.ts",
+          "line": 118,
+          "detail": "seq se inicializa a cero y no se almacena en MemberCredentials."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 499,
+          "detail": "La supuesta monotonicidad tras restart usa Math.max(Date.now(), this.seq+1), sin contador persistente."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 419,
+          "detail": "Se acepta cualquier typeof number: no exige finitud, safe integer ni límites."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 421,
+          "detail": "El host rechaza secuencias <= último valor, aunque la sesión se restauró legítimamente."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 422,
+          "detail": "Se guarda seq incluso cuando la acción después no será válida; persistencia depende de cambios de rev."
+        }
+      ],
+      "scenario": "Tras publicar con un reloj adelantado, el teléfono corrige su hora y reinicia la app. El host conserva una seq mayor; los nuevos heartbeats/acciones quedan ignorados hasta que el tiempo alcance ese valor. Un miembro también puede enviarse a sí mismo un JSON numérico 1e309, que JSON.parse interpreta como Infinity, y bloquear sus acciones futuras.",
+      "impact": "Sesión aparentemente conectada pero sin checkins/scores/respuestas aceptadas y presencia que vence. El caso de número no finito afecta la identidad cuyo token conoce el emisor; no habilita bloquear a otro jugador sin su token.",
+      "fix": "Usar contador/epoch de sesión persistente independiente del reloj, negociar último ACK al reanudar y exigir Number.isSafeInteger(seq) y seq>0. Validar acción antes de avanzar high-water mark, y persistir el ACK del contador con sus efectos.",
+      "acceptance": "Corrección de reloj hacia atrás y restart no bloquean sesión. Seq no finita, fraccionaria, negativa o fuera de rango se rechaza sin mover high-water mark. Replays genuinos con misma seq siguen siendo idempotentes. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-12",
+      "title": "Falta validación runtime completa y límites defensivos de mensajes/paquetes",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/protocol.ts",
+          "line": 113,
+          "detail": "parseJson<T> solo hace cast: no valida esquema, tamaños ni versión interna."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 471,
+          "detail": "Snapshot descifrado solo se valida por code antes de usar kicked.includes y players.find."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 450,
+          "detail": "Welcome no valida key/token/id/alias ni identidad esperada."
+        },
+        {
+          "file": "src/route/protocol.ts",
+          "line": 109,
+          "detail": "Hello no comprueba tamaño/formato de box ni campos v/at internos."
+        },
+        {
+          "file": "src/realtime/mqttPackets.ts",
+          "line": 137,
+          "detail": "PacketReader concatena/acumula sin máximo de bytes y no descarta remaining length malformado."
+        },
+        {
+          "file": "src/realtime/mqttPackets.ts",
+          "line": 103,
+          "detail": "decodePacket no comprueba tamaños mínimos ni QoS/reserved flags válidos."
+        },
+        {
+          "file": "src/route/link.ts",
+          "line": 128,
+          "detail": "Payload se decodifica a string completo sin cota antes de validación criptográfica."
+        }
+      ],
+      "scenario": "Payload grande publicable en topics conocidos consume memoria/CPU antes de ser rechazado; un host autenticado defectuoso puede firmar snapshot sin arrays y disparar TypeError en miembro. Un broker defectuoso/malicioso puede entregar headers MQTT truncados, varints imposibles o length enorme y dejar el reader acumulando. Un simple publisher público NO controla los headers que el broker genera hacia el cliente.",
+      "impact": "Endurecimiento frente a memoria/CPU y crashes por incompatibilidad/host defectuoso. No se afirma que un observador sin claves pueda crear un snapshot válido que crashee mediante firma falsificada, ni que mandar JSON arbitrario como PUBLISH equivale a inyectar un CONNACK.",
+      "fix": "Definir esquemas estrictos para todos los plaintext/envelopes, límites previos por topic y versión/epoch; validar longitudes exactas de claves/nonces/firma/base64. Reader debe rechazar bytes inválidos con cierre/retry y cota global por paquete/buffer; aislar excepciones de callbacks.",
+      "acceptance": "Fuzz de arrays, null, tipos incorrectos, tamaño excesivo, base64/claves inválidas, varint >4 bytes y paquetes truncados termina de forma controlada. Mensajes públicos sin autenticación se descartan antes de trabajo costoso; mensajes válidos continúan funcionando.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-13",
+      "title": "El registro de podio no es transaccional: marca primero y puede perder resultado/XP",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 646,
+          "detail": "wasRouteRecorded y markRouteRecorded son operaciones separadas."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 647,
+          "detail": "Marca como grabada ANTES de recordGameResult."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 643,
+          "detail": "recording.current queda true aun si falla el async, sin catch/retry."
+        },
+        {
+          "file": "src/route/storage.ts",
+          "line": 197,
+          "detail": "La lista recorded usa read-modify-write sin lock y se recorta a 50 códigos."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 125,
+          "detail": "recordGameResult no recibe clave idempotente de ruta ni comprueba un resultado existente."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 159,
+          "detail": "Perfil y resultados se escriben por separado, no en una transacción con recorded."
+        }
+      ],
+      "scenario": "Se agota cuota de almacenamiento o se cierra la app entre markRouteRecorded y guardar resultado: al reabrir, wasRouteRecorded ya impide recuperar XP. Dos montajes/pestañas del podio pueden superar simultáneamente el check-before-mark y ejecutar recordGameResult dos veces. Después de 50 rutas, un código evicto tampoco conserva el candado de deduplicación.",
+      "impact": "Resultado/XP perdido permanentemente o doble registro/inconsistencias por concurrencia. No es duplicación de scores del engine: esos están deduplicados por game; este problema está en el premio local posterior.",
+      "fix": "Registrar resultado y recompensa con ID de sesión/epoch único en operación transaccional e idempotente; marcar recorded solo tras commit durable. Mantener ledger de IDs coherente con historial, manejar errores y reintentar sin duplicar.",
+      "acceptance": "Inyectar fallo entre cada escritura y remount recupera exactamente un resultado/XP. Dos registros concurrentes del mismo session ID entregan una sola recompensa. Rutas antiguas y reutilización accidental de código no dependen únicamente del buffer de 50 códigos. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-14",
+      "title": "Mejorar quiet zone y alternativa accesible del QR sin perder verificación",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/features/route/QrCode.tsx",
+          "line": 15,
+          "detail": "El dibujo solo reserva dos módulos por lado (offset+2, size+4); la quiet zone convencional de QR es de cuatro."
+        },
+        {
+          "file": "app/ruta/stand.tsx",
+          "line": 516,
+          "detail": "El stand añade padding blanco fijo de 10 px: compensa parcialmente, pero no garantiza cuatro módulos para tamaños/longitudes distintos."
+        },
+        {
+          "file": "src/features/route/QrCode.tsx",
+          "line": 22,
+          "detail": "Ya existe role=image y label con URL: no está ausente toda accesibilidad."
+        },
+        {
+          "file": "app/ruta/stand.tsx",
+          "line": 240,
+          "detail": "Ya existe botón accesible para copiar joinUrl, incluyendo k."
+        },
+        {
+          "file": "src/features/route/parts.tsx",
+          "line": 131,
+          "detail": "La entrada manual tiene etiqueta accesible pero escribir solo el código no conserva el pin del QR."
+        }
+      ],
+      "scenario": "Reutilizar QrCode fuera del wrapper o variar tamaño/URL puede dejar margen insuficiente, especialmente para cámara distante o pantallas con reflejo. El lector de pantalla recibe una URL larga como imagen y depende de copiar/compartir para mantener el pin; el camino manual solo-code reduce la garantía de autenticidad.",
+      "impact": "Mejora de fiabilidad y acceso equivalente al flujo autenticado. No se afirma que el QR actual siempre sea ilegible: el wrapper blanco ayuda y no se ejecutó decodificación óptica ni TalkBack/VoiceOver.",
+      "fix": "Incorporar cuatro módulos de quiet zone en el componente, hacer el padding independiente de tamaño, y ofrecer un enlace/acción abrir o compartir la invitación validada con k más label breve y descriptivo. Conservar copy y entrada manual como alternativas.",
+      "acceptance": "Decodificar URL real y URL máxima soportada a 200/260 px con quiet zone interna de cuatro módulos; probar cámara y foco/lector de pantalla en web/Android/iOS. Alternativa accesible conserva codigo+k y no reduce silenciosamente al código solo.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-15",
+      "title": "MQTT ignora rechazo de suscripciones y declara online con solo CONNACK",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 218,
+          "detail": "online significa CONNACK exitoso, no disponibilidad de topics de aplicación."
+        },
+        {
+          "file": "src/realtime/mqttClient.ts",
+          "line": 234,
+          "detail": "SUBACK se ignora en default, sin revisar códigos granted=0x80."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 67,
+          "detail": "findReachableBroker solo verifica conexión, no permisos subscribe/publish."
+        },
+        {
+          "file": "src/realtime/config.ts",
+          "line": 16,
+          "detail": "La configuración admite brokers personalizados y credenciales públicas de compilación."
+        }
+      ],
+      "scenario": "Un broker configurado acepta CONNECT pero rechaza subscriptions por ACL o límite. Stand/participante ven transporte online aunque no existe flujo de hello/join/state; el miembro ya pinned puede quedarse en la espera sin límite de RT-04.",
+      "impact": "Diagnóstico falso de disponibilidad y rutas creadas en un broker que no permite su protocolo. Es especialmente relevante para migrar de brokers públicos a uno privado, no evidencia de que los defaults estén denegando hoy.",
+      "fix": "Rastrear SUBACK por packet ID, comprobar granted y comunicar estado ready separado de online; incluir subscribe/publicación de comprobación o error accionable en la selección de broker. No tratar EXPO_PUBLIC_MQTT_PASSWORD como secreto ni autenticación por usuario final.",
+      "acceptance": "Simular SUBACK 0x80 da error/fallback visible y nunca ready. CONNACK sin permisos no basta para elegir un broker. Suscripciones exitosas, sesión persistente y reconnect conservan el flujo.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-16",
+      "title": "Errores de persistencia dejan botones de unión/creación cargando sin salida",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 65,
+          "detail": "Activa joining y luego espera updateIdentity y routeMember.join sin try/catch/finally."
+        },
+        {
+          "file": "app/ruta/index.tsx",
+          "line": 71,
+          "detail": "El reset de joining solo ocurre si todas las promesas anteriores resuelven."
+        },
+        {
+          "file": "app/ruta/stand.tsx",
+          "line": 130,
+          "detail": "create establece creating=true y solo lo restaura tras create exitoso."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 192,
+          "detail": "saveMember es requisito previo a conectar y puede rechazar."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 145,
+          "detail": "saveHost también es requisito previo al retorno del controller."
+        },
+        {
+          "file": "src/components/TelButton.tsx",
+          "line": 70,
+          "detail": "loading deshabilita el botón, por lo que el fallo impide un nuevo intento desde la misma UI."
+        }
+      ],
+      "scenario": "AsyncStorage/vault fallan por cuota, modo privado, error de IndexedDB/llavero o acceso al disco. La promesa se rechaza; la llamada void del handler no la maneja y joining/creating quedan activos. Offline de red no causa por sí solo estos rechazos; es un escenario de error de almacenamiento.",
+      "impact": "Acción atrapada y rechazo no manejado, sin feedback ni reintento para entrar/crear ruta. La navegación al juego solo ocurre tras éxito, así que no es una falsa unión, sino bloqueo de interfaz.",
+      "fix": "Usar try/catch/finally, mensaje accesible y rollback/cleanup de estados parcialmente creados; separar fallos de persistencia, red y validación. Impedir también doble ejecución por submit del teclado mientras una operación está en curso.",
+      "acceptance": "Inyectar rechazo de updateIdentity/saveMember/saveHost/liberación de lock restablece botones y permite reintentar, sin promesas no manejadas ni controllers huérfanos. Submit repetido de teclado no lanza joins/creates concurrentes.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-17",
+      "title": "Expulsar a un miembro no revoca lectura de futuros estados cifrados",
+      "priority": "P3",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/host.ts",
+          "line": 406,
+          "detail": "Todos los miembros reciben la misma sessionKey."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 374,
+          "detail": "kick marca kicked pero no rota clave ni epoch."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 367,
+          "detail": "Los estados posteriores siguen cifrados con la misma record.sessionKey."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 478,
+          "detail": "Detectar kicked solo cambia status; no desconecta ni elimina credenciales."
+        },
+        {
+          "file": "src/route/member.ts",
+          "line": 465,
+          "detail": "El miembro sigue procesando estados si conserva sessionKey y hostSign."
+        }
+      ],
+      "scenario": "Un participante autorizado guarda su clave antes de ser expulsado y mantiene una suscripción MQTT propia. Puede descifrar aliases, ranking y preguntas de la ruta posterior. Puede emitir ciphertexts nuevos con shared key, pero no firma de host ni tokens de otros; engine rechaza sus acciones por kicked.",
+      "impact": "Revocación incompleta de confidencialidad hacia exmiembros, no takeover ni falsificación del host. Prioridad de mejora depende de si el producto promete privacidad del grupo tras expulsión; el código de sala además se muestra públicamente.",
+      "fix": "Si se necesita revocación real, generar epoch/key nuevos y distribuir por box solo a participantes vigentes, con transición de sesión autenticada. Desconectar/limpiar localmente al expulsado mejora UX pero por sí solo no revoca una clave ya conocida.",
+      "acceptance": "Tras kick y rotación, la clave antigua no abre estados del nuevo epoch; miembros restantes retoman sin pérdida/doble score. Tests conservan rechazo de acciones de expulsados y no confunden possession de shared key con autoridad Ed25519.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-18",
+      "title": "El proyecto activo de B213 no termina ni envía al avanzar el grupo",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 190,
+          "detail": "El comentario promete terminar/enviar el proyecto en curso al ir a hall, pero solo mantiene ProjectsView."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 527,
+          "detail": "StationGameHost del proyecto activo no recibe deadline ni forceFinish."
+        },
+        {
+          "file": "src/features/stations/games/TrainAIGame.tsx",
+          "line": 77,
+          "detail": "TrainAIGame solo consume seed/onComplete, no un deadline global."
+        },
+        {
+          "file": "src/features/stations/games/TrainAIGame.tsx",
+          "line": 110,
+          "detail": "Mientras se lee/espera Continuar el reloj de etapa no cierra el juego."
+        },
+        {
+          "file": "src/features/stations/kit.tsx",
+          "line": 167,
+          "detail": "StageBanner puede quedar abierto hasta que el jugador toque."
+        },
+        {
+          "file": "src/route/engine.ts",
+          "line": 300,
+          "detail": "Scores B213 se aceptan en projects/checkin hall, no durante quiz."
+        },
+        {
+          "file": "app/ruta/juego.tsx",
+          "line": 201,
+          "detail": "Si el host fuerza quiz, el proyecto en curso se desmonta sin ejecutar su onDone."
+        }
+      ],
+      "scenario": "El host pulsa Pasar al pasillo ahora o vence projectsSeconds mientras alguien está en un proyecto, por ejemplo leyendo StageBanner de Entrena la IA. El jugador sigue en el proyecto sin cierre forzoso ni envío, en vez de recibir el checkin de hall. Si el host luego inicia trivia sin esperar, el juego se desmonta y su resultado nunca se envía.",
+      "impact": "Un miembro online puede quedar reteniendo el checkin del grupo hasta completar manualmente el proyecto; un avance posterior pierde lo jugado. El tratamiento de B215 sí tiene forceFinish/deadline, pero ese mecanismo no se aplica a B213.",
+      "fix": "Definir política de finalización de proyecto en cambios de fase: forzar entrega parcial una sola vez con API compartida, o preservar y advertir explícitamente la espera. Garantizar envío/ACK antes de desmontar al entrar a trivia, con ventana tardía acordada por engine.",
+      "acceptance": "Avanzar projects→hall durante banner, etapa y summary dispara exactamente un resultado parcial o una transición explícita sin bloqueo. Forzar hall→quiz no descarta silenciosamente lo jugado; pruebas de fase verifican comportamiento y deduplicación. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "RT-19",
+      "title": "La vista del stand en solo lectura no sigue al host autoritativo",
+      "priority": "P2",
+      "confidence": "confirmado estático",
+      "evidence": [
+        {
+          "file": "src/route/host.ts",
+          "line": 189,
+          "detail": "Si acquireHostLock devuelve null, start marca readOnly y retorna antes de instalar transporte/listeners."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 199,
+          "detail": "Los listeners y suscripciones solo se registran después de ganar el lock."
+        },
+        {
+          "file": "src/route/host.ts",
+          "line": 272,
+          "detail": "buildView deriva snapshot del record local, no de estados firmados del writer."
+        },
+        {
+          "file": "src/route/hostManager.ts",
+          "line": 26,
+          "detail": "La pestaña lectora carga el record una sola vez; no observa cambios en storage."
+        },
+        {
+          "file": "app/ruta/stand.tsx",
+          "line": 276,
+          "detail": "El mismo PhasePanel recibe el snapshot estático de la vista readOnly y sigue ofreciendo controles."
+        }
+      ],
+      "scenario": "La pestaña B abre una ruta que la pestaña A ya conduce. B entra en readOnly correctamente, pero nunca conecta ni observa el record actualizado. A inicia/avanza/recibe miembros y B sigue mostrando la fase y jugadores del momento de apertura. Sus controles siguen apareciendo, aunque dispatch no hace nada al no estar running.",
+      "impact": "Desincronización permanente de una pantalla del stand con el único writer; el operador ve ranking, fase y acciones obsoletos. Bajo la nueva prioridad de sincronizar TODAS las vistas, no basta que el segundo host deje de escribir.",
+      "fix": "Separar driver y observer: readOnly recibe y verifica snapshots actuales sin publicar/tickear; deshabilitar controles de escritura y enlazar explícitamente nueva instancia en takeover. Reanudar desde el último estado durable/autenticado con fencing.",
+      "acceptance": "Con dos pantallas host y tres miembros, el observer alcanza exactamente epoch/revisión/fase/ranking del driver bajo red normal y recuperación. No publica cambios ni permite acciones locales silenciosamente ignoradas. Takeover actualiza la instancia que renderiza la pantalla y conserva una única autoridad. Ejecutar con host y al menos tres miembros reales, claves reales, reloj virtual y transporte simulado con entrega programable por destinatario; registrar trace de paquetes/ACK y comprobar invariantes, no solo status joined.",
+      "area": "realtime"
+    },
+    {
+      "id": "GAME-01",
+      "title": "El bono diario se vuelve a conceder al repetir sin salir de la pantalla",
+      "priority": "P1",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/burst.tsx",
+          "line": 143,
+          "detail": "dailyDone se carga una sola vez al montar; no se actualiza tras guardar una ráfaga."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 225,
+          "detail": "Cada finalización calcula daily && !dailyDone ? DAILY_BONUS : 0."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 373,
+          "detail": "Jugar otra vez inicia una nueva sesión en la misma pantalla."
+        }
+      ],
+      "scenario": "Abrir /burst?diario=1 con el día pendiente, finalizar, tocar Jugar otra vez y finalizar nuevamente. Probe daily-repeat-bonus-and-incomplete-rounds registra dos resultados con score=250 en la misma instancia, ambos con score base=0.",
+      "impact": "Bono supuestamente diario ilimitado y XP derivada incorrecta en repeticiones; el guard recorded solo protege una sesión, no una reclamación diaria.",
+      "fix": "Reclamar el bono por clave de día mediante una operación idempotente de almacenamiento; actualizar dailyDone tras la reclamación. Capturar la clave del día al empezar la partida.",
+      "acceptance": [
+        "Dos finalizaciones secuenciales y concurrentes el mismo día conceden un solo bono de 250.",
+        "Cambiar de día permite otra reclamación; repetir o remontar pantalla no la permite."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-02",
+      "title": "Perder en tres rondas marca el desafío diario como completado",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/burst.tsx",
+          "line": 105,
+          "detail": "finished incluye lives<=0 aunque falten rondas."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 225,
+          "detail": "El bono no comprueba rondas terminadas ni supervivencia."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 232,
+          "detail": "Toda finalización diaria escribe metadata.daily."
+        },
+        {
+          "file": "src/features/burst/daily.ts",
+          "line": 25,
+          "detail": "isDailyDone solo requiere gameId burst y metadata.daily; dailyDays tampoco valida finalización."
+        }
+      ],
+      "scenario": "En un desafío de cinco rondas fallar las tres primeras. Probe registra rounds=3, lives=0, accuracy=0, score=250 y metadata.daily no vacía. isDailyDone lo considera completado; la pantalla promete Termínalo y suma el bono (app/burst.tsx:285).",
+      "impact": "Cita diaria/Constancia y estado diario cuentan derrotas prematuras como desafíos terminados. También consume la reclamación del día si se sale y vuelve a entrar.",
+      "fix": "Distinguir finished/attempt de completed, guardar completed explícito y requerir todas las rondas para reclamar el bono y contar dailyDays. Mantener XP base de participación si esa es la política.",
+      "acceptance": [
+        "Una derrota 0/5 con tres vidas perdidas no concede bono ni incrementa días completados.",
+        "Una sesión que alcanza la quinta ronda según la regla de éxito acordada sí cuenta."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-03",
+      "title": "Completar capítulo admite dos finalizaciones mientras espera almacenamiento",
+      "priority": "P1",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/story.tsx",
+          "line": 100,
+          "detail": "complete no tiene guard síncrono ni estado saving; primero espera completeChapter."
+        },
+        {
+          "file": "app/story.tsx",
+          "line": 104,
+          "detail": "Cada invocación llama a recordGameResult."
+        },
+        {
+          "file": "app/story.tsx",
+          "line": 131,
+          "detail": "Completar capítulo permanece habilitado hasta que la fase cambia al final de los awaits."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 125,
+          "detail": "recordGameResult no recibe una identidad de sesión idempotente."
+        }
+      ],
+      "scenario": "Resolver el primer capítulo y activar Completar capítulo dos veces antes de que termine la primera escritura. Probe story-double-finalization ejecuta el callback dos veces en un act y observa dos solicitudes idénticas: story, score 200, chapter 1, accuracy 1.",
+      "impact": "Doble solicitud de XP/resultados y prácticas de Innovación. Con almacenamiento read-modify-write concurrente puede duplicar contabilización o perder actualizaciones; el harness no demuestra qué interleaving gana en disco real.",
+      "fix": "Añadir ref síncrona submitting antes del primer await, deshabilitar el botón, manejar errores y usar runId idempotente en el registro de resultados.",
+      "acceptance": [
+        "Con completeChapter deliberadamente lento, doble toque produce una sola llamada y un solo resultado persistido.",
+        "Un fallo muestra error recuperable y permite reintentar sin duplicar el capítulo ni su recompensa."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-04",
+      "title": "Una respuesta de guardado anterior interrumpe la partida nueva",
+      "priority": "P1",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/estacion.tsx",
+          "line": 65,
+          "detail": "Jugar de nuevo está disponible cuando result.outcome aún es null."
+        },
+        {
+          "file": "app/estacion.tsx",
+          "line": 111,
+          "detail": "El then restaura setResult de la sesión anterior sin verificar run.key."
+        },
+        {
+          "file": "app/puzzle.tsx",
+          "line": 75,
+          "detail": "onSolved espera almacenamiento mientras ya muestra botones para reiniciar."
+        },
+        {
+          "file": "app/puzzle.tsx",
+          "line": 84,
+          "detail": "La respuesta tardía vuelve a asignar solved de la sesión anterior."
+        }
+      ],
+      "scenario": "Hacer que recordGameResult tarde, finalizar una estación con 800, pulsar Jugar de nuevo y recién entonces resolver la promesa vieja. Probe station-old-save-replaces-new-game confirma que el nuevo juego montado desaparece y vuelve el resumen viejo. En puzzle el mismo patrón se confirma estáticamente.",
+      "impact": "Desmonta la partida recién iniciada y pierde su progreso local; navegación y niveles pueden retroceder por un resultado obsoleto.",
+      "fix": "Capturar un token de sesión y actualizar UI solo si coincide con la sesión vigente; invalidarlo al reiniciar/cambiar ruta/desmontar. Alternativamente bloquear reinicio mientras se guarda, con error/reintento visibles.",
+      "acceptance": [
+        "Resolver una promesa de sesión A después de iniciar B no modifica ni desmonta B.",
+        "Repetir el test en estación y puzzle, también al cambiar nivel y al desmontar pantalla."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-05",
+      "title": "La ráfaga individual no pausa al pasar a background",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/burst.tsx",
+          "line": 187,
+          "detail": "Solo la pausa manual detiene el intervalo; deadline usa Date.now."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 196,
+          "detail": "Al regresar después del deadline la ronda despacha answer false."
+        },
+        {
+          "file": "src/features/coach/PauseSheet.tsx",
+          "line": 46,
+          "detail": "useBackToPause escucha únicamente hardwareBackPress, no AppState ni visibilidad/foco."
+        },
+        {
+          "file": "src/features/stations/kit.tsx",
+          "line": 30,
+          "detail": "Las estaciones también mantienen tiempos absolutos sin ciclo de vida de app."
+        }
+      ],
+      "scenario": "Empezar una ronda, suspender callbacks 30 s simulando background y ejecutar el siguiente tick con el reloj adelantado. Probe burst-background-time-expiration confirma active=false por expiración, sin tocar pausa. La ausencia de listener AppState/visibilitychange se verificó en el código del snapshot.",
+      "impact": "Interrupciones del SO consumen el tiempo y las vidas de una práctica individual. Las etapas cronometradas de estaciones presentan el mismo riesgo. No se afirma reproducción física Android/iOS.",
+      "fix": "Pausar automáticamente la práctica individual al perder estado activo/foco y conservar remainingMs; reanudar de manera explícita. Mantener el deadline autoritativo para juegos de ruta sincronizados, que no deben pausarse independientemente.",
+      "acceptance": [
+        "Simular AppState active→background→active y visibilitychange: tiempo y vidas de práctica permanecen intactos.",
+        "Probar estación individual y ráfaga; verificar separadamente que el deadline multijugador sigue siendo autoritativo."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-06",
+      "title": "La ráfaga rápida avanza y guarda mientras muestra En pausa",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/burst.tsx",
+          "line": 214,
+          "detail": "El timeout de FEEDBACK_MS no depende de paused ni lo comprueba."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 220,
+          "detail": "Llegar a finished registra el resultado aunque paused siga true."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 209,
+          "detail": "La pausa se ofrece también durante feedback."
+        }
+      ],
+      "scenario": "Ritmo fast; perder la tercera vida; abrir Pausar durante el feedback antes de 1150 ms. Probe burst-fast-feedback-finishes-while-paused confirma recordGameResult mientras la pausa estaba activa.",
+      "impact": "La decisión de salir sin guardar queda anulada por una finalización automática; en rondas intermedias avanza el estado detrás del modal.",
+      "fix": "Congelar también el reloj de feedback al pausar y bloquear advance/answer/finished no autorizados; conservar su tiempo restante.",
+      "acceptance": [
+        "Pausar 10 s en feedback no avanza ni escribe resultados.",
+        "Reanudar continúa desde feedback; Salir no registra la partida."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-07",
+      "title": "Atrapa el paquete puede generar menos paquetes sanos que los necesarios",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "src/features/burst/games/PacketCatchGame.tsx",
+          "line": 20,
+          "detail": "NEED exige cinco paquetes sanos."
+        },
+        {
+          "file": "src/features/burst/games/PacketCatchGame.tsx",
+          "line": 38,
+          "detail": "Cada aparición decide bad independientemente, sin cuota mínima de sanos."
+        },
+        {
+          "file": "src/features/burst/games/PacketCatchGame.tsx",
+          "line": 46,
+          "detail": "El período de aparición es finito y depende del nivel."
+        },
+        {
+          "file": "src/features/burst/registry.tsx",
+          "line": 66,
+          "detail": "La ronda 7 fast del juego de base 12 s dura 7 s."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 485,
+          "detail": "level equivale al índice de ronda."
+        }
+      ],
+      "scenario": "Ronda 8 (level=7), fast, 7 s. Inyectar Math.random=mulberry32(247): aparecen 20 paquetes, solo 4 sanos. Probe packet-catch-unwinnable-rng-stream atrapó inmediatamente los cuatro y nunca pudo enviar onAnswer(true). Esta semilla se inyecta al RNG, no existe como prop del microjuego.",
+      "impact": "Condición de victoria imposible en un flujo RNG válido, incluso con reflejos perfectos. No se estimó frecuencia real ni se afirma que suceda en todas las partidas.",
+      "fix": "Generar una secuencia con al menos cinco sanos antes del deadline con margen de lectura/reacción; inyectar RNG y comprobar viabilidad para todos los ritmos/niveles.",
+      "acceptance": [
+        "La semilla 247 permite cinco capturas antes de 7 s.",
+        "Property test de muchas semillas y todas las combinaciones soportadas garantiza cuota mínima y ventanas utilizables."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-08",
+      "title": "Entrena la IA penaliza detenerse en el mínimo que dibuja la curva",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "src/features/stations/logic/vision.ts",
+          "line": 207,
+          "detail": "validationLoss sigue decreciendo después del parámetro best por el término exponencial."
+        },
+        {
+          "file": "src/features/stations/logic/vision.ts",
+          "line": 212,
+          "detail": "stopQuality premia distancia al parámetro best, no al mínimo real de validationLoss."
+        },
+        {
+          "file": "src/features/stations/games/TrainAIGame.tsx",
+          "line": 55,
+          "detail": "La instrucción pide detener cuando la validación deje de bajar."
+        },
+        {
+          "file": "src/features/stations/games/TrainAIGame.tsx",
+          "line": 341,
+          "detail": "Se dibuja la curva con validationLoss(value,best)."
+        }
+      ],
+      "scenario": "Para best=11, mínimo discreto dibujado está en época 13. Probe vision-validation-minimum muestra 272/350 al detener en 13, contra 350/350 en 11. Los seis best posibles divergen del mínimo visual (1 o 2 épocas).",
+      "impact": "Contradice la lección de early stopping: seguir correctamente la gráfica obtiene menos puntos que detenerse cuando aún mejora.",
+      "fix": "Calcular el mínimo de la misma curva utilizada para dibujar y evaluar, o parametrizar la curva para que su mínimo sea exactamente best. Alinear también mensajes Justo a tiempo/Muy tarde.",
+      "acceptance": [
+        "Para cada best=11..16, detener en argmin de la pérdida dibujada consigue TRAIN_MAX.",
+        "Épocas anteriores/posteriores reducen calidad con mensajes coherentes con la pendiente."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-09",
+      "title": "Historia anuncia XP pero envía ese valor como puntos a otra fórmula",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "app/story.tsx",
+          "line": 172,
+          "detail": "El feedback anuncia +chapter.rewardXp XP."
+        },
+        {
+          "file": "app/story.tsx",
+          "line": 106,
+          "detail": "complete manda chapter.rewardXp como score."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 137,
+          "detail": "La XP realmente otorgada sale de calculateGameXp."
+        },
+        {
+          "file": "src/lib/progression.ts",
+          "line": 29,
+          "detail": "XP combina base, 8% del score, precisión y duración."
+        }
+      ],
+      "scenario": "Completar en 60 s y al primer intento: los capítulos anuncian 200/300/450/550/700 XP, pero la fórmula real devuelve 111/119/131/139/151. Probe story-reward-vs-awarded-xp usa los datos reales y la función real, no el recordGameResult simulado del harness de componentes.",
+      "impact": "Promesa de recompensa y resultado efectivo divergen en todos los capítulos; explica mal la progresión educativa.",
+      "fix": "Definir rewardScore y mostrar puntos, o crear una concesión explícita de rewardXp por capítulo que no vuelva a convertirlo como score. Mostrar solo la XP realmente concedida.",
+      "acceptance": [
+        "El texto antes/después de completar coincide con la variación real de profile.xp para cada capítulo.",
+        "Probar aciertos con reintentos y sesiones de más de 300 s."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-10",
+      "title": "Leer la explicación de la placa consume y descarta los proyectos restantes",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "src/features/stations/games/MakerBoardsGame.tsx",
+          "line": 165,
+          "detail": "timeout de ChooseStage sigue activo mientras picked y el Continuar están pendientes."
+        },
+        {
+          "file": "src/features/stations/games/MakerBoardsGame.tsx",
+          "line": 183,
+          "detail": "choose instala una acción para Siguiente proyecto."
+        },
+        {
+          "file": "src/features/stations/kit.tsx",
+          "line": 118,
+          "detail": "ask posterior reemplaza pending, incluida la acción anterior."
+        }
+      ],
+      "scenario": "En la etapa Elige la placa contestar el primer proyecto y dejar la explicación abierta 27 s en pace=1. Probe maker-reading-feedback-discards-remaining-projects: Siguiente proyecto desaparece, Continuar lleva directamente a etapa 2 tras solo 1/4 proyectos.",
+      "impact": "La pausa educativa para leer reduce el puntaje y omite contenido; contradice el propósito explícito de avanzar al ritmo del jugador.",
+      "fix": "Suspender presupuesto de la etapa mientras la explicación está pendiente y conservar tiempo restante. Separar el reloj del deadline autoritativo de ruta si existe.",
+      "acceptance": [
+        "Esperar un minuto leyendo el primer feedback no omite los otros tres proyectos en práctica individual.",
+        "Al continuar se presenta proyecto 2; el tiempo de decisión restante es el previo a la lectura."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-11",
+      "title": "Conecta la red informa precisión perfecta cuando todas las piezas las resuelven pistas",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "src/features/puzzles/NetWalkGame.tsx",
+          "line": 99,
+          "detail": "Se penaliza score por usedHints, pero no accuracy."
+        },
+        {
+          "file": "src/features/puzzles/NetWalkGame.tsx",
+          "line": 102,
+          "detail": "optimal/max(usedMoves,optimal) resulta 1 cuando usedMoves=0."
+        },
+        {
+          "file": "src/features/puzzles/NetWalkGame.tsx",
+          "line": 126,
+          "detail": "La pista gira automáticamente una pieza hasta su solución."
+        },
+        {
+          "file": "app/puzzle.tsx",
+          "line": 79,
+          "detail": "Esta accuracy pasa directamente al registro de resultados y XP."
+        }
+      ],
+      "scenario": "Seed 123, level 1: tocar solo Pista hasta finalizar. Probe netwalk-hint-only-perfect-accuracy devuelve score=520, accuracy=1, detalle 0 giros (mínimo 11) · 6 pistas.",
+      "impact": "La métrica de precisión y sus 60 XP de bonificación representan asistencia completa como ejecución perfecta. El desbloqueo por pistas puede ser legítimo; la precisión sin distinción es la inconsistencia.",
+      "fix": "Guardar asistencia separada y excluirla de la precisión de resolución independiente; definir explicitamente assistedCompletion y su recompensa sin castigar acceso a ayudas.",
+      "acceptance": [
+        "Solución exclusivamente asistida no se registra como 100% independiente.",
+        "Solución manual óptima mantiene 100%; solución mixta refleja cantidad de ayuda sin bloquear aprendizaje."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-12",
+      "title": "La partida perfecta de Mensaje cifrado termina en 999 y no en 1000",
+      "priority": "P3",
+      "confidence": "alta; defecto confirmado por ejecución",
+      "evidence": [
+        {
+          "file": "src/features/puzzles/codes.ts",
+          "line": 68,
+          "detail": "Hay tres mensajes."
+        },
+        {
+          "file": "src/features/puzzles/codes.ts",
+          "line": 109,
+          "detail": "Cada mensaje perfecto redondea 1000/3 a 333."
+        },
+        {
+          "file": "src/features/puzzles/CipherGame.tsx",
+          "line": 54,
+          "detail": "Se suman los tres redondeos; Math.min(1000,score) no recupera el punto perdido."
+        }
+      ],
+      "scenario": "Resolver los tres mensajes sin comprobaciones fallidas. Probe cipher-perfect-score calcula la suma real: 3*333=999.",
+      "impact": "Techo de puntuación incoherente con la distribución nominal de 1000; impacto menor, no impide ganar ni desbloquear sus niveles.",
+      "fix": "Acumular fracciones y redondear al final, o distribuir 334/333/333 preservando penalizaciones.",
+      "acceptance": [
+        "Tres mensajes perfectos suman exactamente 1000.",
+        "Penalizaciones y mínimo por mensaje siguen siendo monotónicos."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-13",
+      "title": "Congestión de red promete doce envíos pero exige hasta dieciocho",
+      "priority": "P3",
+      "confidence": "alta; defecto confirmado por inspección estática",
+      "evidence": [
+        {
+          "file": "src/features/burst/catalog.ts",
+          "line": 25,
+          "detail": "instruction y tip dicen 12 paquetes/envíos."
+        },
+        {
+          "file": "src/features/burst/games/PacketRushGame.tsx",
+          "line": 15,
+          "detail": "target=12+min(level,3)*2, por lo que puede ser 14,16,18."
+        },
+        {
+          "file": "app/burst.tsx",
+          "line": 479,
+          "detail": "La pantalla mantiene la instrucción del catálogo mientras level cambia por ronda."
+        }
+      ],
+      "scenario": "Recibir PacketRushGame con level=3 (ronda 4 o posterior): la introducción dice enviar 12 y el contador/condición requieren 18. Confirmación estática de ambos valores.",
+      "impact": "Instrucción falsa en el momento de aprender y aparente incumplimiento de la victoria al alcanzar lo anunciado. No es prueba de que la dificultad adaptativa esté rota.",
+      "fix": "Generar instruction/tip a partir del mismo target del motor, o eliminar el número fijo del catálogo.",
+      "acceptance": [
+        "Para niveles 0..7, objetivo anunciado, contador y condición de victoria usan el mismo número."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-14",
+      "title": "La primera práctica de estación guarda duración fija de noventa segundos",
+      "priority": "P3",
+      "confidence": "alta; defecto confirmado por inspección estática",
+      "evidence": [
+        {
+          "file": "app/estacion.tsx",
+          "line": 29,
+          "detail": "run.startedAt inicia en 0."
+        },
+        {
+          "file": "app/estacion.tsx",
+          "line": 67,
+          "detail": "Solo Jugar de nuevo asigna startedAt real."
+        },
+        {
+          "file": "app/estacion.tsx",
+          "line": 108,
+          "detail": "La primera partida siempre registra durationSeconds=90."
+        },
+        {
+          "file": "src/lib/progression.ts",
+          "line": 32,
+          "detail": "La duración influye en el bono de XP con umbral de 300 s."
+        }
+      ],
+      "scenario": "Entrar por primera vez a /estacion y finalizar cualquier juego: se guardan 90 s sin importar lo transcurrido. Repetir sí mide la duración. Confirmación estática del flujo.",
+      "impact": "Métricas educativas de tiempo falsas y primera sesión larga recibe el bono de sesión corta. No se calculó impacto agregado sobre perfiles existentes.",
+      "fix": "Inicializar startedAt con now() cuando realmente empieza la primera sesión, y decidir si lectura/pausas cuentan como tiempo educativo o tiempo activo.",
+      "acceptance": [
+        "Con reloj controlado, primera sesión de 420 s y repetición de 60 s guardan 420 y 60 respectivamente.",
+        "El bono de duración usa el tiempo acordado y no una constante de fallback."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "GAME-15",
+      "title": "La explicación sobre Wi-Fi abierta omite el cifrado extremo a extremo",
+      "priority": "P2",
+      "confidence": "alta; defecto confirmado por inspección estática",
+      "evidence": [
+        {
+          "file": "src/features/burst/concepts.ts",
+          "line": 78,
+          "detail": "La red abierta se explica como: Sin clave, cualquiera cerca puede leer lo que envías."
+        },
+        {
+          "file": "src/features/stations/logic/security.ts",
+          "line": 71,
+          "detail": "La alerta sin contraseña se justifica como: Cualquiera puede espiar el tráfico."
+        },
+        {
+          "file": "src/data/questions.ts",
+          "line": 64,
+          "detail": "La propia pregunta sec-006 explica que HTTPS cifra los datos de la conexión."
+        }
+      ],
+      "scenario": "En Wi-Fi seguro seleccionar/redescubrir la opción abierta y leer la explicación; en Escudo digital marcar sin contraseña. Se presenta sin distinguir contenido en claro, metadatos y contenido protegido por TLS. La clasificación del portal falso que pide la contraseña de Instagram sí es correcta.",
+      "impact": "La lección confunde cifrado del enlace Wi-Fi con cifrado HTTPS y transmite una regla absoluta falsa sobre confidencialidad del contenido. No implica una vulnerabilidad de la app ni que el juego permita sitios peligrosos.",
+      "fix": "Explicar que una red abierta carece de cifrado del enlace y expone tráfico no cifrado/metadatos, pero HTTPS sigue protegiendo el contenido frente a observadores de la red; mantener advertencia sobre portals falsos y verificación de certificados.",
+      "acceptance": [
+        "Las explicaciones distinguen WPA/TLS y no afirman que el contenido HTTPS sea legible solo por faltar contraseña Wi-Fi.",
+        "La tarjeta de portal que pide claves de redes sociales sigue marcada como amenaza."
+      ],
+      "area": "gameplay"
+    },
+    {
+      "id": "UXS-01",
+      "title": "Mutaciones concurrentes sobrescriben progreso completo sin coordinación",
+      "priority": "P1",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/profile.ts",
+          "line": 129,
+          "detail": "Cada recordGameResult lee el mismo perfil/historial antes de computar y guardar."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 159,
+          "detail": "Perfil e historial se escriben por separado mediante Promise.all, sin transacción ni ID idempotente."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 120,
+          "detail": "interact guarda un perfil completo tomado de data; no relee la versión actual ni bloquea otro cuidado."
+        },
+        {
+          "file": "src/storage/runner.ts",
+          "line": 82,
+          "detail": "recordRun/addRunnerData/unlock usan read-modify-write sin exclusión mutua."
+        },
+        {
+          "file": "src/storage/career.ts",
+          "line": 31,
+          "detail": "recordAreaPractice comparte el patrón; también completeChapter y recordPuzzleSolved en sus stores."
+        }
+      ],
+      "scenario": "Dos recordGameResult solapados, o una recompensa/cuidado mientras se sincroniza perfil. Probe: dos resultados concurrentes dejan gamesPlayed=1 e historial de longitud 1, no 2.",
+      "impact": "Pérdida de XP, partidas, logros o paquetes; el perfil stale de Rutix puede pisar un merge de cuenta. Escrituras parciales también desalinean perfil e historial.",
+      "fix": "Centralizar mutaciones mediante cola por agregado y operación, parches sobre versión vigente y deduplicación por resultId. Persistir una unidad consistente o journal recuperable para operaciones multi-clave; bloquear dobles acciones en UI como defensa secundaria.",
+      "acceptance": [
+        "Dos resultados simultáneos conservan ambos y suman XP exacto; mismo ID repetido cuenta una vez.",
+        "Interleave resultado/cuidado/merge y premio/recordRun conserva todos los cambios.",
+        "Inyectar fallo en cada escritura y relanzar: no queda perfil adelantado con historial perdido."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-02",
+      "title": "El decaimiento de ánimo se descuenta otra vez al guardar alias o cuidar a Rutix",
+      "priority": "P1",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/profile.ts",
+          "line": 55,
+          "detail": "loadProfile devuelve un ánimo ya decaído, sin actualizar un timestamp de aplicación."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 64,
+          "detail": "Los mismos días desde lastPlayedAt se descuentan en todas las cargas."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 193,
+          "detail": "updateIdentity persiste el perfil decaído sin mover lastPlayedAt; updateMascotMood y syncAchievements hacen lo mismo."
+        }
+      ],
+      "scenario": "Perfil con ánimo 80 y última partida hace tres días: cargar da 62; guardar solo alias y cargar de nuevo da 44. Probe ejecutado con el código del snapshot.",
+      "impact": "Señal se degrada por editar identidad o cuidarlo, no solo por ausencia; gastos de cuidado pueden parecer inútiles.",
+      "fix": "Guardar base de ánimo y moodUpdatedAt/lastDecayAt; aplicar solo tiempo no consumido, o derivar visualmente sin volver a persistir el valor derivado como base. Migrar explícitamente perfiles existentes.",
+      "acceptance": [
+        "Cargar/guardar alias/avatar diez veces el mismo día mantiene 62 en el caso de prueba.",
+        "Cuidados y recompensas suman el delta sin volver a descontar días ya procesados.",
+        "Un día adicional descuenta exactamente 6 una sola vez, con mínimo documentado."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-03",
+      "title": "Recompensa de misiones queda reclamada antes de entregar todos sus componentes",
+      "priority": "P1",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/missions.ts",
+          "line": 19,
+          "detail": "Check y marca de reclamo no son atómicos; la marca se escribe antes de cargar perfil/entregar premio."
+        },
+        {
+          "file": "src/storage/missions.ts",
+          "line": 22,
+          "detail": "Paquetes y ánimo se escriben en paralelo; no hay recuperación de entrega parcial."
+        },
+        {
+          "file": "src/features/missions/MissionsCard.tsx",
+          "line": 42,
+          "detail": "claim no tiene pending, catch ni disabled/loading en el botón de línea 90."
+        }
+      ],
+      "scenario": "Después de guardar la fecha, falla @soytel/runner. Probe: queda marca del día, no billetera, y el reintento devuelve false. Dos taps pueden además pasar el check simultáneo.",
+      "impact": "Premio perdido de forma permanente para ese día; la UI puede no explicar el fallo o indicar una entrega incompleta.",
+      "fix": "Transacción/journal idempotente por día con estado pending/committed y suboperaciones deduplicables; no basta mover la marca al final sin impedir duplicaciones. Estado de carga y error recuperable en el botón.",
+      "acceptance": [
+        "Fallo en carga de perfil, billetera o ánimo permite reintento que completa cada parte exactamente una vez.",
+        "Dos reclamos simultáneos entregan una sola recompensa y tienen respuesta consistente.",
+        "Botón anuncia busy, bloquea reentrada y muestra error sin mensaje falso de guardado."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-04",
+      "title": "Hidratación tardía de settings reemplaza cambios recién realizados",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "app/_layout.tsx",
+          "line": 27,
+          "detail": "initSettings se dispara sin await; ready solo depende de fuentes, líneas 21-22 y 40."
+        },
+        {
+          "file": "src/storage/settings.ts",
+          "line": 88,
+          "detail": "initSettings asigna el snapshot leído aunque haya mutaciones posteriores."
+        },
+        {
+          "file": "src/storage/settings.ts",
+          "line": 98,
+          "detail": "updateSettings parchea defaults/cache disponible; no espera hidratación."
+        }
+      ],
+      "scenario": "Abrir Ajustes con lectura lenta y desactivar hápticos. Probe deja cache.haptics=true mientras AsyncStorage contiene false cuando termina la lectura antigua.",
+      "impact": "Ajustes parecen revertirse y preferencias previas de otros campos pueden perderse al escribir un patch sobre defaults.",
+      "fix": "Promise única de hidratación con ready/error, bloquear o encolar mutaciones hasta ready y reconciliar por versión. Resolver init/reload/reset en el mismo coordinador.",
+      "acceptance": [
+        "Lectura diferida + update conserva intención del usuario en memoria y disco.",
+        "Patch temprano no borra pace/motion/accesorio persistidos.",
+        "Repetir init no pisa cambios más nuevos ni duplica suscripciones."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-05",
+      "title": "Reset no cancela escrituras pendientes y puede terminar parcialmente",
+      "priority": "P1",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/reset.ts",
+          "line": 23,
+          "detail": "multiRemove elimina claves sin barrera para mutaciones ya iniciadas."
+        },
+        {
+          "file": "src/storage/reset.ts",
+          "line": 24,
+          "detail": "clearRouteStorage/resetAccountLocal se ejecutan después del borrado y antes de limpiar caches."
+        },
+        {
+          "file": "app/ajustes.tsx",
+          "line": 106,
+          "detail": "Cadena de reset/tema/navegación sin catch ni estado busy."
+        }
+      ],
+      "scenario": "Una edición de perfil empieza antes del reset pero setItem termina después. Probe: alias Resurrected vuelve a aparecer tras resolver resetAllData. Si falla una etapa posterior, ya se borraron claves pero caches/UI no necesariamente se limpiaron.",
+      "impact": "Datos supuestamente borrados reaparecen; identidad/XP de la sesión previa o estados locales parciales. Esto es local: no se afirma eliminar ni auditar la cuenta del servidor.",
+      "fix": "Entrar a una generación reset que invalide lecturas/escrituras anteriores, detener productores y drenar/abortar cola antes de borrar. Manejar todas las etapas y reportar fallo parcial recuperable; unificar tema y reset sin introducir borrado remoto.",
+      "acceptance": [
+        "Retener setItem/getItem y resolverlos tras reset no resucita perfiles, avisos, tutoriales ni settings.",
+        "Fallo en cada etapa limpia o invalida caches y comunica qué falta, sin toast de éxito.",
+        "Dos resets simultáneos y reset durante sync conservan estado local vacío; onboarding respeta keepOnboarding."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-06",
+      "title": "Ventana de 200 resultados se usa como progreso acumulado de colección y guía",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/profile.ts",
+          "line": 140,
+          "detail": "Se conservan solo los 200 resultados más recientes."
+        },
+        {
+          "file": "src/lib/achievements.ts",
+          "line": 91,
+          "detail": "Colecciones burst y niveles puzzle se recomputan desde esa ventana; también contadores por modo y días diarios."
+        },
+        {
+          "file": "src/lib/guide.ts",
+          "line": 25,
+          "detail": "starterGuide calcula primeras actividades mirando solo results."
+        },
+        {
+          "file": "app/(tabs)/achievements.tsx",
+          "line": 35,
+          "detail": "current visible se recomputa aunque ya exista la marca unlocked."
+        }
+      ],
+      "scenario": "Un microjuego/primer modo se completó y luego hay 200 resultados de otro modo. Probe: burst-collector cae de 1 a 0 y la guía vuelve a dar la primera Ráfaga por pendiente.",
+      "impact": "Avance parcial se olvida y puede impedir completar colecciones; guía retrocede. Las medallas ya presentes en unlockedAchievements NO se borran automáticamente.",
+      "fix": "Separar historial reciente de agregados durables: modos usados, niveles distintos, microjuegos ganados, días de desafío, counters y récords. Migrar desde historial conservado sin inventar eventos ya truncados.",
+      "acceptance": [
+        "301+ resultados no reducen contadores acumulados ni pasos ya completados.",
+        "Completar una colección en sesiones separadas por más de 200 partidas desbloquea correctamente.",
+        "Las tarjetas unlocked presentan el umbral cumplido incluso si no está el evento histórico."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-07",
+      "title": "Recarga de inbox puede pisar un aviso nuevo y persistir su pérdida",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/inbox.ts",
+          "line": 46,
+          "detail": "loadInbox reemplaza cache después de una lectura sin revision/promise única."
+        },
+        {
+          "file": "src/storage/inbox.ts",
+          "line": 40,
+          "detail": "persist actualiza cache antes de confirmar disco y puede escribir el snapshot sustituido."
+        },
+        {
+          "file": "app/(tabs)/inbox.tsx",
+          "line": 38,
+          "detail": "Cada entrada enfocada llama loadInbox además del boot global."
+        }
+      ],
+      "scenario": "Una lectura lenta captura inbox antiguo; llega pushInbox nuevo; termina lectura vieja; marcar leído escribe cache vieja. Probe confirma que solo Old queda y New desaparece.",
+      "impact": "Avisos de logros/subida de nivel pueden perderse o volver a no leídos; render y disco divergen si falla persist.",
+      "fix": "Store único hidratado, revisions/generación y cola de mutaciones. Cargas stale no sustituyen cambios más recientes; rollback o pending explícito en persist.",
+      "acceptance": [
+        "Interleave load/push/markRead conserva cada aviso y su última marca.",
+        "Carga de boot y de foco comparten hidratación sin duplicación.",
+        "Inyectar fallo en setItem no da por durable el aviso ni su lectura."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-08",
+      "title": "Perfil y resultados aceptan JSON válido con estructura inválida",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/profile.ts",
+          "line": 47,
+          "detail": "Spread de JSON como Partial<UserProfile> sin validar strings/números finitos/fechas/rangos."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 87,
+          "detail": "loadResults comprueba solo Array.isArray; [null] se acepta."
+        },
+        {
+          "file": "src/storage/profile.ts",
+          "line": 222,
+          "detail": "loadProgressSummary accede result.gameId sin guard de entradas."
+        },
+        {
+          "file": "app/(tabs)/inbox.tsx",
+          "line": 106,
+          "detail": "kindStyle[item.kind] se usa sin fallback; loadInbox tampoco valida un enum."
+        }
+      ],
+      "scenario": "Carga local dañada por migración/fallo parcial: results=[null] o perfil xp=\"900\", mascotMood=\"bad\". Probe confirma TypeError al resumir progreso y xp string aceptado.",
+      "impact": "Render/sync/logros pueden fallar; XP concatena strings o ánimo se vuelve NaN. El fallback silencioso puede ocultar pérdida de progreso.",
+      "fix": "Schemas versionados para cada store con validación finita/rangos y migraciones; filtrar/quarantinar entradas inválidas con recuperación, sin sobrescribir automáticamente toda evidencia dañada.",
+      "acceptance": [
+        "Fixtures con null, arrays donde se espera objeto, unknown gameId/kind, NaN/Infinity serializados como null y fechas inválidas no rompen UI.",
+        "Datos válidos antiguos se migran; solo registros corruptos se aíslan.",
+        "Usuario recibe recuperación/exportación segura si su progreso no es legible."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-09",
+      "title": "useFocusData no expone errores y reload acepta respuestas fuera de orden",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/lib/useFocusData.ts",
+          "line": 15,
+          "detail": "La carga de foco tiene guard active pero solo .then; no hay catch ni error state."
+        },
+        {
+          "file": "src/lib/useFocusData.ts",
+          "line": 25,
+          "detail": "reload no comprueba active, generación ni orden; escribe setData directamente."
+        },
+        {
+          "file": "app/_layout.tsx",
+          "line": 27,
+          "detail": "Cargas globales son void sin captura local; un ErrorBoundary de render no recupera promesas rechazadas."
+        }
+      ],
+      "scenario": "Dos reload: el nuevo responde primero y el antiguo último. Probe de hooks mínimos termina con [new, old]. Un getItem rechazado deja data null/loading indefinido y rechazo sin tratamiento por el hook.",
+      "impact": "Datos antiguos pisan datos nuevos o el usuario ve skeleton sin reintento. Riesgo de callback tras desmontar; no se afirma una fuga permanente de memoria.",
+      "fix": "Agregar estado error/retry, ID de solicitud y cancelación/generation compartida para foco/reload. Capturar rechazos también en boot y operaciones UI; fallback por pantalla y error boundary para errores de render, no como sustituto de catch async.",
+      "acceptance": [
+        "Respuesta antigua tras nueva no cambia data.",
+        "Unmount/blur antes de resolver no modifica estado por foco ni reload.",
+        "Loader rechazado muestra error accesible y Reintentar funciona; no queda promise unhandled."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-10",
+      "title": "Primer tutorial automático de Rutix depende de una invitación de cuenta que esa pantalla no muestra",
+      "priority": "P2",
+      "confidence": 0.98,
+      "evidence": [
+        {
+          "file": "src/storage/tutorials.ts",
+          "line": 46,
+          "detail": "Todo tutorial se bloquea para guest con offerDismissed=false."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 77,
+          "detail": "Pantalla Rutix usa useTutorial(rutix), sin montar AccountGate."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 364,
+          "detail": "TutorialSheet depende de tutorial.visible; HelpButton puede abrirlo manualmente."
+        },
+        {
+          "file": "src/features/account/AccountGate.tsx",
+          "line": 23,
+          "detail": "offerDismissed se resuelve mediante la invitación montada en juegos, no en Rutix."
+        }
+      ],
+      "scenario": "Invitado entra a Rutix desde Inicio antes de abrir un juego y omitir la invitación. Probe del hook: pending=true, visible=false aun cargados los tutoriales vistos.",
+      "impact": "Onboarding automático de cuidados se omite en primera visita. No hay bloqueo total: Conoce a Rutix permite abrirlo manualmente.",
+      "fix": "Hacer el bloqueo una prop contextual isBlockingOverlayVisible, no una dependencia global del estado guest; montar gate solo donde corresponda. Decidir qué pantallas deben explicar y marcar visto de forma durable.",
+      "acceptance": [
+        "Invitado de primera visita recibe tutorial Rutix sin exigir cuenta ni abrir gameplay.",
+        "En pantallas con gate visible solo aparece una hoja a la vez.",
+        "Ayuda manual sigue disponible para invitados y usuarios registrados."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-11",
+      "title": "Tema Del teléfono se resuelve solo al boot y no sigue cambios del sistema",
+      "priority": "P2",
+      "confidence": 0.97,
+      "evidence": [
+        {
+          "file": "src/theme/themeStore.ts",
+          "line": 49,
+          "detail": "bootTheme resuelve Appearance.getColorScheme una sola vez."
+        },
+        {
+          "file": "src/theme/themeStore.ts",
+          "line": 58,
+          "detail": "setThemePreference sale si el tema visible coincide, sin suscripción futura."
+        },
+        {
+          "file": "src/theme/colors.ts",
+          "line": 85,
+          "detail": "Stylesheets capturan colores al importar y se recrean mediante reinicio."
+        },
+        {
+          "file": "src/storage/settings.ts",
+          "line": 16,
+          "detail": "Copy define system como seguir al teléfono."
+        }
+      ],
+      "scenario": "Con preferencia system, cambiar claro/oscuro en el teléfono mientras la app sigue abierta o vuelve del background. No hay listener de Appearance en los archivos revisados.",
+      "impact": "Promesa de Del teléfono no se cumple hasta reiniciar; posible mezcla de apariencia/superficie al retornar. Análisis estático, no observado en dispositivo.",
+      "fix": "Escuchar Appearance cuando la preferencia sea system y actualizar tokens/estilos reactivos o realizar recarga controlada y segura al recuperar foco, sin perder interacción activa. No recargar indiscriminadamente en medio de una operación.",
+      "acceptance": [
+        "Evento Appearance claro→oscuro actualiza la interfaz con system y no con preferencia explícita.",
+        "Volver del background aplica esquema actual.",
+        "Cambios no pierden drafts ni disparan recargas en bucle."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-12",
+      "title": "Dos stores del tema pueden divergir y el fallo del store de boot se silencia",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "app/ajustes.tsx",
+          "line": 96,
+          "detail": "Primero actualiza AppSettings.theme en AsyncStorage y después la preferencia de boot."
+        },
+        {
+          "file": "src/theme/themeStore.ts",
+          "line": 11,
+          "detail": "soytel.theme vive en localStorage/SecureStore, separado de @soytel/settings."
+        },
+        {
+          "file": "src/theme/themeStore.ts",
+          "line": 43,
+          "detail": "Fallo de writeThemePreference se oculta; setThemePreference puede recargar de todos modos."
+        }
+      ],
+      "scenario": "Cambiar dark→light cuando falla SecureStore. Probe: la función no informa error, pide una recarga, y readThemePreference sigue dark. Settings ya puede anunciar light.",
+      "impact": "Selector y apariencia real quedan contradictorios; recarga sin efecto, preferencias distintas tras relanzar. También existe ventana parcial en reset, aunque su caller normal intenta restaurar system después.",
+      "fix": "Unificar fuente de verdad; si se necesita store síncrono de boot, tratarlo como cache reconciliada y verificar escritura antes de anunciar éxito/recargar. Error explicativo y rollback coherente.",
+      "acceptance": [
+        "Fallo de keychain/localStorage no produce success ni reinicio inútil.",
+        "Tras chooseTheme, selector/bootTheme coinciden también al relanzar.",
+        "Reset exitoso limpia ambas preferencias, y fallo intermedio queda detectable y recuperable."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-13",
+      "title": "Colores de error y de icono Rutix pierden contraste en tema oscuro",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/theme/colors.ts",
+          "line": 27,
+          "detail": "danger permanece #C73E3E en ambos temas; dark surface es #0E2A3F, línea 59."
+        },
+        {
+          "file": "src/components/TelButton.tsx",
+          "line": 46,
+          "detail": "dangerOutline usa danger como texto sobre fondo transparente."
+        },
+        {
+          "file": "app/ajustes.tsx",
+          "line": 165,
+          "detail": "Acción Borrar datos utiliza dangerOutline sobre Screen paper oscuro."
+        },
+        {
+          "file": "app/profile.tsx",
+          "line": 236,
+          "detail": "Error de alias usa danger como small text; syncError también línea 163."
+        },
+        {
+          "file": "app/(tabs)/inbox.tsx",
+          "line": 24,
+          "detail": "Icono Rutix mezcla fondo fijo cream con warningInk que se vuelve #EFD58B en dark; se aplica en líneas 116-117."
+        }
+      ],
+      "scenario": "Seleccionar tema oscuro y mostrar error de alias o botón destructivo. Cálculo sRGB de tokens: danger/surface=2.945:1; icono warningInk/cream=1.224:1 (6.182:1 en light). No se capturó UI.",
+      "impact": "Texto normal de error está por debajo de 4.5:1; icono Rutix casi indistinguible. El icono es redundante con el texto y no se declara por sí solo infracción WCAG esencial.",
+      "fix": "Usar dangerInk sobre superficie oscura y parejas semánticas warningSoft/warningInk, o tinta de marca oscura fija sobre cream. Matriz automatizada por componente, fondo real y tema.",
+      "acceptance": [
+        "Todo texto normal habilitado/error cumple 4.5:1 en ambos temas.",
+        "Iconos informativos esenciales cumplen 3:1; decorativos son explícitamente ocultos a accesibilidad.",
+        "Tests cubren composiciones reales, no únicamente parejas de tokens ideales."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-14",
+      "title": "Settings optimistas quedan aparentando guardado cuando falla persistencia",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/settings.ts",
+          "line": 98,
+          "detail": "Cache y listeners se actualizan antes de esperar setItem y no se revierten en rechazo."
+        },
+        {
+          "file": "app/ajustes.tsx",
+          "line": 122,
+          "detail": "Cambios de ritmo/motion/haptics usan void updateSettings sin captura ni confirmación."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 343,
+          "detail": "Guardarropa actualiza settings sin await y anuncia accesorio inmediatamente."
+        }
+      ],
+      "scenario": "Falla almacenamiento después de apagar hápticos o cambiar accesorio. Probe: cache muestra haptics=false y no hay settings persistido. Al relanzar vuelve default.",
+      "impact": "El usuario confía en una preferencia no guardada; pérdida silenciosa y rechazo async sin UI. Escrituras terminadas fuera de orden también necesitan coordinación.",
+      "fix": "Persistencia serializada/versionada con pending/error; rollback si no hay mutación posterior o reintento controlado; esperar commit antes de textos de éxito. Evitar bloquear lectura por cada toggle.",
+      "acceptance": [
+        "setItem rechazado produce mensaje de error accesible y no Guardado.",
+        "Reintento guarda intención última y sobrevive reinicio.",
+        "Dos toggles con completado inverso no dejan disco en valor antiguo."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-15",
+      "title": "Texto global limita escala de accesibilidad a 1.4",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/components/TelText.tsx",
+          "line": 23,
+          "detail": "maxFontSizeMultiplier=1.4 por defecto en todo TelText; caller puede sobrescribir, pero pantallas comunes no lo hacen."
+        },
+        {
+          "file": "src/components/Chips.tsx",
+          "line": 108,
+          "detail": "Chips tienen height 36 y tags height 24, sin crecimiento al escalar."
+        },
+        {
+          "file": "src/components/TabBar.tsx",
+          "line": 111,
+          "detail": "Label de pestaña se limita a una línea sobre celdas estrechas."
+        }
+      ],
+      "scenario": "Usuario configura texto 200% o tamaño accesible máximo. Código limita TelText a 140%; layouts de altura fija requerirían reflow para liberar el límite.",
+      "impact": "Impide leer al tamaño solicitado, especialmente captions y botones. No se afirma clipping visto en UI ni equivalencia exacta entre zoom web y escala nativa.",
+      "fix": "Quitar límite global, usar minHeight y wrap, y reservar límites puntuales justificados a elementos no esenciales. Hacer navegación responsive y texto completo accesible si se trunca visualmente.",
+      "acceptance": [
+        "Texto principal/control respeta al menos 200% y ajustes máximos soportados por plataforma.",
+        "Pantallas 320px ancho y landscape permiten leer/activar acciones sin solapamiento.",
+        "VoiceOver/TalkBack mantienen nombres completos y selección; comprobar web a zoom 200%."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-16",
+      "title": "Hojas de contenido largo sin scroll pueden dejar acciones fuera del área disponible",
+      "priority": "P2",
+      "confidence": 0.86,
+      "evidence": [
+        {
+          "file": "src/components/Sheet.tsx",
+          "line": 23,
+          "detail": "scroll=false por defecto; children se colocan sin contenedor desplazable."
+        },
+        {
+          "file": "src/components/Sheet.tsx",
+          "line": 68,
+          "detail": "Hoja limita maxHeight al viewport pero no agrega scroll automáticamente."
+        },
+        {
+          "file": "src/features/tutorial/TutorialSheet.tsx",
+          "line": 36,
+          "detail": "Tutorial usa Sheet sin scroll y muestra cabecera, texto, dots y acciones."
+        },
+        {
+          "file": "src/features/coach/PauseSheet.tsx",
+          "line": 22,
+          "detail": "La pausa también usa una hoja de contenido/acciones no desplazable."
+        }
+      ],
+      "scenario": "Pantalla baja/landscape con texto aumentado: suma de altura intrínseca excede maxHeight. Riesgo demostrado por estructura, no por layout/render en equipo real.",
+      "impact": "Siguiente/Entendido o controles de pausa pueden no ser alcanzables por touch/teclado; el problema se amplifica al corregir font scale.",
+      "fix": "Hoja con cuerpo scrollable por defecto y footer de acciones seguro; reservar cabecera/cierre, manejar teclado cuando haya campos y medir viewport dinámico.",
+      "acceptance": [
+        "Tutorial, pausa, tips y cuenta funcionan en viewport 320x320 y texto 200%.",
+        "Todos los controles son alcanzables por scroll y teclado, sin quedar debajo de safe area.",
+        "Validar foco inicial/retorno y exclusión del fondo en cada plataforma; no asumir que falta trap en RN Modal sin probarlo."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-17",
+      "title": "Selección de ajustes y guardarropa usa semántica incompleta para lector/teclado",
+      "priority": "P2",
+      "confidence": 0.97,
+      "evidence": [
+        {
+          "file": "src/components/Chips.tsx",
+          "line": 30,
+          "detail": "Todos los grupos se anuncian como tablist/tab aunque settings sean selección exclusiva y no paneles de pestaña."
+        },
+        {
+          "file": "src/components/Chips.tsx",
+          "line": 47,
+          "detail": "No hay estrategia de foco/teclas de flecha en el grupo."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 333,
+          "detail": "Guardarropa usa radio con selected, no checked, y contenedor sin radiogroup."
+        },
+        {
+          "file": "src/components/TabBar.tsx",
+          "line": 98,
+          "detail": "La navegación sí es una pestaña real; no debe convertirse indiscriminadamente en radios."
+        }
+      ],
+      "scenario": "Lector recorre guardarropa o web user navega selección por teclado. radio no expone checked y ajustes anuncian un patrón de tabs no implementado plenamente.",
+      "impact": "Estado elegido puede no anunciarse como marcado; expectativas de navegación de tabs/radios no se cumplen. No se afirma que Enter/Space fallen: Pressable puede activarlos.",
+      "fix": "Añadir modo semántico a ChipGroup: radiogroup/radio+checked para settings, y tab/tabpanel con keyboard/foco donde sea navegación real. Guardarropa checked y disabled coherentes; grupos con labels.",
+      "acceptance": [
+        "Test de rol/estado encuentra radio checked=true para accesorio elegido y label de grupo.",
+        "En web flechas/Home/End y Tab siguen patrón elegido; Enter/Space activan sin doble acción.",
+        "Verificar anuncio seleccionado/marcado con NVDA/VoiceOver/TalkBack sin duplicar SVG decorativos."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-18",
+      "title": "Cuidados y avisos usan día UTC mientras misiones/racha usan día local",
+      "priority": "P2",
+      "confidence": 0.99,
+      "evidence": [
+        {
+          "file": "src/storage/story.ts",
+          "line": 65,
+          "detail": "Día de cuidado se deriva con isoDate.slice(0,10), UTC."
+        },
+        {
+          "file": "src/storage/story.ts",
+          "line": 81,
+          "detail": "Límite diario de cuidado también usa new Date().toISOString().slice(0,10)."
+        },
+        {
+          "file": "src/storage/inbox.ts",
+          "line": 87,
+          "detail": "Aviso diario se deduplica por fecha UTC."
+        },
+        {
+          "file": "src/lib/dailyMissions.ts",
+          "line": 63,
+          "detail": "Misiones filtran por isSameLocalDay; dailyKey en burst/daily.ts:8 es local."
+        },
+        {
+          "file": "src/features/missions/MissionsCard.tsx",
+          "line": 25,
+          "detail": "today queda fijado al montar; no se renueva por medianoche/foreground."
+        }
+      ],
+      "scenario": "En Chile UTC-3, cuidados a 20:00 y 22:00 del mismo 6 de octubre. Probe cuenta dos días (2026-10-06 y 2026-10-07) mientras dailyKey local sigue 2026-10-06. Una tarjeta de misiones montada toda la noche también puede mostrar/reclamar el día anterior.",
+      "impact": "Cuidados y avisos reinician a las 21:00 locales, no cuando la UI de hoy/mañana sugiere; logros de días desalineados y misiones stale al cruzar medianoche.",
+      "fix": "Elegir política única de dayKey local o zona horaria explícita y aplicarla en todos los módulos; reloj inyectable que refresque en foreground/foco/medianoche. Migrar días existentes con criterio conservador.",
+      "acceptance": [
+        "Pruebas UTC-3, UTC+10 y transición DST mantienen el mismo día lógico para todos los subsistemas.",
+        "Dos cuidados en la misma fecha local cuentan un día; siguiente fecha cuenta otro.",
+        "Tarjeta abierta al cruzar medianoche cambia misiones y estado de reclamo sin reiniciar app."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "UXS-19",
+      "title": "Baile de Rutix ignora la preferencia manual Animaciones mínimas",
+      "priority": "P2",
+      "confidence": 0.95,
+      "evidence": [
+        {
+          "file": "app/mascot.tsx",
+          "line": 176,
+          "detail": "play(dance) siempre agenda wiggle withRepeat y un intervalo que cambia pose/expresión."
+        },
+        {
+          "file": "app/mascot.tsx",
+          "line": 90,
+          "detail": "Cleanup limpia timers pero no cancela wiggle; stopDance sí lo cancela en línea 98."
+        },
+        {
+          "file": "src/components/graphics/Rutix.tsx",
+          "line": 68,
+          "detail": "Componente Rutix respeta minimal en sus propias animaciones, pero no controla el wrapper externo."
+        },
+        {
+          "file": "src/lib/motion.ts",
+          "line": 29,
+          "detail": "resolveMotionLevel respeta sistema y preferencia; pantalla solo usa useEntering, no condiciona baile."
+        }
+      ],
+      "scenario": "Con settings.motion=minimal, tocar Baila. El componente hijo se aquieta, pero wrapper/scheduling siguen generándose. Efecto visible real requiere test nativo; withTiming puede respetar reducción del SO, que no equivale a la preferencia manual.",
+      "impact": "Movimiento adicional y trabajo JS de intervalos en modo de bajo estímulo/bajo rendimiento; animación puede continuar transitoriamente si se cambia preferencia.",
+      "fix": "Condicionar baile por useMotionLevel: respuesta textual/pose estática para minimal; cancelar timer y wiggle al reducir motion, blur y desmontar. Mantener celebración opcional en otros modos.",
+      "acceptance": [
+        "En minimal no se llama withRepeat ni setInterval al bailar.",
+        "Pasar full→minimal durante baile cancela recursos y deja transform neutro.",
+        "Salir/regresar no deja timers/animaciones activos; medir en dispositivo antes de afirmar mejora de FPS."
+      ],
+      "area": "ux-storage"
+    },
+    {
+      "id": "REL-01",
+      "title": "El release Android puede firmarse con la llave debug sin fallar",
+      "priority": "P1",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "plugins/withAndroidReleaseSigning.js",
+          "line": 13,
+          "detail": "Código: solo verifica SOYTEL_UPLOAD_STORE_FILE, no las cuatro propiedades; la rama alternativa de la línea 24 selecciona signingConfigs.debug."
+        },
+        {
+          "file": "scripts/build-android.js",
+          "line": 27,
+          "detail": "Código: assembleRelease se copia a SoyTEL-<versión>.apk y solo se calcula SHA-256; no se verifica el certificado."
+        },
+        {
+          "file": "docs/PRODUCCION.md",
+          "line": 43,
+          "detail": "Documenta el fallback debug, pero afirma que ocurre sin las cuatro propiedades; con STORE_FILE presente y otras faltantes se referencian propiedades inexistentes."
+        },
+        {
+          "file": "plugins/withAndroidReleaseSigning.js",
+          "line": 23,
+          "detail": "Reproducido: expo prebuild generó android/app/build.gradle con el ternario release/debug en línea 123. Un fixture con signingConfig = signingConfigs.debug no coincide con la regex y conserva debug sin error."
+        }
+      ],
+      "scenario": "Una máquina sin llave ejecuta android:release; la selección de Gradle permite completar un artefacto release con certificado debug. Se reprodujo la generación, no se compiló ni distribuyó APK.",
+      "impact": "Publicación accidental de artefacto con identidad debug compartida, rechazo en canales de distribución o incompatibilidad con actualizaciones firmadas por la llave real. SHA-256 acredita el archivo, no quién lo firmó.",
+      "fix": "Fallar cerrado en release al faltar cualquiera de las cuatro propiedades; separar un comando explícito local/test. Verificar certificado esperado con apksigner verify --print-certs antes de copiar/publicar. Hacer fallar el plugin si no transforma exactamente el bloque esperado; agregar fixtures por SDK y probar el camino EAS.",
+      "acceptance": "Sin credenciales o con una propiedad faltante, android:release termina no-cero y no produce el APK final. Con llave de prueba aislada produce certificado esperado; una plantilla Gradle no reconocida falla. EAS y build local pasan la misma verificación de certificado.",
+      "area": "release"
+    },
+    {
+      "id": "REL-02",
+      "title": "Publicación a producción sin controles de calidad obligatorios ni CI de aplicación",
+      "priority": "P1",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "package.json",
+          "line": 19,
+          "detail": "deploy:web ejecuta build --prod y deploy --prebuilt --prod --yes, sin check."
+        },
+        {
+          "file": "vercel.json",
+          "line": 5,
+          "detail": "buildCommand únicamente npm run build:web."
+        },
+        {
+          "file": "package.json",
+          "line": 20,
+          "detail": "android:release únicamente invoca build-android.js; check existe aparte en línea 23."
+        },
+        {
+          "file": "docs/PRODUCCION.md",
+          "line": 7,
+          "detail": "npm run check es un paso manual previo, no una dependencia del despliegue."
+        },
+        {
+          "file": ".github/agents/.version",
+          "line": 1,
+          "detail": "Inventario completo: 154 archivos .github son chatmodes, metadata/referencias/scaffolding de agentes; cero archivos .github/workflows. No son pipelines activos de SoyTEL."
+        }
+      ],
+      "scenario": "Una persona ejecuta deploy:web directamente o el proveedor recompila un commit; exportar no garantiza lint, tipado de API ni pruebas.",
+      "impact": "Regresiones pueden publicarse aunque exista un check local limpio. --yes elimina confirmación interactiva; protección real de rama, approvals y settings del proveedor no fueron consultados.",
+      "fix": "Introducir CI de aplicación con npm ci, check y build:web; required status checks y aprobación para producción. Hacer gate obligatorio en el script de release y en la construcción del proveedor; separar preview/prod y evitar depender solo de un checklist.",
+      "acceptance": "Un commit con test, lint o typecheck fallido no llega a deploy; CI realiza build y tests en cada PR. Las plantillas de agentes no se contabilizan como CI. Producción requiere aprobación verificable y usa el artefacto validado.",
+      "area": "release"
+    },
+    {
+      "id": "REL-03",
+      "title": "No hay integración DB ni E2E real; los tres skips son MQTT, no Postgres",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "tests/api.test.ts",
+          "line": 8,
+          "detail": "Las pruebas de API declaran lógica pura sin base de datos; no ejecutan los handlers contra Postgres."
+        },
+        {
+          "file": "tests/live-broker.test.ts",
+          "line": 6,
+          "detail": "La única suite condicional usa LIVE_MQTT=1; it.each recorre los tres brokers de configuración."
+        },
+        {
+          "file": "jest.config.js",
+          "line": 4,
+          "detail": "Tests limitados a tests/**/*.test.ts(x); no threshold de cobertura ni configuración E2E."
+        },
+        {
+          "file": "README.md",
+          "line": 44,
+          "detail": "Asegura 180 pruebas y una suite omitida sin base de datos; ejecución real obtuvo 194 passed, 3 skipped, 20 passed suites y 1 skipped (MQTT)."
+        }
+      ],
+      "scenario": "El check pasa sin probar SQL, migraciones, CORS/HTTP desplegado, persistencia Postgres ni flujos nativos/web completos.",
+      "impact": "El resultado verde no cubre diferencias del servidor, constraints, autenticación real ni renderizado/navegación del bundle. No se ha demostrado que una integración DB esté fallando: no existe la suite en este snapshot.",
+      "fix": "Agregar Postgres efímero y tests de handlers por HTTP, migración limpia y actualización, registro/recuperación/borrado/sync/ranking, consentimiento y límites. Agregar Playwright web con la CSP real y Maestro/Detox en Android; broker de pruebas aislado, no públicos. Umbrales de cobertura basados en riesgos.",
+      "acceptance": "CI ejecuta integración DB y E2E, fallando cuando no hay servicio en el job requerido; verifica rollback y escenarios negativos. La suite MQTT no habilita publicaciones a terceros en la auditoría. README distingue explícitamente unitarias, integración y E2E.",
+      "area": "release"
+    },
+    {
+      "id": "REL-04",
+      "title": "La configuración pública permite incrustar la contraseña del broker en los clientes",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "src/realtime/config.ts",
+          "line": 21,
+          "detail": "brokerAuth toma EXPO_PUBLIC_MQTT_USERNAME y EXPO_PUBLIC_MQTT_PASSWORD."
+        },
+        {
+          "file": "scripts/build-web.js",
+          "line": 14,
+          "detail": "El export hereda process.env en producción; el build Android también lo hace en build-android.js:16."
+        },
+        {
+          "file": "docs/PRODUCCION.md",
+          "line": 56,
+          "detail": "Recomienda variables EXPO_PUBLIC_* para un broker propio sin advertir que las credenciales son públicas."
+        }
+      ],
+      "scenario": "Si al compilar se coloca aquí una credencial privada/privilegiada del broker, el cliente tiene que recibirla y un usuario puede extraerla. No se leyó .env ni se constató ninguna credencial real expuesta.",
+      "impact": "Riesgo condicional de acceso no autorizado al broker según sus ACL y permisos. No equivale a fuga observada de DATABASE_URL, pepper, data key o admin key; esas variables de backend no están referenciadas en esta configuración cliente.",
+      "fix": "Tratar EXPO_PUBLIC_* como datos públicos. No colocar secretos administrativos; para acceso privado usar credenciales temporales por sesión emitidas por backend con ACL por tópico, expiración y cuotas. Separar variables build cliente de secretos runtime servidor y escanear artefactos sin volcar valores sensibles.",
+      "acceptance": "Un canary no sensible empleado como secreto servidor no aparece en bundle/APK/metadata; las únicas credenciales cliente permiten solo tópicos y acciones de su sesión y expiran. La guía explica qué variables serán públicas.",
+      "area": "release"
+    },
+    {
+      "id": "REL-05",
+      "title": "db:migrate elige producción implícitamente y sin confirmación del destino",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "scripts/db-migrate.js",
+          "line": 23,
+          "detail": "Tras variables del proceso, lee .env.production.local y usa DATABASE_URL_UNPOOLED o DATABASE_URL."
+        },
+        {
+          "file": "scripts/db-migrate.js",
+          "line": 39,
+          "detail": "Se conecta y aplica SQL inmediatamente; no exige entorno, proyecto, dry-run ni aprobación."
+        },
+        {
+          "file": "scripts/db/schema.sql",
+          "line": 44,
+          "detail": "Además del DDL ejecuta DELETE de rate_limits antiguos."
+        },
+        {
+          "file": "docs/PRODUCCION.md",
+          "line": 26,
+          "detail": "Solo indica npm run db:migrate; no especifica selección de entorno ni verificación del destino."
+        }
+      ],
+      "scenario": "Un desarrollador tiene un archivo de variables de producción de una operación anterior y ejecuta el comando esperando una DB local. El script puede usar ese destino sin intervención.",
+      "impact": "Escrituras accidentales contra producción y limpieza de datos operativos; el SQL actual no borra jugadores. No se ejecutó migración ni se consultó la DB.",
+      "fix": "Eliminar fallback de producción; exigir --environment y --database-id, mostrar destino sanitizado, dry-run y aprobación explícita para prod. Usar cuenta de migraciones separada, mínimos privilegios y backup/plan de recuperación. Nunca imprimir URL o credenciales.",
+      "acceptance": "El comando sin destino falla aun existiendo .env.production.local. Dry-run no abre una transacción de escritura; producción requiere aprobación y reporta identidad sanitizada del proyecto.",
+      "area": "release"
+    },
+    {
+      "id": "REL-06",
+      "title": "El esquema se aplica sin transacción, historial ni evolución de tablas existentes",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "scripts/db-migrate.js",
+          "line": 29,
+          "detail": "Divide SQL por punto y coma; falla si futuras funciones/literales contienen ; internos."
+        },
+        {
+          "file": "scripts/db-migrate.js",
+          "line": 41,
+          "detail": "sql.query secuencial sin BEGIN, rollback, lock, tabla de versiones o checksums."
+        },
+        {
+          "file": "scripts/db/schema.sql",
+          "line": 4,
+          "detail": "CREATE TABLE IF NOT EXISTS no añade columnas ni constraints a una tabla preexistente; la misma limitación aplica a rate_limits:37."
+        }
+      ],
+      "scenario": "Una sentencia intermedia falla o se modifica schema.sql para una nueva versión sobre una DB ya creada.",
+      "impact": "Estado parcialmente aplicado; no hay comprobación automática del esquema real ni ruta verificable de upgrade. Reproducido con adaptador Neon simulado: segundo statement falló, dos intentos, salida 1 y ningún BEGIN/ROLLBACK; no representa una migración real.",
+      "fix": "Usar migraciones incrementales versionadas, con checksums y locking; aplicar el lote DDL compatible en transacción con la API transaccional adecuada. Usar parser/herramienta de migración que soporte SQL completo, separar cleanup de migraciones y probar upgrade desde versión anterior y recuperación.",
+      "acceptance": "Fallo inyectado deja DB efímera en estado previo; upgrades conservan jugadores y aplican columnas/constraints nuevos; una migración ya aplicada no se repite, concurrencia está bloqueada y SQL con ; interno se procesa correctamente.",
+      "area": "release"
+    },
+    {
+      "id": "REL-07",
+      "title": "El reporte de dependencias exige triage por alcance, no audit fix --force",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "package-lock.json",
+          "line": 4,
+          "detail": "Lockfile v3 consistente con package.json: 1185 entradas incluyendo raíz; todas las entradas de paquetes tienen integrity."
+        },
+        {
+          "file": "package.json",
+          "line": 30,
+          "detail": "Expo 57 depende también de toolchain; omit=dev no significa exclusivamente código desplegado."
+        },
+        {
+          "file": "package.json",
+          "line": 50,
+          "detail": "React Native 0.86.3; el reporte de audit recomienda cambios mayores/incompatibles en varias raíces."
+        }
+      ],
+      "scenario": "El npm-audit.json aportado reporta 63 paquetes afectados (47 high, 16 moderate, 0 critical). Hay advisories de hojas braces, decode-uri-component, node-forge, source-map-js, sprintf-js y uuid; las severidades de sus padres no son 63 fallas independientes de producción.",
+      "impact": "Deuda de mantenimiento y riesgo de build/toolchain según entrada alcanzable; no se probó explotación en navegador, APK ni funciones. Algunas sugerencias incluso bajan Expo a 44 y Reanimated/Worklets a versiones incompatibles con el stack.",
+      "fix": "Conservar el reporte, deduplicar advisories y construir rutas npm explain por runtime/backend/build/test. Actualizar dentro del SDK soportado o planificar upgrade SDK completo con pruebas y rebuild; overrides solo si compatibilidad comprobada. No ejecutar npm audit fix --force ni atribuir CVEs productivas explotables a todos los nodos.",
+      "acceptance": "Cada advisory tiene ruta, alcance, requisito de explotación y decisión documentada; fix pasa install limpio, check, export y prueba nativa. Vulnerabilidades aceptadas tienen responsable/fecha de revisión. El total de paquetes se mantiene separado del número de advisories.",
+      "area": "release"
+    },
+    {
+      "id": "REL-08",
+      "title": "La cadena de publicación depende de @latest y runtimes no fijados",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "package.json",
+          "line": 19,
+          "detail": "Ejecuta npx vercel@latest dos veces; Vercel CLI no forma parte del lockfile del proyecto."
+        },
+        {
+          "file": "package.json",
+          "line": 2,
+          "detail": "No hay engines ni packageManager en este package.json, tampoco .nvmrc/.node-version/.tool-versions en el inventario."
+        },
+        {
+          "file": "eas.json",
+          "line": 3,
+          "detail": "Permite toda versión >=24.8.0; build profiles no fijan node ni imagen."
+        },
+        {
+          "file": "README.md",
+          "line": 32,
+          "detail": "Arranque recomendado con npm install, mientras Vercel instala con npm ci."
+        }
+      ],
+      "scenario": "Mismo commit construido en máquinas/fechas distintas descarga un Vercel CLI distinto o selecciona otro Node/npm/EAS.",
+      "impact": "Comportamiento de builds/deploy y resolución puede variar fuera del lockfile, dificultando reproducir incidentes. npm ci local sí fue exitoso: no hay evidencia de lockfile roto.",
+      "fix": "Fijar Vercel CLI como dependencia de desarrollo versionada y usar una sola versión instalada; engines/packageManager y version manager, imagen/Node EAS y pipeline pinneados. Documentar npm ci y producir provenance del artefacto con commit, tool versions y configuración pública sanitizada.",
+      "acceptance": "Dos entornos limpios seleccionan mismas versiones de herramientas y dependencias; no hay invocaciones @latest en release. El manifiesto incluye origen y huella del artefacto sin secretos; discrepancias se detectan antes de publicar.",
+      "area": "release"
+    },
+    {
+      "id": "REL-09",
+      "title": "CSP permite conexión WebSocket segura a cualquier host",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "vercel.json",
+          "line": 53,
+          "detail": "connect-src 'self' wss: permite cualquier origen con esquema wss; no solo los brokers declarados."
+        },
+        {
+          "file": "src/realtime/config.ts",
+          "line": 3,
+          "detail": "Hay una lista concreta de tres brokers por defecto y lista configurable para broker propio."
+        }
+      ],
+      "scenario": "Si en el futuro hay ejecución de JavaScript no autorizado, la CSP no restringe una conexión WSS al host del atacante. Es defensa en profundidad, no una inyección demostrada.",
+      "impact": "Menor contención de exfiltración/control de conexiones. script-src self, frame-ancestors none, base-uri self y form-action self sí ofrecen controles útiles; style-src unsafe-inline es compatible con estilos generados de React Native Web y no es una falla por sí solo.",
+      "fix": "Sustituir wss: por orígenes explícitos de brokers (host y puerto), generados coherentemente con el build. Ensayar Report-Only/colección de violaciones y no ampliar script-src a unsafe-inline/eval para resolver problemas.",
+      "acceptance": "Los tres brokers configurados conectan bajo política final; una conexión a un host WSS arbitrario falla en navegador. No aparecen violaciones necesarias de scripts, estilos o fonts del bundle.",
+      "area": "release"
+    },
+    {
+      "id": "REL-10",
+      "title": "Los endpoints públicos configurables no están coordinados con la CSP",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "vercel.json",
+          "line": 53,
+          "detail": "connect-src solo self y wss:, sin un origen HTTPS externo de API."
+        },
+        {
+          "file": "src/realtime/config.ts",
+          "line": 27,
+          "detail": "webAppUrl por defecto es https://soytel.vercel.app incluso en preview/otro hostname."
+        },
+        {
+          "file": "src/realtime/config.ts",
+          "line": 30,
+          "detail": "apiBaseUrl deriva de webAppUrl o EXPO_PUBLIC_API_URL; puede ser de otro origen."
+        },
+        {
+          "file": "src/account/api.ts",
+          "line": 88,
+          "detail": "El cliente hace fetch a apiBaseUrl, no a una ruta relativa al origen actual."
+        }
+      ],
+      "scenario": "En un hostname preview/custom que no redefine API, el cliente intenta hablar con soytel.vercel.app; o se configura una API HTTPS externa. El header CSP de ese build no autoriza ese origen. No se visitó una preview ni se constató settings de producción.",
+      "impact": "Registro, recuperación, sync y ranking pueden quedar bloqueados por el navegador aunque CORS del backend permita la llamada.",
+      "fix": "Para web mismo-origin usar /api/v1 o derivar del origin; para separación intencional permitir exclusivamente el origen de API y configurar SOYTEL_ALLOWED_ORIGINS coherentemente. Separar variables preview/prod para no contaminar datos y validar endpoint/política al compilar.",
+      "acceptance": "E2E bajo CSP real ejecuta cuenta/ranking en dominio de producción, preview y custom previsto; endpoints inesperados quedan bloqueados. Preview no hace writes a DB productiva.",
+      "area": "release"
+    },
+    {
+      "id": "REL-11",
+      "title": "El export web incluye un bundle único pesado y siete fuentes completas",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "app.json",
+          "line": 31,
+          "detail": "Web output single; el export real generó un único JS de 3421483 bytes (gzip local 912175), sin medición de red/CPU de usuario."
+        },
+        {
+          "file": "src/theme/fontAssets.ts",
+          "line": 2,
+          "detail": "Siete pesos TTF importados; artefactos exportados suman 1467048 bytes de fuentes."
+        },
+        {
+          "file": "src/components/Brand.tsx",
+          "line": 5,
+          "detail": "Nueve imágenes de marca importadas; tamaño total dist/web medido 6525207 bytes. No todos los archivos necesariamente se descargan en primera visita."
+        }
+      ],
+      "scenario": "Una primera visita en conexión móvil y teléfono modesto necesita procesar el único bundle antes de renderizar la SPA.",
+      "impact": "Riesgo de arranque lento y consumo de datos/memoria en eventos. No se midieron LCP, INP, fps ni tiempos en teléfono; no se debe equiparar tamaño total dist con bytes transferidos iniciales.",
+      "fix": "Medir cold start/LCP/INP en dispositivos y red representativos; analizar bundle para lazy splitting compatible con Expo Router, reducir pesos o subset WOFF2 en web conservando acentos y assets nativos. Establecer presupuesto de JS/fonts y comparar gzip/Brotli servido.",
+      "acceptance": "CI controla presupuesto de artefacto y E2E mide arranque con caché vacía y perfil móvil; mejora de tamaño/tiempo documentada sin pérdida de caracteres, estilo ni rutas.",
+      "area": "release"
+    },
+    {
+      "id": "REL-12",
+      "title": "Los originales de diseño inflan el repositorio, no el bundle verificado",
+      "priority": "P3",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "assets/Design.html",
+          "line": null,
+          "detail": "Referencia de diseño de 10547947 bytes; no es ruta ni entrada de aplicación."
+        },
+        {
+          "file": "assets/Assets_SoyTEL_17.png",
+          "line": null,
+          "detail": "Original raster de 1872810 bytes; múltiples hojas similares de 1.4–1.9 MB."
+        },
+        {
+          "file": "src/components/Brand.tsx",
+          "line": 6,
+          "detail": "La app consume recortes assets/brand; export real no incluyó Design.html ni Assets_SoyTEL_*.png."
+        }
+      ],
+      "scenario": "Clones/paquetes de fuente y subida a servicios de build incluyen assets históricos aunque la app use derivados más pequeños.",
+      "impact": "assets/ suma 35026787 bytes; coste de repositorio/build-context. No se afirma que estas hojas se descarguen en web ni que inflen el APK sin analizarlo.",
+      "fix": "Mover originales/prototipo a almacenamiento de diseño, Git LFS o repositorio de recursos; conservar licencias/provenance y generar derivados determinísticamente. Excluir fuentes no necesarias del contexto EAS según política validada; no borrar recursos a ciegas.",
+      "acceptance": "Export conserva mismas imágenes y rutas; inventario de contexto EAS/archivo fuente reduce originales sin perder trazabilidad. Artefactos web/APK se comparan para demostrar qué archivos realmente se empaquetan.",
+      "area": "release"
+    },
+    {
+      "id": "REL-13",
+      "title": "El soporte PWA se limita al manifest; no hay arranque offline verificable",
+      "priority": "P3",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "public/manifest.webmanifest",
+          "line": 6,
+          "detail": "start_url y scope raíz, display standalone y shortcuts; iconos 192/512 y maskable comprobados con dimensiones correctas."
+        },
+        {
+          "file": "scripts/build-web.js",
+          "line": 36,
+          "detail": "Inyecta manifest y apple touch icon pero no registra service worker."
+        },
+        {
+          "file": "scripts/build-web.js",
+          "line": 53,
+          "detail": "Valida cuatro públicos; no exige maskable-512.png ni og.jpg, aunque están presentes en el export actual."
+        }
+      ],
+      "scenario": "La app se agrega a la pantalla de inicio y se vuelve a abrir sin conexión. No hay service worker ni caché offline del shell en fuente/export. El manifest por sí solo no promete offline ni prueba instalabilidad en todas las plataformas.",
+      "impact": "Limitación de continuidad en feria/laboratorios con red irregular; operaciones locales pueden funcionar en una pestaña ya cargada, pero no garantizan cold launch offline.",
+      "fix": "Definir explícitamente si se ofrece offline. Si sí, precache versionado del shell/assets con estrategia de actualización y rollback; nunca cachear API autenticada, recuperación, contactos o respuestas privadas. Validar todos los recursos referenciados por manifest/OG.",
+      "acceptance": "Test de navegador en contexto limpio verifica manifest MIME/recursos/shortcuts e instalación soportada; tras una carga inicial, cold launch offline abre juego local. Cuenta/ruta realtime indican sin conexión sin filtrar datos a caché; o docs declaran claramente que no se soporta offline.",
+      "area": "release"
+    },
+    {
+      "id": "REL-14",
+      "title": "Documentación de validación y memoria técnica no refleja el snapshot",
+      "priority": "P3",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "README.md",
+          "line": 44,
+          "detail": "180 tests y suite DB omitida contradicen 194 passed/3 MQTT skipped reproducidos."
+        },
+        {
+          "file": "memory-bank/productContext.md",
+          "line": 17,
+          "detail": "Describe Expo SDK54/RN0.81/React19.1 y Supabase futuro; package usa SDK57/RN0.86.3/React19.2.3 y MQTT/Neon."
+        },
+        {
+          "file": "memory-bank/progress.md",
+          "line": 22,
+          "detail": "79 tests y pendientes Supabase/tiendas son memoria histórica sin etiqueta de vigencia."
+        },
+        {
+          "file": "memory-bank/architect.md",
+          "line": 4,
+          "detail": "Plantilla de otro proyecto (MemoriPilot), no arquitectura de SoyTEL."
+        },
+        {
+          "file": "babel.config.js",
+          "line": 4,
+          "detail": "Comentario de SDK54 mientras dependencias usan SDK57."
+        }
+      ],
+      "scenario": "Una persona usa README/memory-bank como mapa de release/QA y cree que la omisión es integración DB o que la arquitectura actual es otra.",
+      "impact": "Validación y mantenimiento mal orientados; la versión app/package/README 3.0.0 sí coincide. Se trata de stack/estado desactualizado, no prueba de una versión binaria distinta.",
+      "fix": "Actualizar resultados y clasificar memoria histórica con fecha/commit; remover plantilla ajena o reemplazarla por arquitectura real. Generar conteos desde output de CI, mantener un runbook para migración, firma, entornos y smoke E2E; documentar iOS/EAS y límites de PWA.",
+      "acceptance": "Readme distingue 194 tests unitarias/componentes de 3 MQTT opt-in sin declarar integración DB existente. Stack y runbook concuerdan con package/app/CI; memoria histórica no se presenta como estado actual.",
+      "area": "release"
+    },
+    {
+      "id": "REL-15",
+      "title": "El postprocesado HTML falla silenciosamente al cambiar la plantilla Expo",
+      "priority": "P3",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "scripts/build-web.js",
+          "line": 47,
+          "detail": "Busca <title>SoyTEL</title>; plantilla real exportó <title>SoyTEL · Ruta Telemática</title>, así que no aplica el título previsto SoyTEL · Ruta Telemática USM."
+        },
+        {
+          "file": "scripts/build-web.js",
+          "line": 45,
+          "detail": "lang/viewport/title se reemplazan por strings exactos sin validar cuántos coincidieron."
+        },
+        {
+          "file": "scripts/build-web.js",
+          "line": 33,
+          "detail": "OG image relativa /og.jpg sin validación específica; no hay canonical/og:url en el bloque."
+        }
+      ],
+      "scenario": "Actualizar Expo o app.web.name modifica el HTML emitido pero el script sigue saliendo 0 aunque no aplique metadata prevista. El mismatch del title fue reproducido en build actual.",
+      "impact": "Drift de metadata/SEO/share y menor confiabilidad del build; no es una vulnerabilidad de XSS, las cadenas actuales son constantes.",
+      "fix": "Usar API de plantilla HTML o parser estructurado; establecer un único title, lang, viewport y meta por nombre, con assertions post-build. Generar URL absoluta de imagen/canonical por entorno público previsto y comprobar todos los recursos.",
+      "acceptance": "Test sobre plantilla actual y variantes produce el título esperado y exactamente una meta pertinente; missing/mismatch relevante falla build. Crawlers y MIME de og/manifest se verifican sin asumir comportamiento de rewrite de Vercel.",
+      "area": "release"
+    },
+    {
+      "id": "REL-16",
+      "title": "brand:kit reporta éxito sin PNG y design:system omite grupos sin advertir",
+      "priority": "P2",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "scripts/build-brand-kit.js",
+          "line": 354,
+          "detail": "puppeteer-core se resuelve opcionalmente desde instalación/global path pero no está declarado en package.json."
+        },
+        {
+          "file": "scripts/build-brand-kit.js",
+          "line": 383,
+          "detail": "Escribe kit.json anunciando archivos PNG antes de rasterizar."
+        },
+        {
+          "file": "scripts/build-brand-kit.js",
+          "line": 387,
+          "detail": "Sin Puppeteer/Chrome retorna sin error."
+        },
+        {
+          "file": "scripts/build-design-system.js",
+          "line": 337,
+          "detail": "Filtra kitPieces por existencia; si no hay PNG omite logos/social/impresos/presentación sin falla."
+        }
+      ],
+      "scenario": "Instalación limpia npm ci; ejecutar brand:kit y design:system. Reproducido: brand:kit salida 0 con 20 piezas declaradas y 0 PNG; design:system salida 0 con 247 activos y solo ocho grupos, sin grupos del kit.",
+      "impact": "Automatización o entrega de diseño puede considerarse completa aun faltando piezas. Es un problema de tooling de diseño, no rompe el bundle app verificado.",
+      "fix": "Declarar herramienta de rasterizado y fijar versión del browser para pipeline de diseño; modo --html-only explícito y modo default/--require-png que falle sin requisitos. Publicar kit.json solo con archivos existentes y hacer fail/warn inequívoco en design:system cuando se requiere kit completo.",
+      "acceptance": "En instalación limpia con requisitos, las 20 piezas declaradas existen. Sin rasterizador, el modo que promete PNG falla; HTML-only declara formato correcto. design:system completo incluye todos los grupos o retorna error verificable.",
+      "area": "release"
+    },
+    {
+      "id": "REL-17",
+      "title": "ANDROID_ARCHS entra sin validación a un comando de shell",
+      "priority": "P3",
+      "confidence": "high",
+      "evidence": [
+        {
+          "file": "scripts/build-android.js",
+          "line": 12,
+          "detail": "Lee ANDROID_ARCHS libremente."
+        },
+        {
+          "file": "scripts/build-android.js",
+          "line": 16,
+          "detail": "execSync recibe string y shell implícito."
+        },
+        {
+          "file": "scripts/build-android.js",
+          "line": 30,
+          "detail": "Interpolación sin escape de arquitecturas en -PreactNativeArchitectures=..."
+        }
+      ],
+      "scenario": "Un entorno de build/template local suministra valor con metacaracteres. Probe aislado con execSync sustituido capturó ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a; AUDIT_CANARY --no-daemon; ningún canary se ejecutó.",
+      "impact": "Posible ejecución involuntaria de shell bajo el usuario de build si el input de entorno no es confiable. No hay entrada remota de usuarios demostrada; quien controla el entorno normalmente ya posee privilegios locales.",
+      "fix": "Validar una lista de arquitecturas permitidas y rechazar todo otro carácter/valor. Preferir spawn/execFile con argumentos separados y manejo seguro de gradlew.bat en Windows, no shell concatenado.",
+      "acceptance": "Valores arm64-v8a, armeabi-v7a, x86 y x86_64 aprobados construyen como lista; ;, &, pipes, comillas y nombres desconocidos se rechazan antes de lanzar proceso. Test verifica argv real sin ejecutar payload.",
+      "area": "release"
+    }
+  ]
+}

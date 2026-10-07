@@ -9,7 +9,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, useAskContinue, useNow, usePace, type StationGameProps } from '../kit';
+import { GameBoard, Hint, StageBanner, StationHud, StationSummary, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   boardInfo,
   CHOOSE_MAX,
@@ -41,7 +41,7 @@ const STAGES: { key: StageKey; title: string; body: string; icon: IconName; seco
 const ACCENT = '#E0B84A';
 
 // B213 · Hardware: Arduino, ESP32 y Raspberry Pi en tres desafíos rápidos.
-export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
+export function MakerBoardsGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [cases] = useState(() => pickScenarios(mulberry32(seed ^ 0xb0a4)));
   const [stageIndex, setStageIndex] = useState(0);
@@ -56,7 +56,7 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
 
   const startStage = useCallback(() => {
     setBanner(false);
-    setEndsAt(Date.now() + STAGES[stageIndex].seconds * pace * 1000);
+    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
   }, [pace, stageIndex]);
 
   const nextStage = useCallback(() => {
@@ -70,6 +70,9 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
   }, [stageIndex]);
 
   const setStagePoints = useCallback((value: number) => setPoints((current) => ({ ...current, [stage.key]: value })), [stage.key]);
+  const accuracy = (chooseHits / cases.length + points.wire / WIRE_MAX + points.code / CODE_MAX) / 3;
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score: total, accuracy }));
 
   if (finished) {
     return (
@@ -84,7 +87,7 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
           { label: 'Programa', value: points.code, max: CODE_MAX, icon: 'code' },
         ]}
         learned="Arduino es un microcontrolador simple, el ESP32 suma Wi-Fi y Bluetooth, y la Raspberry Pi es un computador con Linux. Un LED necesita resistencia y el código se repite en loop()."
-        onSubmit={() => onComplete({ score: total, accuracy: (chooseHits / cases.length + points.wire / WIRE_MAX + points.code / CODE_MAX) / 3 })}
+        onSubmit={() => submit({ score: total, accuracy })}
       />
     );
   }
@@ -111,13 +114,6 @@ export function MakerBoardsGame({ seed, onComplete }: StationGameProps) {
       {banner && <View style={styles.bannerSpace} />}
     </View>
   );
-}
-
-function useStageTimeout(endsAt: number, onTimeout: () => void) {
-  useEffect(() => {
-    const timer = setTimeout(onTimeout, Math.max(0, endsAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [endsAt, onTimeout]);
 }
 
 function BoardArt({ board, size = 88 }: { board: BoardId; size?: number }) {
@@ -167,7 +163,7 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
     done.current = true;
     askContinue(onFinish);
   }, [askContinue, onFinish]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function choose(board: BoardId) {
     if (picked || done.current) return;
@@ -248,7 +244,7 @@ function WireStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     onPoints(correct === 2 ? wireScore(mistakes) : correct * 60);
     askContinue(onFinish);
   }, [askContinue, mistakes, onFinish, onPoints, wires]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function connect(terminal: Terminal) {
     if (done.current || wires[terminal]) return;
@@ -371,7 +367,7 @@ function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     onPoints(attempt > 0 ? codeScore(attempt, false) : 0);
     askContinue(onFinish, 'Ver resultado');
   }, [askContinue, attempt, onFinish, onPoints]);
-  useStageTimeout(endsAt, timeout);
+  useGameTimeout(endsAt, timeout);
 
   function upload() {
     if (program.length < SLOTS || done.current) return;

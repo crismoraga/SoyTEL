@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAccount } from '@/account/store';
+import { withLock } from './locks';
 
 // Tutoriales ya vistos: cada juego explica cómo se juega la primera vez y después solo si se pide.
 const TUTORIALS_KEY = '@soytel/tutorials';
@@ -19,11 +20,13 @@ export async function loadSeenTutorials(): Promise<Set<string>> {
   return cache;
 }
 
-export async function markTutorialSeen(id: string): Promise<void> {
-  const seen = await loadSeenTutorials();
-  if (seen.has(id)) return;
-  seen.add(id);
-  await AsyncStorage.setItem(TUTORIALS_KEY, JSON.stringify([...seen])).catch(() => undefined);
+export function markTutorialSeen(id: string): Promise<void> {
+  return withLock('tutorials', async () => {
+    const seen = await loadSeenTutorials();
+    if (seen.has(id)) return;
+    seen.add(id);
+    await AsyncStorage.setItem(TUTORIALS_KEY, JSON.stringify([...seen])).catch(() => undefined);
+  });
 }
 
 export function resetTutorialsCache(): void {
@@ -38,12 +41,14 @@ export interface TutorialControl {
   close: () => void;
 }
 
-// Abre el tutorial la primera vez que se entra a un juego. Espera a que se cierre la invitación a
-// crear cuenta para no apilar dos ventanas.
-export function useTutorial(id: string | null): TutorialControl {
+// Abre el tutorial la primera vez que se entra a un juego. En las pantallas que muestran la invitación
+// a crear cuenta (`waitForAccountOffer`, por defecto) espera a que se cierre para no apilar dos ventanas;
+// en las que no la muestran (Rutix) no hay nada que esperar.
+export function useTutorial(id: string | null, options: { waitForAccountOffer?: boolean } = {}): TutorialControl {
   const account = useAccount();
   const [state, setState] = useState<{ id: string | null; seen: boolean | null; open: boolean }>({ id, seen: null, open: false });
-  const blocked = account.status === 'loading' || (account.status === 'guest' && !account.offerDismissed);
+  const waits = options.waitForAccountOffer !== false;
+  const blocked = waits && (account.status === 'loading' || (account.status === 'guest' && !account.offerDismissed));
 
   useEffect(() => {
     if (!id) return;

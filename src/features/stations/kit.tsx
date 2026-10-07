@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType, type PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type PropsWithChildren } from 'react';
+import { AppState, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Rutix } from '@/components/graphics/Rutix';
@@ -26,15 +26,98 @@ export interface StationGameProps {
   onComplete: (result: StationGameResult) => void;
 }
 
-// Reloj que se actualiza solo mientras el juego está activo.
+// ——— Reloj del juego ———
+// Los tiempos de cada etapa se miden con un reloj que se puede detener: mientras el jugador lee una
+// explicación, o la app queda en segundo plano durante una práctica, el tiempo de la etapa no corre.
+// El cierre que impone la ruta en vivo no usa este reloj sino la hora real (ver useDeadline).
+// Hay un solo juego de estación abierto a la vez, así que el reloj es uno.
+
+let pausedAt: number | null = null;
+let pausedTotal = 0;
+const pauseListeners = new Set<() => void>();
+
+// Hora del juego en ms: avanza como la hora real, salvo mientras está en pausa.
+export function gameNow(): number {
+  return (pausedAt ?? clockNow()) - pausedTotal;
+}
+
+function isGamePaused(): boolean {
+  return pausedAt !== null;
+}
+
+function setGamePaused(paused: boolean): void {
+  if (paused === isGamePaused()) return;
+  if (paused) {
+    pausedAt = clockNow();
+  } else {
+    pausedTotal += clockNow() - (pausedAt as number);
+    pausedAt = null;
+  }
+  pauseListeners.forEach((listener) => listener());
+}
+
+function subscribePause(listener: () => void): () => void {
+  pauseListeners.add(listener);
+  return () => {
+    pauseListeners.delete(listener);
+  };
+}
+
+export function useGamePaused(): boolean {
+  return useSyncExternalStore(subscribePause, isGamePaused, isGamePaused);
+}
+
+// Hora del juego que se actualiza sola mientras el juego está activo.
 export function useNow(active: boolean, intervalMs = 250): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => gameNow());
   useEffect(() => {
     if (!active) return;
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    const timer = setInterval(() => setNow(gameNow()), intervalMs);
     return () => clearInterval(timer);
   }, [active, intervalMs]);
   return now;
+}
+
+// Ejecuta `onTime` cuando el reloj del juego llega a `at` (null: nada pendiente). En pausa no corre y
+// al reanudar se reprograma con el tiempo que quedaba. `token` vuelve a armarlo aunque `at` no cambie.
+export function useGameTimeout(at: number | null | undefined, onTime: () => void, token: unknown = null): void {
+  const callback = useRef(onTime);
+  useEffect(() => {
+    callback.current = onTime;
+  });
+  const paused = useGamePaused();
+  useEffect(() => {
+    if (at === null || at === undefined || paused) return;
+    const timer = setTimeout(() => callback.current(), Math.max(0, at - gameNow()));
+    return () => clearTimeout(timer);
+  }, [at, paused, token]);
+}
+
+// Entrega el resultado una sola vez, aunque el cierre forzado y el botón de enviar coincidan.
+export function useSubmitOnce(onComplete: (result: StationGameResult) => void): (result: StationGameResult) => void {
+  const done = useRef(false);
+  return useCallback(
+    (result: StationGameResult) => {
+      if (done.current) return;
+      done.current = true;
+      onComplete(result);
+    },
+    [onComplete],
+  );
+}
+
+// Cierra el juego a la hora indicada (hora local en ms). En la ruta en vivo la decide el stand: cuando
+// el grupo avanza, el juego abierto se cierra solo y entrega lo logrado hasta ese momento.
+export function useDeadline(deadline: number | null | undefined, onDeadline: () => void): void {
+  const callback = useRef(onDeadline);
+  useEffect(() => {
+    callback.current = onDeadline;
+  });
+  useEffect(() => {
+    if (!deadline) return;
+    const timer = setTimeout(() => callback.current(), Math.max(0, deadline - Date.now()));
+    return () => clearTimeout(timer);
+  }, [deadline]);
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -112,16 +195,58 @@ export function useAskContinue(): AskContinue {
   return useContext(ContinueContext).ask;
 }
 
-function ContinueHost({ children }: PropsWithChildren) {
+// `pausable`: el juego no tiene un cierre impuesto por la ruta en vivo, así que puede esperar al jugador.
+function ContinueHost({ children, pausable }: PropsWithChildren<{ pausable: boolean }>) {
   const motion = useMotionEnabled();
   const [pending, setPending] = useState<{ action: () => void; label: string } | null>(null);
+  // El jugador salió de la app en medio del juego: queda en pausa hasta que él lo reanuda.
+  const [away, setAway] = useState(false);
   const ask = useCallback<AskContinue>((action, label = 'Continuar') => setPending({ action, label }), []);
   const cancel = useCallback(() => setPending(null), []);
   const api = useMemo(() => ({ ask, cancel }), [ask, cancel]);
+
+  // Mientras hay una explicación en pantalla (o el jugador no está), el reloj del juego no corre.
+  useEffect(() => {
+    setGamePaused(pending !== null || away);
+  }, [away, pending]);
+  // Al cerrar el juego el reloj queda corriendo para el siguiente.
+  useEffect(() => () => setGamePaused(false), []);
+
+  useEffect(() => {
+    if (!pausable) return;
+    const pause = () => setAway(true);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') pause();
+    });
+    const page = Platform.OS === 'web' ? (globalThis as { document?: { visibilityState?: string; addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void } }).document : undefined;
+    const onVisibility = () => {
+      if (page?.visibilityState === 'hidden') pause();
+    };
+    page?.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      subscription.remove();
+      page?.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [pausable]);
+
   return (
     <ContinueContext.Provider value={api}>
       <View style={styles.continueHost}>
         <View style={styles.continueGame}>{children}</View>
+        {away && pausable && (
+          <View style={styles.pauseLayer} accessibilityViewIsModal>
+            <View style={styles.pauseCard}>
+              <TelIcon name="pause" size={30} color={colors.cream} />
+              <TelText variant="subtitle" color="cream" align="center">
+                Juego en pausa
+              </TelText>
+              <TelText variant="caption" color="accentSoft" align="center">
+                Saliste un momento. El tiempo no corrió: sigues donde quedaste.
+              </TelText>
+              <TelButton label="Seguir jugando" variant="cream" icon="play" onPress={() => setAway(false)} />
+            </View>
+          </View>
+        )}
         {pending && (
           <Animated.View entering={motion ? FadeInDown.duration(180) : undefined} style={styles.continueBar}>
             <TelButton
@@ -141,11 +266,11 @@ function ContinueHost({ children }: PropsWithChildren) {
 }
 
 // Envuelve un juego de estación con el botón "Continuar" compartido por sus etapas.
-export function withContinue<P extends { pace?: number }>(Game: ComponentType<P>): ComponentType<P> {
+export function withContinue<P extends { pace?: number; deadline?: number | null }>(Game: ComponentType<P>): ComponentType<P> {
   function WithContinue(props: P) {
     return (
       <PaceContext.Provider value={props.pace && props.pace > 0 ? props.pace : 1}>
-        <ContinueHost>
+        <ContinueHost pausable={props.deadline === null || props.deadline === undefined}>
           <Game {...props} />
         </ContinueHost>
       </PaceContext.Provider>
@@ -405,6 +530,26 @@ const styles = StyleSheet.create({
   },
   continueBar: {
     paddingBottom: spacing.xs,
+  },
+  pauseLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+    backgroundColor: 'rgba(6, 26, 41, 0.9)',
+    zIndex: 20,
+  },
+  pauseCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primarySoft,
   },
   summary: {
     gap: spacing.md,
