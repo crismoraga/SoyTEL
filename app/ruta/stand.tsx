@@ -208,14 +208,14 @@ function StandHome() {
         <TelText variant="body" color="ink">
           Crea la ruta y muestra el código o el QR en la pantalla del stand. Los participantes se unen desde su teléfono y la ruta avanza sola: B215 → B213 → pasillo.
         </TelText>
-        <ChipGroup options={QUESTION_OPTIONS} value={questions} onChange={setQuestions} accessibilityLabel="Preguntas de la trivia" />
-        <ChipGroup options={PROJECT_OPTIONS} value={minutes} onChange={setMinutes} accessibilityLabel="Tiempo en la sala B213" />
-        <ChipGroup options={PACE_OPTIONS} value={pace} onChange={setPace} accessibilityLabel="Ritmo de los juegos" />
+        <ChipGroup kind="choice" options={QUESTION_OPTIONS} value={questions} onChange={setQuestions} accessibilityLabel="Preguntas de la trivia" />
+        <ChipGroup kind="choice" options={PROJECT_OPTIONS} value={minutes} onChange={setMinutes} accessibilityLabel="Tiempo en la sala B213" />
+        <ChipGroup kind="choice" options={PACE_OPTIONS} value={pace} onChange={setPace} accessibilityLabel="Ritmo de los juegos" />
         <TelText variant="caption" color="inkSoft">
           {paceLabels[pace].description} El ritmo es el mismo para todo el grupo.
         </TelText>
         {error && (
-          <TelText variant="caption" color="danger" accessibilityLiveRegion="polite">
+          <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
             {error}
           </TelText>
         )}

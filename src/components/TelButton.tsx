@@ -16,6 +16,7 @@ export type ButtonVariant =
   | 'ghost'
   | 'ghostLight'
   | 'danger'
+  | 'dangerOutlineLight'
   | 'dangerOutline'
   | 'success';
 
@@ -43,7 +44,9 @@ const variantColors: Record<ButtonVariant, { bg: string; fg: ColorToken; border?
   // Sobre fondos azul noche (pantallas de juego).
   ghostLight: { bg: 'transparent', fg: 'accentSoft' },
   danger: { bg: colors.danger, fg: 'white' },
-  dangerOutline: { bg: 'transparent', fg: 'danger', border: colors.danger },
+  dangerOutline: { bg: 'transparent', fg: 'dangerText', border: colors.dangerText },
+  // Acción destructiva sobre fondos azul noche.
+  dangerOutlineLight: { bg: 'rgba(11, 45, 69, 0.55)', fg: 'dangerLight', border: 'rgba(255, 156, 156, 0.6)' },
   success: { bg: colors.success, fg: 'white' },
 };
 

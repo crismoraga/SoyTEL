@@ -125,7 +125,7 @@ export default function RouteLandingScreen() {
             setError(null);
           }} autoFocus={!link.code && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
           {link.problem === 'code' && (
-            <TelText variant="caption" color="danger" accessibilityLiveRegion="polite">
+            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
               El enlace que abriste no trae un código válido. Escribe el que muestra la pantalla del stand.
             </TelText>
           )}
@@ -161,7 +161,7 @@ export default function RouteLandingScreen() {
           <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} />
 
           {error && (
-            <TelText variant="caption" color="danger" accessibilityLiveRegion="polite">
+            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
               {error}
             </TelText>
           )}

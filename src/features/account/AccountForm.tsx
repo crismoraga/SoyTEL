@@ -111,7 +111,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
           autoCorrect={false}
           style={[styles.input, font('bodySemi'), touched && aliasError && styles.inputError]}
         />
-        <TelText variant="small" color={touched && aliasError ? 'danger' : 'inkSoft'}>
+        <TelText variant="small" color={touched && aliasError ? 'dangerText' : 'inkSoft'}>
           {touched && aliasError ? aliasError : 'Aparece en el ranking. Mejor un apodo que tu nombre completo.'}
         </TelText>
       </TelCard>
@@ -146,7 +146,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
           style={[styles.input, font('bodySemi'), touched && schoolError && styles.inputError]}
         />
         {touched && schoolError && (
-          <TelText variant="small" color="danger">
+          <TelText variant="small" color="dangerText">
             {schoolError}
           </TelText>
         )}
@@ -185,7 +185,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
               style={[styles.input, font('bodySemi'), touched && contactError && styles.inputError]}
             />
             {touched && contactError && (
-              <TelText variant="small" color="danger">
+              <TelText variant="small" color="dangerText">
                 {contactError}
               </TelText>
             )}
@@ -200,7 +200,7 @@ export function AccountForm({ initial, level, achievements, submitLabel, submitt
                   label="Mi apoderado/a sabe y está de acuerdo con que Telemática USM me contacte por este medio. (Puedes dejar el contacto de tu apoderado/a.)"
                 />
                 {touched && guardianError && (
-                  <TelText variant="small" color="danger">
+                  <TelText variant="small" color="dangerText">
                     {guardianError}
                   </TelText>
                 )}

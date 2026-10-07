@@ -20,6 +20,7 @@ import { expressionForMood, isAccessoryUnlocked, rutixWardrobe, signalForMood } 
 import { now } from '@/lib/clock';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { useEntering, useMotionLevel } from '@/lib/motion';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { loadProfile, loadResults, syncAchievements, updateMascotMood } from '@/storage/profile';
 import { updateSettings, useSettings } from '@/storage/settings';
@@ -85,7 +86,7 @@ export default function MascotScreen() {
   const danceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const wiggle = useSharedValue(0);
   const wiggleStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 9}deg` }, { translateY: -Math.abs(wiggle.value) * 6 }] }));
-  const { data, setData, reload } = useFocusData(async () => {
+  const { data, setData, reload, error } = useFocusData(async () => {
     const [profile, log, days, results] = await Promise.all([loadProfile(), loadMascotLog(), loadMascotDays(), loadResults()]);
     return { profile, log, days: days.length, results };
   });
@@ -240,6 +241,7 @@ export default function MascotScreen() {
       header={<AppHeader transparent onBack={() => router.back()} kicker="Tu compañero" title="Rutix" compact right={<HelpButton onPress={tutorial.open} label="Conoce a Rutix" />} />}
     >
       <Celebration burstKey={burst} />
+      {error && !data && <LoadError tone="dark" onRetry={reload} />}
       <View style={styles.stage}>
         <Pressable accessibilityRole="button" accessibilityLabel="Tocar a Rutix" accessibilityHint="Tócalo varias veces para hacerle cosquillas" onPress={() => void pet()}>
           <Animated.View style={wiggleStyle}>
@@ -350,7 +352,7 @@ export default function MascotScreen() {
         <TelText variant="caption" color="accentSoft">
           Rutix lleva lo que elijas en toda la app. Desbloquea más accesorios jugando.
         </TelText>
-        <View style={styles.wardrobeRow}>
+        <View style={styles.wardrobeRow} accessibilityRole="radiogroup" accessibilityLabel="Accesorio de Rutix">
           {rutixWardrobe.map((item) => {
             const unlocked = profile ? isAccessoryUnlocked(item, { level: profile.level, achievements: profile.unlockedAchievements }) : item.id === 'none';
             const selected = settings.rutixAccessory === item.id;
@@ -358,7 +360,7 @@ export default function MascotScreen() {
               <PressableScale
                 key={item.id}
                 accessibilityRole="radio"
-                accessibilityState={{ selected, disabled: !unlocked }}
+                accessibilityState={{ checked: selected, disabled: !unlocked }}
                 accessibilityLabel={unlocked ? item.label : `${item.label}, bloqueado. ${item.hint}`}
                 haptic
                 onPress={() => {

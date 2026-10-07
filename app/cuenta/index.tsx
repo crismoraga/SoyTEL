@@ -12,6 +12,7 @@ import { createAccount, deleteAccount, editAccount, forgetAccount, useAccount } 
 import { AccountForm, type AccountFormValues } from '@/features/account/AccountForm';
 import { RecoveryCodeCard } from '@/features/account/RecoveryCodeCard';
 import { formatNumber } from '@/lib/format';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { DEFAULT_ALIAS, loadProfile } from '@/storage/profile';
 import { spacing } from '@/theme';
@@ -30,7 +31,7 @@ function confirm(title: string, message: string, action: string, onConfirm: () =
 // Crear o editar la cuenta (alias, avatar, curso, colegio y consentimiento de contacto).
 export default function AccountScreen() {
   const account = useAccount();
-  const { data: profile } = useFocusData(loadProfile);
+  const { data: profile, error: profileError, reload } = useFocusData(loadProfile);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export default function AccountScreen() {
   }
 
   if (account.status === 'loading' || !profile) {
-    return <Screen header={<AppHeader onBack={leave} kicker="Cuenta" title=" " />} />;
+    return <Screen header={<AppHeader onBack={leave} kicker="Cuenta" title=" " />}>{profileError && <LoadError onRetry={reload} />}</Screen>;
   }
 
   if (account.status === 'expired') {

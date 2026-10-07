@@ -108,7 +108,7 @@ export function TelTabBar({ state, navigation, descriptors, position }: TelTabBa
                 <TelIcon name={config.icon} size={22} color={focused ? colors.actionInk : colors.inkSoft} strokeWidth={focused ? 2.3 : 2} />
                 {showDot && <View style={[styles.dot, focused && styles.dotOnDark]} />}
               </View>
-              <TelText variant="small" color={focused ? 'actionInk' : 'inkSoft'} style={styles.label} numberOfLines={1}>
+              <TelText variant="small" color={focused ? 'actionInk' : 'inkSoft'} style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                 {label}
               </TelText>
             </PressableScale>

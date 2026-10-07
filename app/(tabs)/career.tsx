@@ -19,6 +19,7 @@ import { tipForDate } from '@/data/tips';
 import { TipSheet } from '@/features/tips/TipSheet';
 import { LINKS, openLink } from '@/lib/links';
 import { useEntering } from '@/lib/motion';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { AREA_MASTERY, isAreaMastered, loadCareerProgress, masteredAreas, type AreaProgress } from '@/storage/career';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -35,7 +36,7 @@ export default function CareerScreen() {
   const entering = useEntering();
   const [selectedId, setSelectedId] = useState<CareerArea['id']>('redes');
   const [tipOpen, setTipOpen] = useState(false);
-  const { data: progress } = useFocusData(loadCareerProgress);
+  const { data: progress, error, reload } = useFocusData(loadCareerProgress);
   const selected = careerAreas.find((area) => area.id === selectedId) ?? careerAreas[0];
   const selectedProgress = progress?.[selected.id];
   const tip = tipForDate(new Date());
@@ -64,6 +65,7 @@ export default function CareerScreen() {
         </AppHeader>
       }
     >
+      {error && !progress && <LoadError onRetry={reload} />}
       <View style={styles.section}>
         <SectionHeader title="Áreas de la carrera" subtitle={`${mastered}/${careerAreas.length} dominadas`} />
         <View style={styles.grid}>

@@ -22,6 +22,7 @@ import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { getTutorial } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
 import { formatNumber } from '@/lib/format';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { newRunId, useResultSaver } from '@/lib/resultSaver';
 import { loadPuzzleProgress, recordPuzzleSolved, type PuzzleId } from '@/storage/puzzles';
@@ -47,7 +48,7 @@ export default function PuzzleScreen() {
   const coach = useCoachEnabled();
   const tutorial = useTutorial(info ? `puzzle-${info.id}` : null);
   const guide = info ? getTutorial(`puzzle-${info.id}`) : undefined;
-  const { data: progress, setData: setProgress } = useFocusData(loadPuzzleProgress);
+  const { data: progress, setData: setProgress, error, reload } = useFocusData(loadPuzzleProgress);
   const [chosenLevel, setChosenLevel] = useState<number | null>(null);
   const [run, setRun] = useState(() => ({ key: 0, id: newRunId('puzzle'), seed: Math.floor(Math.random() * 1e9), startedAt: now() }));
   const [solved, setSolved] = useState<Solved | null>(null);
@@ -56,7 +57,13 @@ export default function PuzzleScreen() {
   const [line, setLine] = useState<{ text: string; mood: CoachMood } | null>(null);
 
   if (!info) return <Redirect href="/games" />;
-  if (!progress) return <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />} />;
+  if (!progress) {
+    return (
+      <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />}>
+        {error && <LoadError tone="dark" onRetry={reload} />}
+      </Screen>
+    );
+  }
 
   const unlocked = Math.min(info.maxLevel, progress[info.id].level + 1);
   const level = Math.min(chosenLevel ?? unlocked, unlocked);
@@ -161,7 +168,7 @@ export default function PuzzleScreen() {
       }
     >
       {levels.length > 1 && (
-        <ChipGroup tone="dark" accessibilityLabel="Elegir nivel" options={levels} value={String(level)} onChange={(id) => restart(Number(id))} inset={spacing.md} />
+        <ChipGroup kind="choice" tone="dark" accessibilityLabel="Elegir nivel" options={levels} value={String(level)} onChange={(id) => restart(Number(id))} inset={spacing.md} />
       )}
       {coach ? (
         <CoachBubble mood={line?.mood ?? 'intro'} tone={line?.mood === 'good' ? 'good' : line?.mood === 'bad' ? 'bad' : 'info'} size={60}>

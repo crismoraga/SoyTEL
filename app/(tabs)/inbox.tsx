@@ -21,7 +21,7 @@ type Filter = 'all' | InboxKind;
 const kindStyle: Record<InboxKind, { label: string; icon: IconName; tint: [string, string] }> = {
   logro: { label: 'LOGRO', icon: 'trophy', tint: [colors.successSoft, colors.successInk] },
   progreso: { label: 'PROGRESO', icon: 'rocket', tint: [colors.highlight, colors.inkAccent] },
-  rutix: { label: 'RUTIX', icon: 'robot', tint: [colors.cream, colors.warningInk] },
+  rutix: { label: 'RUTIX', icon: 'robot', tint: [colors.cream, colors.primary] },
   dato: { label: 'DATO', icon: 'lightbulb', tint: [colors.primary, colors.cream] },
   aviso: { label: 'AVISO', icon: 'megaphone', tint: [colors.primary, colors.cream] },
 };

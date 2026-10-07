@@ -23,6 +23,7 @@ import { SvgDrawing } from '@/graphics/ShapeLayer';
 import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { useEntering } from '@/lib/motion';
 import { useScrollToEnd } from '@/lib/useScrollToEnd';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { now } from '@/lib/clock';
 import { newRunId, useResultSaver } from '@/lib/resultSaver';
@@ -55,7 +56,7 @@ function useTypewriter(text: string, speed = 18) {
 
 export default function StoryScreen() {
   const entering = useEntering();
-  const { data: progress, setData: setProgress } = useFocusData(loadStoryProgress);
+  const { data: progress, setData: setProgress, error, reload } = useFocusData(loadStoryProgress);
   const [phase, setPhase] = useState<StoryPhase>('map');
   const [chapter, setChapter] = useState<StoryChapter | null>(null);
   const [line, setLine] = useState(0);
@@ -244,6 +245,7 @@ export default function StoryScreen() {
         <AppHeader transparent onBack={() => router.back()} kicker="Modo historia" title="La señal perdida" subtitle="Alguien dejó el campus sin conexión. Ayuda a Rutix a restaurarla, capítulo a capítulo." />
       }
     >
+      {error && !progress && <LoadError tone="dark" onRetry={reload} />}
       <View style={styles.progressRow}>
         <TelText variant="label" color="cream">
           {completed.length} de {storyChapters.length} capítulos

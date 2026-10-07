@@ -275,7 +275,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
             Perderás tu lugar en el ranking de este grupo.
           </TelText>
           <TelButton label="Seguir jugando" variant="cream" onPress={() => setConfirmLeave(false)} />
-          <TelButton label="Salir de la ruta" variant="dangerOutline" onPress={exit} />
+          <TelButton label="Salir de la ruta" variant="dangerOutlineLight" onPress={exit} />
           {!view.solo && <DiagnosticsButton />}
         </View>
       </Screen>

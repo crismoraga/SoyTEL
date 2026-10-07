@@ -25,6 +25,8 @@ const brand = {
   success: '#2E7D5B',
   warning: '#D4A017',
   danger: '#C73E3E',
+  // Rojo claro para texto y bordes de error sobre azul noche (el de marca no alcanza contraste ahí).
+  dangerLight: '#FF9C9C',
   info: '#3B82F6',
   white: '#FFFFFF',
   black: '#000000',
@@ -48,6 +50,8 @@ const lightSurface = {
   warningInk: '#6B5320',
   dangerSoft: '#FBEAEA',
   dangerInk: '#8E2B2B',
+  // Texto de error directamente sobre una superficie del tema (el rojo de marca es para rellenos).
+  dangerText: '#C03A3A',
   // Acción principal (botón primario, pestaña activa, chip seleccionado) y su texto.
   action: '#0B2D45',
   actionInk: '#F4ECD7',
@@ -70,6 +74,7 @@ const darkSurface: typeof lightSurface = {
   warningInk: '#EFD58B',
   dangerSoft: '#3F191A',
   dangerInk: '#F3ABAB',
+  dangerText: '#FF9C9C',
   action: '#6FB3D9',
   actionInk: '#0B2D45',
   overlay: 'rgba(2, 10, 18, 0.74)',

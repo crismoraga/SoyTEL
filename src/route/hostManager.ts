@@ -40,6 +40,11 @@ class HostManager {
     return controller;
   }
 
+  // Hay rutas abiertas en este dispositivo (conduciendo o mirando).
+  get busy(): boolean {
+    return this.controllers.size > 0 || this.opening.size > 0;
+  }
+
   get(code: string): HostController | undefined {
     return this.controllers.get(code);
   }

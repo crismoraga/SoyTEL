@@ -103,8 +103,10 @@ describe('motion levels', () => {
 
   it('defaults to an unhurried game pace and validates stored values', () => {
     expect(defaultSettings.pace).toBe('relaxed');
-    expect(parseSettings(JSON.stringify({ pace: 'fast', theme: 'dark', coach: false }))).toMatchObject({ pace: 'fast', theme: 'dark', coach: false });
-    expect(parseSettings(JSON.stringify({ pace: 'turbo', theme: 'neon' }))).toMatchObject({ pace: 'relaxed', theme: 'system', coach: true });
+    expect(parseSettings(JSON.stringify({ pace: 'fast', coach: false }))).toMatchObject({ pace: 'fast', coach: false });
+    expect(parseSettings(JSON.stringify({ pace: 'turbo' }))).toMatchObject({ pace: 'relaxed', coach: true });
+    // El tema ya no vive en los ajustes: un valor guardado por una versión anterior se ignora.
+    expect(parseSettings(JSON.stringify({ theme: 'dark' }))).not.toHaveProperty('theme');
     expect(paceFactor('calm')).toBeGreaterThan(paceFactor('normal'));
     expect(paceFactor('fast')).toBe(1);
     expect(paceFromFactor(1.68)).toBe('calm');

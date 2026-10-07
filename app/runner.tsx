@@ -23,6 +23,7 @@ import { SvgDrawing } from '@/graphics/ShapeLayer';
 import { feedbackSuccess } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
 import { usePaceFactor } from '@/lib/pace';
+import { LoadError } from '@/components/feedback/LoadError';
 import { useFocusData } from '@/lib/useFocusData';
 import { recordGameResult } from '@/storage/profile';
 import { loadRunnerSave, recordRun, selectRunnerCharacter, unlockRunnerCharacter, type RunnerSave } from '@/storage/runner';
@@ -47,7 +48,7 @@ export default function RunnerScreen() {
   const pace = usePaceFactor();
   const coach = useCoachEnabled();
   const tutorial = useTutorial('runner');
-  const { data: save, setData: setSave } = useFocusData(loadRunnerSave);
+  const { data: save, setData: setSave, error, reload } = useFocusData(loadRunnerSave);
   const [phase, setPhase] = useState<'lobby' | 'playing' | 'result'>('lobby');
   const [preview, setPreview] = useState<string | null>(null);
   const [run, setRun] = useState({ key: 0, seed: 1 });
@@ -76,7 +77,13 @@ export default function RunnerScreen() {
 
   const leave = useCallback(() => setPhase('lobby'), []);
 
-  if (!save) return <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />} />;
+  if (!save) {
+    return (
+      <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.back()} />}>
+        {error && <LoadError tone="dark" onRetry={reload} />}
+      </Screen>
+    );
+  }
 
   const selected = getRunnerCharacter(save.selected);
 

@@ -14,9 +14,10 @@ import { TelText } from '@/components/TelText';
 import { suggestedMotionLevel, useMotionLevel, type MotionLevel } from '@/lib/motion';
 import { paceLabels } from '@/lib/pace';
 import { resetAllData } from '@/storage/reset';
-import { updateSettings, useSettings, type GamePace, type MotionPreference, type ThemePreference } from '@/storage/settings';
+import { emitAppEvent } from '@/lib/events';
+import { updateSettings, useSettings, type GamePace, type MotionPreference } from '@/storage/settings';
 import { colors, currentTheme, spacing } from '@/theme';
-import { setThemePreference } from '@/theme/themeStore';
+import { setThemePreference, useThemePreference, type ThemePreference } from '@/theme/themeStore';
 
 const THEME_OPTIONS: { id: ThemePreference; label: string; icon: IconName }[] = [
   { id: 'system', label: 'Del teléfono', icon: 'settings' },
@@ -96,9 +97,13 @@ export default function SettingsScreen() {
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  const themePreference = useThemePreference();
+
   async function chooseTheme(theme: ThemePreference) {
-    await updateSettings({ theme });
-    await setThemePreference(theme);
+    // Si no se pudo guardar, nada cambia (ni el selector ni los colores) y se dice.
+    if (!(await setThemePreference(theme))) {
+      emitAppEvent({ type: 'toast', title: 'No se pudo guardar el tema', body: 'Este teléfono no permitió guardarlo. Inténtalo de nuevo.' });
+    }
   }
 
   async function runReset() {
@@ -107,7 +112,7 @@ export default function SettingsScreen() {
     setResetError(null);
     try {
       await resetAllData();
-      await setThemePreference('system');
+      if (!(await setThemePreference('system'))) throw new Error('tema');
       router.replace('/home');
     } catch {
       // Lo que se pudo borrar ya se borró y la app quedó como recién instalada en memoria.
@@ -128,15 +133,15 @@ export default function SettingsScreen() {
 
   return (
     <Screen header={<AppHeader onBack={() => router.back()} kicker="Tu app, a tu manera" title="Ajustes" />}>
-      <Block icon="moon" title="Tema" description={`Ahora: ${currentTheme() === 'dark' ? 'oscuro' : 'claro'}. Al cambiarlo, la app se reinicia un instante para aplicar los colores.`}>
+      <Block icon="moon" title="Tema" description={`Ahora: ${currentTheme() === 'dark' ? 'oscuro' : 'claro'}. Al cambiarlo, la app se reinicia un instante para aplicar los colores. Con «Del teléfono» sigue el modo claro u oscuro de tu equipo.`}>
         <View style={styles.chips}>
-          <ChipGroup accessibilityLabel="Tema de la app" options={THEME_OPTIONS} value={settings.theme} onChange={(theme) => void chooseTheme(theme)} />
+          <ChipGroup kind="choice" accessibilityLabel="Tema de la app" options={THEME_OPTIONS} value={themePreference} onChange={(theme) => void chooseTheme(theme)} />
         </View>
       </Block>
 
       <Block icon="timer" title="Ritmo de los juegos" description={paceLabels[settings.pace].description}>
         <View style={styles.chips}>
-          <ChipGroup accessibilityLabel="Ritmo de los juegos" options={PACE_OPTIONS} value={settings.pace} onChange={(pace) => void updateSettings({ pace })} />
+          <ChipGroup kind="choice" accessibilityLabel="Ritmo de los juegos" options={PACE_OPTIONS} value={settings.pace} onChange={(pace) => void updateSettings({ pace })} />
         </View>
         <TelText variant="caption" color="inkSoft">
           Cambia cuánto tiempo tienes en la Ráfaga y en los juegos de la ruta cuando practicas. En la ruta en vivo el ritmo lo fija el stand para todo el grupo.
@@ -161,7 +166,7 @@ export default function SettingsScreen() {
         description={`${settings.motion === 'auto' ? `Para este teléfono: ${MOTION_OPTIONS.find((option) => option.id === suggestedMotionLevel())?.label.toLowerCase()}. ` : ''}${motionCopy[motionLevel]}`}
       >
         <View style={styles.chips}>
-          <ChipGroup accessibilityLabel="Nivel de animaciones" options={MOTION_OPTIONS} value={settings.motion} onChange={(motion) => void updateSettings({ motion })} />
+          <ChipGroup kind="choice" accessibilityLabel="Nivel de animaciones" options={MOTION_OPTIONS} value={settings.motion} onChange={(motion) => void updateSettings({ motion })} />
         </View>
       </Block>
 
