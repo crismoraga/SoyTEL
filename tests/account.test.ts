@@ -1,14 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   aliasProblem,
-  allowedXp,
   cleanAlias,
+  contactPolicyProblem,
   formatRecoveryCode,
   isBlockedText,
   isRecoveryCode,
   needsGuardianConsent,
+  grantXp,
   normalizeContact,
+  recoveryCodeFromBytes,
+  refillBudget,
   schoolProblem,
+  XP_BUDGET_CAP,
 } from '@/account/rules';
 import { dismissAccountOffer, initAccount, isOfferSnoozed, OFFER_SNOOZE_MS, shouldOfferAccount } from '@/account/store';
 import { avatarCatalog, isAvatarUnlocked } from '@/data/avatars';
@@ -52,9 +56,36 @@ describe('account rules', () => {
     expect(isRecoveryCode('TEL-ABCD-EFGH-JKM0')).toBe(false);
   });
 
-  it('limits how fast a device can claim XP', () => {
-    expect(allowedXp(1000, 0)).toBe(1400);
-    expect(allowedXp(1000, 60)).toBe(1580);
+  it('limits how fast a device can claim XP with a budget that is spent and refilled', () => {
+    // El presupuesto se recarga con el tiempo, hasta un tope.
+    expect(refillBudget(400, 0)).toBe(400);
+    expect(refillBudget(0, 60)).toBe(180);
+    expect(refillBudget(49_990, 3600)).toBe(XP_BUDGET_CAP);
+    // Lo pedido se acepta hasta donde alcanza, y lo aceptado se descuenta.
+    expect(grantXp(1000, 1250, 400)).toEqual({ xp: 1250, budget: 150, clamped: false });
+    expect(grantXp(1000, 9000, 400)).toEqual({ xp: 1400, budget: 0, clamped: true });
+    // Pedir de nuevo sin que pase el tiempo no da más.
+    expect(grantXp(1400, 9000, 0)).toEqual({ xp: 1400, budget: 0, clamped: true });
+    // El XP nunca baja.
+    expect(grantXp(1400, 10, 300)).toEqual({ xp: 1400, budget: 300, clamped: false });
+  });
+
+  it('stores contact data only with a known grade and, for 7° and 8°, guardian consent', () => {
+    expect(contactPolicyProblem(null, false, false)).toBeNull();
+    expect(contactPolicyProblem('7b', false, false)).toBeNull();
+    expect(contactPolicyProblem(null, true, true)).toMatch(/elige tu curso/);
+    expect(contactPolicyProblem(undefined, true, false)).toMatch(/elige tu curso/);
+    expect(contactPolicyProblem('no-existe', true, true)).toMatch(/elige tu curso/);
+    expect(contactPolicyProblem('7b', true, false)).toMatch(/apoderado/);
+    expect(contactPolicyProblem('8b', true, true)).toBeNull();
+    expect(contactPolicyProblem('4m', true, false)).toBeNull();
+    expect(contactPolicyProblem('otro', true, false)).toBeNull();
+  });
+
+  it('builds recovery codes from random bytes', () => {
+    const code = recoveryCodeFromBytes(Uint8Array.from({ length: 12 }, (_, index) => index * 21));
+    expect(isRecoveryCode(code)).toBe(true);
+    expect(() => recoveryCodeFromBytes(new Uint8Array(4))).toThrow();
   });
 
   it('checks school names', () => {

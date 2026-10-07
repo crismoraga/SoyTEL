@@ -9,7 +9,9 @@ import { randomBytes } from '@/realtime/crypto';
 // Los datos viven en AsyncStorage solo como texto cifrado; la llave maestra queda fuera de él:
 // - Android/iOS: en el llavero del sistema (expo-secure-store, Keystore / Keychain).
 // - Web: CryptoKey AES-GCM no exportable guardada en IndexedDB (ningún script puede leerla).
-// - Sin ninguno de los dos (pruebas): llave en memoria, válida solo durante la sesión.
+// - Sin ninguno de los dos (o si fallan): llave en memoria, válida solo durante la sesión. En ese modo
+//   lo guardado NO sobrevive a cerrar la app: quien necesita durabilidad (la cuenta) lo consulta antes
+//   con `vaultIsDurable()` y no promete nada que no pueda cumplir.
 
 const MASTER_KEY_NAME = 'soytel.vault.v1';
 const SEALED_PREFIX = 'sv1:';
@@ -110,18 +112,43 @@ async function webCipher(): Promise<Cipher | null> {
   };
 }
 
+// No se puede guardar sin destruir algo que quizá se pueda recuperar: hay datos cifrados con la llave
+// del sistema y en este momento esa llave no está disponible.
+export class VaultUnavailableError extends Error {
+  constructor() {
+    super('vault-unavailable');
+    this.name = 'VaultUnavailableError';
+  }
+}
+
+// Cuánto se espera antes de volver a probar el llavero del sistema cuando falló (pudo ser temporal:
+// el teléfono aún bloqueado tras reiniciar, el navegador negando el acceso un momento).
+const PROVIDER_RETRY_MS = 15_000;
+
 let cipherPromise: Promise<Cipher> | null = null;
+// La llave de sesión es una sola mientras dure el proceso: lo escrito con ella se puede volver a leer.
+let memoryCipher: Cipher | null = null;
+let retryAt = 0;
+
+function sessionCipher(): Cipher {
+  if (!memoryCipher) memoryCipher = secretboxCipher(randomBytes(nacl.secretbox.keyLength), 'memory');
+  return memoryCipher;
+}
 
 function getCipher(): Promise<Cipher> {
+  if (cipherPromise && retryAt > 0 && Date.now() >= retryAt) cipherPromise = null;
   if (!cipherPromise) {
     cipherPromise = (async () => {
       try {
         const cipher = (await secureStoreCipher()) ?? (await webCipher());
+        retryAt = 0;
         if (cipher) return cipher;
       } catch {
-        // Llavero no disponible (equipo sin bloqueo, modo privado del navegador…): llave de sesión.
+        // Llavero no disponible ahora (equipo sin bloqueo, modo privado del navegador…): se usa la
+        // llave de sesión y se vuelve a probar más tarde.
+        retryAt = Date.now() + PROVIDER_RETRY_MS;
       }
-      return secretboxCipher(randomBytes(nacl.secretbox.keyLength), 'memory');
+      return sessionCipher();
     })();
   }
   return cipherPromise;
@@ -129,6 +156,11 @@ function getCipher(): Promise<Cipher> {
 
 export async function vaultKind(): Promise<Cipher['kind']> {
   return (await getCipher()).kind;
+}
+
+// ¿Lo que se guarde ahora seguirá ahí al reabrir la app?
+export async function vaultIsDurable(): Promise<boolean> {
+  return (await vaultKind()) !== 'memory';
 }
 
 export function isSealed(raw: string | null): boolean {
@@ -150,8 +182,17 @@ export async function openText(raw: string): Promise<string | null> {
   }
 }
 
+// Con la llave de sesión no se pisa un valor cifrado con otra llave: puede ser lo guardado con el
+// llavero del sistema, que volverá a leerse cuando el llavero responda.
+async function assertReplaceable(key: string): Promise<void> {
+  if ((await getCipher()).kind !== 'memory') return;
+  const current = await AsyncStorage.getItem(key).catch(() => null);
+  if (current && isSealed(current) && (await openText(current)) === null) throw new VaultUnavailableError();
+}
+
 // Guarda un valor JSON cifrado.
 export async function vaultSet(key: string, value: unknown): Promise<void> {
+  await assertReplaceable(key);
   await AsyncStorage.setItem(key, await sealText(JSON.stringify(value)));
 }
 
@@ -188,10 +229,13 @@ export async function vaultRemove(...keys: string[]): Promise<void> {
 
 // Prepara pares [clave, valor cifrado] para escribirlos junto a otros en un multiSet.
 export async function vaultEntry(key: string, value: unknown): Promise<[string, string]> {
+  await assertReplaceable(key);
   return [key, await sealText(JSON.stringify(value))];
 }
 
-// Solo para pruebas: olvida la llave en memoria.
+// Solo para pruebas: olvida la llave en memoria (como al cerrar y volver a abrir la app).
 export function resetVaultForTests(): void {
   cipherPromise = null;
+  memoryCipher = null;
+  retryAt = 0;
 }

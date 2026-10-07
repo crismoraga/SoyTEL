@@ -8,7 +8,7 @@ import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelText } from '@/components/TelText';
 import { ApiError, type ProfilePayload } from '@/account/api';
-import { createAccount, deleteAccount, editAccount, forgetAccount, useAccount } from '@/account/store';
+import { AccountStorageError, createAccount, deleteAccount, editAccount, forgetAccount, regenerateRecoveryCode, useAccount } from '@/account/store';
 import { AccountForm, type AccountFormValues } from '@/features/account/AccountForm';
 import { RecoveryCodeCard } from '@/features/account/RecoveryCodeCard';
 import { formatNumber } from '@/lib/format';
@@ -28,6 +28,11 @@ function confirm(title: string, message: string, action: string, onConfirm: () =
   ]);
 }
 
+// Mensaje para mostrar: los errores de la cuenta ya vienen redactados para el usuario.
+function messageOf(caught: unknown, fallback: string): string {
+  return caught instanceof ApiError || caught instanceof AccountStorageError ? caught.message : fallback;
+}
+
 // Crear o editar la cuenta (alias, avatar, curso, colegio y consentimiento de contacto).
 export default function AccountScreen() {
   const account = useAccount();
@@ -36,6 +41,7 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [rotating, setRotating] = useState(false);
 
   const editing = account.status === 'registered' && !createdCode;
   const player = account.player;
@@ -52,9 +58,22 @@ export default function AccountScreen() {
         setCreatedCode(await createAccount(payload));
       }
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'No se pudo guardar. Intenta de nuevo.');
+      setError(messageOf(caught, 'No se pudo guardar. Intenta de nuevo.'));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function rotateCode() {
+    if (rotating) return;
+    setRotating(true);
+    setError(null);
+    try {
+      await regenerateRecoveryCode();
+    } catch (caught) {
+      setError(messageOf(caught, 'No se pudo cambiar el código. Intenta de nuevo.'));
+    } finally {
+      setRotating(false);
     }
   }
 
@@ -144,6 +163,13 @@ export default function AccountScreen() {
           <TelButton label="Entrar con mi código" variant="outline" size="sm" icon="key" fullWidth={false} onPress={() => router.replace('/cuenta/recuperar')} />
         </TelCard>
       )}
+      {editing && player?.contactError && (
+        <TelCard tone="danger" style={styles.gap}>
+          <TelText variant="caption" color="dangerInk" accessibilityLiveRegion="polite">
+            No pudimos leer el contacto que tenías guardado. Escríbelo de nuevo y guarda, o desactiva las invitaciones.
+          </TelText>
+        </TelCard>
+      )}
       <AccountForm
         key={editing ? `edit-${player?.id}` : 'create'}
         initial={initial}
@@ -154,7 +180,22 @@ export default function AccountScreen() {
         error={error}
         onSubmit={(payload) => void submit(payload)}
       />
-      {editing && account.recoveryCode && <RecoveryCodeCard code={account.recoveryCode} compact />}
+      {editing && account.recoveryCode && (
+        <RecoveryCodeCard
+          code={account.recoveryCode}
+          compact
+          concealed
+          regenerating={rotating}
+          onRegenerate={() =>
+            confirm(
+              'Cambiar código de recuperación',
+              'Se crea un código nuevo y el anterior deja de servir en el acto. Anota el nuevo: lo necesitarás para entrar a tu cuenta en otro teléfono.',
+              'Cambiar código',
+              () => void rotateCode(),
+            )
+          }
+        />
+      )}
       {editing && (
         <View style={styles.dangerZone}>
           <TelButton
@@ -182,7 +223,7 @@ export default function AccountScreen() {
                 () =>
                   void deleteAccount()
                     .then(leave)
-                    .catch((caught: unknown) => setError(caught instanceof ApiError ? caught.message : 'No se pudo eliminar la cuenta.')),
+                    .catch((caught: unknown) => setError(messageOf(caught, 'No se pudo eliminar la cuenta.'))),
               )
             }
           />

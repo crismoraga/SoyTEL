@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --watchman=false",
     "test:ci": "jest --watchman=false --runInBand",
+    "smoke:brokers": "jest --watchman=false --runInBand --testMatch \"<rootDir>/tests/live/**/*.live.ts\"",
     "lint": "expo lint",
     "design:export": "node scripts/export-design.js",
     "design:system": "node scripts/build-design-system.js",
@@ -66,6 +67,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@electric-sql/pglite": "^0.5.8",
     "@react-native/jest-preset": "0.86.3",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "29.5.14",

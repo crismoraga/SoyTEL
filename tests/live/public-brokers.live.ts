@@ -4,10 +4,10 @@ import { HostController, probeBroker } from '@/route/host';
 import { MqttRouteLink } from '@/route/link';
 import { MemberController } from '@/route/member';
 
-// Prueba contra los brokers públicos reales. Se ejecuta solo con LIVE_MQTT=1 (necesita Internet).
-// Es una comprobación mínima (una ruta con código al azar, un participante, una acción): no es una
-// campaña de fallos ni usa datos de nadie.
-const live = process.env.LIVE_MQTT === '1' ? describe : describe.skip;
+// Comprobación contra los brokers públicos reales (necesita Internet). No forma parte de `npm test`:
+// se ejecuta a pedido con `npm run smoke:brokers`, por ejemplo antes de un evento, desde la red del lugar.
+// Es mínima (una ruta con código al azar, un participante, una acción): no es una campaña de fallos
+// ni usa datos de nadie.
 
 async function waitFor(check: () => boolean, timeoutMs: number, what: string) {
   const started = Date.now();
@@ -18,7 +18,7 @@ async function waitFor(check: () => boolean, timeoutMs: number, what: string) {
   return Date.now() - started;
 }
 
-live('route over public MQTT brokers', () => {
+describe('ruta sobre los brokers MQTT públicos', () => {
   beforeAll(() => {
     (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
   });
