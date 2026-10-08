@@ -247,6 +247,13 @@ describe('REL-02 / REL-08 · publicación', () => {
     expect(ci).not.toMatch(/vercel|deploy:web/);
   });
 
+  it('una copia recién clonada comprueba los tipos igual que el equipo de desarrollo', () => {
+    // `expo-env.d.ts` lo genera `expo start` y no viaja en el repositorio: los tipos globales de Expo
+    // tienen que venir de un archivo que sí viaja (sin él, CI ve `process.env` como `any`).
+    expect(read('.gitignore')).toMatch(/^expo-env\.d\.ts\r?$/m);
+    expect(read('src/types/expo.d.ts')).toContain('/// <reference types="expo/types" />');
+  });
+
   it('las herramientas de publicación están fijadas', () => {
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string>; engines: Record<string, string>; packageManager: string; devDependencies: Record<string, string> };
     // Ninguna invocación a "lo último que haya".
