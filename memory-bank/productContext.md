@@ -1,3 +1,5 @@
+> **Histórico.** Notas de trabajo de versiones anteriores de SoyTEL. No describen el estado actual: para eso están el [README](../README.md), [docs/PRODUCCION.md](../docs/PRODUCCION.md) y [docs/RUTA-PROTOCOLO.md](../docs/RUTA-PROTOCOLO.md).
+
 # Product Context
 
 ## Overview
