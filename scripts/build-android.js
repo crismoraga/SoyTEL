@@ -16,7 +16,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { describePublicConfig, publicConfigProblem } = require('./public-config');
+const { buildEnv, describePublicConfig, publicConfigProblem } = require('./public-config');
 
 const root = path.resolve(__dirname, '..');
 const ALLOWED_ARCHS = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
@@ -67,18 +67,22 @@ function gradleArguments(architectures, debugSigning) {
 
 function run(file, args, cwd) {
   console.log(`\n> ${path.basename(file)} ${args.join(' ')}`);
-  execFileSync(file, args, { cwd, stdio: 'inherit', env: { ...process.env, CI: '1', NODE_ENV: 'production' } });
+  execFileSync(file, args, { cwd, stdio: 'inherit', env: buildEnv() });
 }
 
-// Ejecuta una herramienta que vive en `directory` (gradlew, apksigner). En Windows son archivos .bat y
-// necesitan cmd.exe: se llaman por su nombre desde su carpeta, y los argumentos ya están validados
-// (arquitecturas de una lista cerrada, rutas propias), así que no hay texto libre.
+// Cómo se lanza una herramienta que vive en `directory` (gradlew, apksigner). En Windows son archivos
+// .bat y necesitan cmd.exe: se llaman desde su carpeta con la ruta explícita `.\`, porque un equipo con
+// NoDefaultCurrentDirectoryInExePath no busca programas en la carpeta actual. Los argumentos ya están
+// validados (arquitecturas de una lista cerrada, rutas propias), así que no hay texto libre.
+function toolCommand(directory, name, args, platform = process.platform) {
+  if (platform === 'win32') return { file: 'cmd.exe', args: ['/d', '/c', `.\\${name}`, ...args] };
+  return { file: path.join(directory, name), args };
+}
+
 function runTool(directory, name, args, capture = false) {
-  const windows = process.platform === 'win32';
-  const file = windows ? 'cmd.exe' : path.join(directory, name);
-  const full = windows ? ['/d', '/c', name, ...args] : args;
+  const command = toolCommand(directory, name, args);
   if (!capture) console.log(`\n> ${name} ${args.join(' ')}`);
-  return execFileSync(file, full, { cwd: directory, stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', env: { ...process.env, CI: '1', NODE_ENV: 'production' } });
+  return execFileSync(command.file, command.args, { cwd: directory, stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', env: buildEnv() });
 }
 
 function findApksigner() {
@@ -165,7 +169,7 @@ function main() {
   console.log(`\nAPK listo: ${target}\nTamaño: ${(manifest.bytes / 1048576).toFixed(1)} MB\nSHA-256: ${sha256}\nCertificado (SHA-256): ${certificate.sha256}\nFirma: ${manifest.signing}`);
 }
 
-module.exports = { certificateProblem, gradleArguments, isDebugCertificate, parseArchitectures, parseCertificate };
+module.exports = { certificateProblem, gradleArguments, isDebugCertificate, parseArchitectures, parseCertificate, toolCommand };
 
 if (require.main === module) {
   try {

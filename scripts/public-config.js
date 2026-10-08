@@ -65,4 +65,12 @@ function describePublicConfig(env = process.env) {
   };
 }
 
-module.exports = { describePublicConfig, findLeakedSecrets, publicConfigProblem, SERVER_SECRETS };
+// Entorno de los procesos que compilan (CLI de Expo, Gradle). EXPO_NO_DOTENV evita que la CLI de Expo
+// cargue archivos .env: en la carpeta del proyecto suele quedar .env.production.local (de `vercel env pull`)
+// con los secretos del servidor, y una compilación de la app no los necesita. La configuración pública
+// (EXPO_PUBLIC_*) viene del entorno de quien compila y queda anotada en el manifiesto de la compilación.
+function buildEnv(env = process.env) {
+  return { ...env, CI: '1', NODE_ENV: 'production', EXPO_NO_DOTENV: '1' };
+}
+
+module.exports = { buildEnv, describePublicConfig, findLeakedSecrets, publicConfigProblem, SERVER_SECRETS };

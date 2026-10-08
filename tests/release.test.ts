@@ -15,8 +15,10 @@ const android = require('../scripts/build-android') as {
   parseCertificate(output: string): { dn: string; sha256: string } | null;
   certificateProblem(certificate: { dn: string; sha256: string } | null, options: { debugSigning: boolean; expectedSha256?: string }): string | null;
   gradleArguments(architectures: string[], debugSigning: boolean): string[];
+  toolCommand(directory: string, name: string, args: string[], platform?: string): { file: string; args: string[] };
 };
 const publicConfig = require('../scripts/public-config') as {
+  buildEnv(env?: Record<string, string | undefined>): Record<string, string | undefined>;
   publicConfigProblem(env: Record<string, string | undefined>): string | null;
   findLeakedSecrets(directory: string, env: Record<string, string | undefined>): { secret: string; file: string }[];
   describePublicConfig(env: Record<string, string | undefined>): { brokers: string[]; mqttCredentials: boolean };
@@ -91,9 +93,27 @@ describe('REL-17 · arquitecturas de Android', () => {
     expect(script).not.toMatch(/execSync\(/);
     expect(script).not.toMatch(/shell:\s*true/);
   });
+
+  it('en Windows llama a gradlew y apksigner con ruta explícita: funciona aunque el equipo no busque programas en la carpeta actual', () => {
+    expect(android.toolCommand('C:\\proyecto\\android', 'gradlew.bat', ['assembleRelease'], 'win32')).toEqual({ file: 'cmd.exe', args: ['/d', '/c', '.\\gradlew.bat', 'assembleRelease'] });
+    const unix = android.toolCommand('/proyecto/android', 'gradlew', ['assembleRelease'], 'linux');
+    expect(unix.args).toEqual(['assembleRelease']);
+    expect(path.basename(unix.file)).toBe('gradlew');
+    expect(path.isAbsolute(unix.file) || unix.file.startsWith('/')).toBe(true);
+  });
 });
 
 describe('REL-04 · lo público de una compilación', () => {
+  it('compilar no carga los archivos .env del proyecto (ahí quedan los secretos del servidor)', () => {
+    const env = publicConfig.buildEnv({ PATH: 'x', EXPO_PUBLIC_API_URL: 'https://soytel.example' });
+    expect(env).toMatchObject({ EXPO_NO_DOTENV: '1', NODE_ENV: 'production', PATH: 'x', EXPO_PUBLIC_API_URL: 'https://soytel.example' });
+    for (const script of ['scripts/build-web.js', 'scripts/build-android.js']) {
+      const source = read(script);
+      expect(source).toMatch(/buildEnv\(\)/);
+      expect(source).not.toMatch(/env:\s*\{\s*\.\.\.process\.env/);
+    }
+  });
+
   it('una credencial de broker solo entra a la app si se confirma que es de permisos mínimos', () => {
     expect(publicConfig.publicConfigProblem({})).toBeNull();
     expect(publicConfig.publicConfigProblem({ EXPO_PUBLIC_MQTT_URLS: 'wss://broker.propio.cl:443/mqtt' })).toBeNull();

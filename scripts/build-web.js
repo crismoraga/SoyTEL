@@ -14,7 +14,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildCsp, readVercelCsp } = require('./csp');
-const { describePublicConfig, findLeakedSecrets, publicConfigProblem } = require('./public-config');
+const { buildEnv, describePublicConfig, findLeakedSecrets, publicConfigProblem } = require('./public-config');
 const { budgetProblems, measureWeb } = require('./web-budget');
 
 const root = path.resolve(__dirname, '..');
@@ -59,7 +59,7 @@ fs.rmSync(out, { recursive: true, force: true });
 execFileSync(process.execPath, [path.join(root, 'node_modules', 'expo', 'bin', 'cli'), 'export', '--platform', 'web', '--output-dir', outName, '--clear'], {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, CI: '1', NODE_ENV: 'production' },
+  env: buildEnv(),
 });
 
 const indexFile = path.join(out, 'index.html');
