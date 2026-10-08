@@ -3,12 +3,15 @@
 // Uso:
 //   node scripts/build-design-system.js <carpeta>              → escribe <carpeta>/project/** y <carpeta>/uploads/**
 //   node scripts/build-design-system.js <carpeta> --index ids.json  → además escribe project/design-system.json
+//   --require-kit   falla si el kit de marca (npm run brand:kit) no está completo, en vez de generar el
+//                   sistema sin los grupos Logos, Social, Impresos y Presentacion.
 const fs = require('fs');
 const path = require('path');
 const { drawingToSvg, iconToSvg } = require('./export-design');
 
 const root = path.resolve(__dirname, '..');
-const outDir = path.resolve(process.argv[2] || path.join(root, 'dist', 'design-system'));
+const outDir = path.resolve(process.argv.slice(2).find((arg, index, list) => !arg.startsWith('--') && list[index - 1] !== '--index') || path.join(root, 'dist', 'design-system'));
+const requireKit = process.argv.includes('--require-kit');
 const indexArg = process.argv.indexOf('--index');
 const idsFile = indexArg > 0 ? path.resolve(process.argv[indexArg + 1]) : null;
 
@@ -334,7 +337,18 @@ const kitUses = {
   'historia-1080x1920': 'Historia vertical con el QR de la ruta.',
   'banner-1600x900': 'Banner 16:9 para pantallas, sitios y video.',
 };
-const kitPieces = fs.existsSync(path.join(kitDir, 'kit.json')) ? JSON.parse(fs.readFileSync(path.join(kitDir, 'kit.json'), 'utf8')).filter((item) => fs.existsSync(path.join(kitDir, item.group, item.file))) : [];
+const kitDeclared = fs.existsSync(path.join(kitDir, 'kit.json')) ? JSON.parse(fs.readFileSync(path.join(kitDir, 'kit.json'), 'utf8')).filter((item) => (item.format ?? 'png') === 'png') : [];
+const kitPieces = kitDeclared.filter((item) => fs.existsSync(path.join(kitDir, item.group, item.file)));
+// Un sistema de diseño sin el kit de marca se puede generar, pero nunca en silencio.
+const kitMissingGroups = Object.keys(kitGroups).filter((group) => !kitPieces.some((item) => item.group === group));
+if (kitMissingGroups.length > 0 || kitPieces.length < kitDeclared.length) {
+  const detail = kitDeclared.length === 0 ? 'no hay imágenes del kit de marca (ejecuta npm run brand:kit)' : `faltan ${kitDeclared.length - kitPieces.length} imágenes y los grupos ${kitMissingGroups.map((group) => kitGroups[group]).join(', ') || '(ninguno)'}`;
+  if (requireKit) {
+    console.error(`\n✖ Sistema de diseño incompleto: ${detail}.`);
+    process.exit(1);
+  }
+  console.warn(`\n⚠ Sistema de diseño SIN el kit de marca completo: ${detail}. Se omiten esos grupos. Usa --require-kit para que esto sea un error.\n`);
+}
 kitPieces.forEach((item) => addAsset(kitGroups[item.group], item.file, fs.readFileSync(path.join(kitDir, item.group, item.file))));
 illustrationNames.forEach((name) => {
   addAsset('Ilustraciones', `${name}.svg`, drawingToSvg(illustrationDrawing(name), { width: 480, height: 400 }));

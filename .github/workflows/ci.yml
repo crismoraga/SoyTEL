@@ -1,0 +1,56 @@
+# Comprobaciones de la app en cada cambio. No publica nada: publicar es un paso manual aparte
+# (ver docs/PRODUCCION.md).
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Tipos, lint y pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Tipos (app y API), lint y todas las pruebas: unitarias, de componentes, la ruta sobre brokers
+      # MQTT locales y la API contra Postgres embebido. Ninguna usa servicios externos.
+      - run: npm run check
+      - run: npx expo-doctor
+
+  web:
+    name: Web y E2E en navegador
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # La compilación de producción con sus comprobaciones (política de seguridad, fuentes, tamaño).
+      - run: npm run build:web
+      # Stand, segunda pantalla y cuatro teléfonos en Chrome, con brokers MQTT locales.
+      - run: npm run e2e:web
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-web
+          path: dist/e2e-artifacts
+          if-no-files-found: ignore

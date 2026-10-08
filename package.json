@@ -3,6 +3,11 @@
   "version": "3.0.0",
   "private": true,
   "main": "index.js",
+  "engines": {
+    "node": ">=22.12 <25",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10.9.0",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -21,11 +26,14 @@
     "csp:check": "node scripts/csp.js --check",
     "csp:write": "node scripts/csp.js --write",
     "e2e:web": "node scripts/e2e-web.js",
-    "deploy:web": "npx vercel@latest build --prod --yes && npx vercel@latest deploy --prebuilt --prod --yes",
+    "deploy:web": "node scripts/deploy-web.js",
     "android:release": "node scripts/build-android.js",
+    "android:test-apk": "node scripts/build-android.js --debug-signing",
     "typecheck:api": "tsc -p api/tsconfig.json",
     "db:migrate": "node scripts/db-migrate.js",
-    "check": "npm run typecheck && npm run typecheck:api && npm run lint && npm run test:ci"
+    "check": "npm run typecheck && npm run typecheck:api && npm run lint && npm run test:ci",
+    "verify:web": "npm run check && npm run build:web",
+    "fonts:web": "python scripts/build-web-fonts.py"
   },
   "dependencies": {
     "@expo-google-fonts/montserrat": "^0.4.2",
@@ -83,6 +91,7 @@
     "puppeteer-core": "^25.12.0",
     "react-test-renderer": "19.2.3",
     "typescript": "~6.0.3",
+    "vercel": "62.7.0",
     "ws": "^8.22.0"
   }
 }

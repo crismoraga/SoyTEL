@@ -1,14 +1,21 @@
 // Compila la versión web de producción (dist/web) y completa el HTML con metadatos, PWA y estilos táctiles.
 // Uso: npm run build:web
 //
+// Antes de entregar la carpeta comprueba: que la configuración pública no lleve credenciales sin
+// decidirlo, que la política de seguridad calce con los brokers, que las fuentes web estén al día, que
+// el tamaño quepa en su presupuesto y que ningún secreto del servidor haya quedado dentro.
+//
 // Variables:
 //   SOYTEL_WEB_OUT  carpeta de salida (por defecto dist/web)
 //   SOYTEL_E2E=1    compilación para las pruebas E2E locales: no exige que vercel.json tenga la política
 //                   de esos brokers (el servidor de pruebas aplica la suya con scripts/csp.js)
 const { execFileSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildCsp, readVercelCsp } = require('./csp');
+const { describePublicConfig, findLeakedSecrets, publicConfigProblem } = require('./public-config');
+const { budgetProblems, measureWeb } = require('./web-budget');
 
 const root = path.resolve(__dirname, '..');
 const outName = process.env.SOYTEL_WEB_OUT || 'dist/web';
@@ -19,17 +26,39 @@ function fail(message) {
   process.exit(1);
 }
 
+const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+// Las fuentes WOFF2 de assets/fonts-web deben corresponder a las TTF instaladas (si el paquete de
+// fuentes cambia, hay que regenerarlas con scripts/build-web-fonts.py).
+function webFontsProblem() {
+  const manifestFile = path.join(root, 'assets', 'fonts-web', 'manifest.json');
+  if (!fs.existsSync(manifestFile)) return 'Faltan las fuentes web (assets/fonts-web). Ejecuta: python scripts/build-web-fonts.py';
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  for (const [name, info] of Object.entries(manifest.fonts)) {
+    const source = path.join(root, 'node_modules', info.source);
+    const built = path.join(root, 'assets', 'fonts-web', `${name}.woff2`);
+    if (!fs.existsSync(built) || sha256(built) !== info.sha256) return `La fuente web ${name} no corresponde a lo anotado. Ejecuta: python scripts/build-web-fonts.py`;
+    if (!fs.existsSync(source) || sha256(source) !== info.sourceSha256) return `La fuente original de ${name} cambió. Ejecuta: python scripts/build-web-fonts.py`;
+  }
+  return null;
+}
+
+const configProblem = publicConfigProblem();
+if (configProblem) fail(configProblem);
+
 // La política de seguridad publicada debe permitir exactamente los brokers de esta compilación.
 if (process.env.SOYTEL_E2E !== '1' && readVercelCsp() !== buildCsp()) {
   fail('La política de seguridad de vercel.json no coincide con los brokers configurados. Ejecuta "npm run csp:write" con las mismas variables EXPO_PUBLIC_* y vuelve a compilar.');
 }
 
+const fontsProblem = webFontsProblem();
+if (fontsProblem) fail(fontsProblem);
+
 fs.rmSync(out, { recursive: true, force: true });
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-execFileSync(npx, ['expo', 'export', '--platform', 'web', '--output-dir', outName, '--clear'], {
+// La CLI de Expo se ejecuta con Node directamente: sin intérprete de comandos de por medio.
+execFileSync(process.execPath, [path.join(root, 'node_modules', 'expo', 'bin', 'cli'), 'export', '--platform', 'web', '--output-dir', outName, '--clear'], {
   cwd: root,
   stdio: 'inherit',
-  shell: process.platform === 'win32',
   env: { ...process.env, CI: '1', NODE_ENV: 'production' },
 });
 
@@ -88,4 +117,42 @@ const final = fs.readFileSync(indexFile, 'utf8');
 if (!final.includes(`<title>${title}</title>`) || !final.includes('<html lang="es">') || (final.match(/rel="manifest"/g) ?? []).length !== 1) {
   fail('El HTML final no tiene el título, el idioma o el manifiesto esperados.');
 }
-console.log(`Web de producción lista en ${outName}`);
+
+// Tamaño: el JavaScript comprimido y las fuentes tienen tope.
+const measured = measureWeb(out);
+const excess = budgetProblems(measured);
+if (excess.length) fail(`La web pasó su presupuesto de tamaño:\n  ${excess.join('\n  ')}`);
+
+// Ningún secreto del servidor dentro de lo que se publica (se informa el nombre, nunca el valor).
+const leaks = findLeakedSecrets(out);
+if (leaks.length) fail(`Hay secretos del servidor dentro de la web: ${leaks.map((leak) => `${leak.secret} en ${leak.file}`).join('; ')}. No se publica.`);
+
+// De dónde salió esta compilación (sin credenciales): queda junto a la web.
+function git(args) {
+  try {
+    return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+}
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+fs.writeFileSync(
+  path.join(out, 'build.json'),
+  `${JSON.stringify(
+    {
+      version: pkg.version,
+      commit: git(['rev-parse', 'HEAD']),
+      dirty: (git(['status', '--porcelain']) ?? '').length > 0,
+      node: process.version,
+      expo: pkg.dependencies.expo,
+      builtAt: new Date().toISOString(),
+      publicConfig: describePublicConfig(),
+      size: { scriptBytes: measured.scriptBytes, scriptGzipBytes: measured.scriptGzipBytes, fontBytes: measured.fontBytes, totalBytes: measured.totalBytes },
+    },
+    null,
+    2,
+  )}\n`,
+);
+
+const kb = (bytes) => `${Math.round(bytes / 1024)} kB`;
+console.log(`Web de producción lista en ${outName} · JavaScript ${kb(measured.scriptGzipBytes)} comprimido (${kb(measured.scriptBytes)}) · fuentes ${kb(measured.fontBytes)} · total ${kb(measured.totalBytes)}`);

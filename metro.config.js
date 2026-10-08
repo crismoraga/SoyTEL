@@ -3,6 +3,8 @@ const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
+// Fuentes recortadas de la versión web (assets/fonts-web).
+config.resolver.assetExts.push('woff2');
 const emptyModule = path.resolve(__dirname, 'src/shims/empty.js');
 const upstreamResolve = config.resolver.resolveRequest;
 

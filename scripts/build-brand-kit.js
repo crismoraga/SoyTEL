@@ -1,14 +1,20 @@
 // Genera el kit de marca de SoyTEL: logos, piezas para redes sociales, impresos y fondos de
 // presentación, compuestos con los mismos tokens, fuentes y gráficos de la app.
-// Uso: npm run brand:kit [-- <carpeta>]   →   dist/brand-kit/<grupo>/*.png (y su HTML fuente)
-// Las imágenes se rasterizan con Chrome (puppeteer-core). Sin él, quedan solo los HTML.
+// Uso:
+//   npm run brand:kit [-- <carpeta>]              →  dist/brand-kit/<grupo>/*.png (y su HTML fuente)
+//   npm run brand:kit -- [<carpeta>] --html-only  →  solo el HTML fuente (sin imágenes)
+// Las imágenes se rasterizan con Chrome (puppeteer-core, que viene con `npm ci`). Si falta Chrome o
+// puppeteer, el modo normal FALLA: nunca anuncia imágenes que no generó. `kit.json` lista únicamente
+// archivos que existen.
 const fs = require('fs');
 const path = require('path');
 const { drawingToSvg, iconToSvg } = require('./export-design');
 const { create: createQr } = require('qrcode');
 
 const root = path.resolve(__dirname, '..');
-const outDir = path.resolve(process.argv[2] || path.join(root, 'dist', 'brand-kit'));
+const cliArgs = process.argv.slice(2);
+const htmlOnly = cliArgs.includes('--html-only');
+const outDir = path.resolve(cliArgs.find((arg) => !arg.startsWith('--')) || path.join(root, 'dist', 'brand-kit'));
 const src = (file) => require(path.join(root, 'src', file));
 const { palettes } = src('theme/colors');
 const { icons } = src('graphics/icons');
@@ -353,7 +359,8 @@ const page = ({ width, height, body, transparent }) =>
 function loadPuppeteer() {
   for (const candidate of ['puppeteer-core', process.env.PUPPETEER_CORE_PATH].filter(Boolean)) {
     try {
-      return require(candidate);
+      const loaded = require(candidate);
+      return loaded.default ?? loaded;
     } catch {
       // Se prueba la siguiente ubicación.
     }
@@ -380,13 +387,22 @@ async function main() {
     fs.mkdirSync(path.join(outDir, item_.group), { recursive: true });
     fs.writeFileSync(path.join(htmlDir, `${item_.name}.html`), page(item_));
   });
-  fs.writeFileSync(path.join(outDir, 'kit.json'), JSON.stringify(pieces.map(({ group, name, width, height, note }) => ({ group, file: `${name}.png`, width, height, note })), null, 2));
+  const kitFile = path.join(outDir, 'kit.json');
+  // El índice anterior ya no describe lo que hay: se vuelve a escribir al final, con lo que exista.
+  fs.rmSync(kitFile, { force: true });
+
+  if (htmlOnly) {
+    fs.writeFileSync(kitFile, JSON.stringify(pieces.map(({ group, name, width, height, note }) => ({ group, file: `html/${name}.html`, format: 'html', width, height, note })), null, 2));
+    console.log(`Kit de marca (solo HTML): ${pieces.length} piezas en ${htmlDir}. No se generaron imágenes.`);
+    return;
+  }
 
   const puppeteer = loadPuppeteer();
   const chrome = findChrome();
   if (!puppeteer || !chrome) {
-    console.log(`HTML del kit en ${htmlDir}. Para generar los PNG instala puppeteer-core (o define PUPPETEER_CORE_PATH) y Chrome (CHROME_PATH).`);
-    return;
+    throw new Error(
+      `No se pueden generar las imágenes del kit: falta ${!puppeteer ? 'puppeteer-core (ejecuta npm ci)' : 'Chrome (define CHROME_PATH)'}. El HTML fuente quedó en ${htmlDir}. Si solo quieres el HTML, usa: npm run brand:kit -- --html-only`,
+    );
   }
   const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--allow-file-access-from-files'] });
   const tab = await browser.newPage();
@@ -399,10 +415,13 @@ async function main() {
     if (item_.name.startsWith('vista-previa')) await tab.screenshot({ path: path.join(outDir, item_.group, `${item_.name}.jpg`), type: 'jpeg', quality: 88 });
   }
   await browser.close();
+  const missing = pieces.filter((item_) => !fs.existsSync(path.join(outDir, item_.group, `${item_.name}.png`)));
+  if (missing.length) throw new Error(`Faltan ${missing.length} imágenes del kit: ${missing.map((item_) => item_.name).join(', ')}`);
+  fs.writeFileSync(kitFile, JSON.stringify(pieces.map(({ group, name, width, height, note }) => ({ group, file: `${name}.png`, format: 'png', width, height, note })), null, 2));
   console.log(`Kit de marca: ${pieces.length} piezas en ${outDir}`);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(`\n✖ ${error instanceof Error ? error.message : error}`);
   process.exit(1);
 });
