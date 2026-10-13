@@ -95,7 +95,7 @@ export default function AchievementsScreen() {
               </View>
               <View style={styles.body}>
                 <View style={styles.titleRow}>
-                  <TelText variant="bodyStrong" color={isUnlocked ? 'primary' : 'muted'}>
+                  <TelText variant="bodyStrong" color={isUnlocked ? 'primary' : 'muted'} style={styles.title}>
                     {achievement.title}
                   </TelText>
                   <View style={[styles.tierChip, { borderColor: tierColors[achievement.tier] }]}>
@@ -147,11 +147,15 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  title: {
+    flex: 1,
   },
   tierChip: {
+    flexShrink: 0,
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.xs,
