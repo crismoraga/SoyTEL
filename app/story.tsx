@@ -12,6 +12,12 @@ import { recordGameResult } from '@/storage/profile';
 import { completeChapter, loadStoryProgress, type StoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 
+const MAP_HEIGHT = 340;
+const MAP_PADDING = spacing.sm;
+const BADGE_SIZE = 48;
+// Desplazamiento horizontal de cada nodo: dibuja la ruta en zigzag sin que los nodos se crucen.
+const NODE_OFFSETS = [0, 56, 16];
+
 type StoryPhase = 'map' | 'dialogue' | 'challenge' | 'done';
 
 export default function StoryScreen() {
@@ -103,6 +109,28 @@ export default function StoryScreen() {
   }
 
   if (phase === 'map') {
+    // Cada nodo ocupa su propia fila; los centros de las insignias definen la ruta punteada.
+    const rowGap = (MAP_HEIGHT - MAP_PADDING * 2 - BADGE_SIZE * storyChapters.length) / (storyChapters.length - 1);
+    const centers = storyChapters.map((_, index) => ({
+      x: MAP_PADDING + NODE_OFFSETS[index % NODE_OFFSETS.length] + BADGE_SIZE / 2,
+      y: MAP_PADDING + index * (BADGE_SIZE + rowGap) + BADGE_SIZE / 2,
+    }));
+    const pathDots = centers.slice(1).flatMap((end, index) => {
+      const start = centers[index];
+      const length = Math.hypot(end.x - start.x, end.y - start.y);
+      const steps = Math.max(2, Math.round(length / 12));
+      const reached = completed.includes(storyChapters[index].id);
+      return Array.from({ length: steps - 1 }, (_, step) => (step + 1) / steps)
+        // Sin puntos bajo las insignias: las bloqueadas son translúcidas y los dejarían ver.
+        .filter((ratio) => Math.min(ratio, 1 - ratio) * length > BADGE_SIZE / 2 + 4)
+        .map((ratio) => ({
+          key: `${index}-${ratio}`,
+          left: start.x + (end.x - start.x) * ratio - 2,
+          top: start.y + (end.y - start.y) * ratio - 2,
+          reached,
+        }));
+    });
+
     return (
       <Screen dark>
         <TelText variant="overline" color="accentSoft">Modo historia</TelText>
@@ -112,43 +140,44 @@ export default function StoryScreen() {
         </TelText>
 
         <View style={styles.mapContainer}>
-          <View style={styles.mapOverlay}>
-            {storyChapters.map((item, index) => {
-              const unlocked = isUnlocked(index);
-              const done = completed.includes(item.id);
-              return (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Capítulo ${item.number}: ${item.title}. ${done ? 'Completado' : unlocked ? 'Disponible' : 'Bloqueado'}`}
-                  disabled={!unlocked}
-                  onPress={() => openChapter(item)}
-                  style={({ pressed }) => [
-                    styles.chapterNode,
-                    done && styles.chapterDone,
-                    !unlocked && styles.chapterLocked,
-                    pressed && unlocked && styles.chapterPressed,
-                    index === 0 && { top: '20%', left: '20%' },
-                    index === 1 && { top: '45%', right: '15%' },
-                    index === 2 && { bottom: '15%', left: '40%' },
-                  ]}
-                >
-                  <View style={styles.chapterBadge}>
-                    <Ionicons
-                      color={done ? colors.success : unlocked ? colors.primary : colors.muted}
-                      name={done ? 'checkmark-circle' : unlocked ? 'radio-button-on' : 'lock-closed'}
-                      size={24}
-                    />
-                  </View>
-                  <View style={styles.chapterLabel}>
-                    <TelText variant="caption" color={unlocked ? 'white' : 'muted'} style={{ fontWeight: '700' }}>
-                      {item.number}. {item.title}
-                    </TelText>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+          {pathDots.map((dot) => (
+            <View
+              key={dot.key}
+              style={[styles.pathDot, dot.reached && styles.pathDotReached, { left: dot.left, top: dot.top }]}
+            />
+          ))}
+          {storyChapters.map((item, index) => {
+            const unlocked = isUnlocked(index);
+            const done = completed.includes(item.id);
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Capítulo ${item.number}: ${item.title}. ${done ? 'Completado' : unlocked ? 'Disponible' : 'Bloqueado'}`}
+                disabled={!unlocked}
+                onPress={() => openChapter(item)}
+                style={({ pressed }) => [
+                  styles.chapterNode,
+                  { marginLeft: NODE_OFFSETS[index % NODE_OFFSETS.length] },
+                  !unlocked && styles.chapterLocked,
+                  pressed && unlocked && styles.chapterPressed,
+                ]}
+              >
+                <View style={styles.chapterBadge}>
+                  <Ionicons
+                    color={done ? colors.success : unlocked ? colors.primary : colors.muted}
+                    name={done ? 'checkmark-circle' : unlocked ? 'radio-button-on' : 'lock-closed'}
+                    size={24}
+                  />
+                </View>
+                <View style={styles.chapterLabel}>
+                  <TelText variant="caption" color={unlocked ? 'white' : 'muted'} style={styles.chapterTitle}>
+                    {item.number}. {item.title}
+                  </TelText>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
 
         {allDone && (
@@ -267,25 +296,35 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   mapContainer: {
-    height: 340,
+    height: MAP_HEIGHT,
+    justifyContent: 'space-between',
+    padding: MAP_PADDING,
     borderRadius: radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(167,212,237,0.25)',
     backgroundColor: 'rgba(111,179,217,0.1)',
   },
-  mapOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  pathDot: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(167,212,237,0.4)',
+  },
+  pathDotReached: {
+    backgroundColor: colors.success,
   },
   chapterNode: {
-    position: 'absolute',
+    minHeight: BADGE_SIZE,
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: spacing.xs,
-    maxWidth: 140,
   },
   chapterBadge: {
-    width: 48,
-    height: 48,
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
     borderRadius: radius.pill,
     backgroundColor: colors.cream,
     alignItems: 'center',
@@ -299,13 +338,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   chapterLabel: {
+    flexShrink: 1,
     borderRadius: radius.sm,
     backgroundColor: 'rgba(11,45,69,0.85)',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
   },
-  chapterDone: {
-    opacity: 1,
+  chapterTitle: {
+    fontWeight: '700',
   },
   chapterLocked: {
     opacity: 0.55,
