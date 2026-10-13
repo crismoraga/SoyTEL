@@ -86,7 +86,7 @@ export default function MillionaireScreen() {
 
   return (
     // La key reinicia el scroll arriba en cada pregunta; al responder se baja hasta la explicación.
-    <Screen key={questionIndex} autoScrollKey={selected}>
+    <Screen key={questionIndex} autoScrollKey={selected} contentStyle={styles.content}>
       <View style={styles.header}>
         <View>
           <TelText variant="overline" color="secondary">Quién quiere ser Telemático</TelText>
@@ -172,6 +172,11 @@ export default function MillionaireScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Más compacto que el Screen por defecto: la pregunta y el comodín caben en 360×640.
+  content: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -181,6 +186,7 @@ const styles = StyleSheet.create({
   scoreCard: {
     minWidth: 96,
     padding: spacing.sm,
+    gap: spacing.xxs,
     alignItems: 'center',
   },
   ladder: {
