@@ -83,7 +83,7 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.headerText}>
           <TelText variant="caption" color="muted">Perfil local</TelText>
-          <TelText variant="title" color="primary">{profile?.alias ?? 'Explorador TEL'}</TelText>
+          <TelText variant="title" color="primary" numberOfLines={2}>{profile?.alias ?? 'Explorador TEL'}</TelText>
         </View>
       </View>
 
