@@ -204,6 +204,8 @@ const styles = StyleSheet.create({
   },
   missionCard: {
     padding: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.accentSoft,
   },
   quickActionPressed: {
     transform: [{ scale: 0.98 }],
