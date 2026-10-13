@@ -45,7 +45,6 @@ export default function JourneyScreen() {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [checkpoint, setCheckpoint] = useState(0);
-  const [completed, setCompleted] = useState(false);
   const [startedAt, setStartedAt] = useState(() => Date.now());
 
   async function createSession() {
@@ -123,14 +122,13 @@ export default function JourneyScreen() {
         completedAt: new Date().toISOString(),
         metadata: { code: session.code, checkpoints: checkpoints.length },
       });
-      setCompleted(true);
     }
   }
 
-  if (completed && session) {
+  if (session && checkpoint >= checkpoints.length) {
     return (
       <Screen dark contentStyle={styles.centered}>
-        <Ionicons color={colors.accent} name="flag" size={72} />
+        <Ionicons color={colors.accent} name="flag" size={72} style={styles.completedIcon} />
         <TelText variant="hero" color="white" align="center">Recorrido completado</TelText>
         <TelText color="accentSoft" align="center">
           El equipo restauró la señal del campus con el ID {session.code}.
@@ -231,7 +229,9 @@ export default function JourneyScreen() {
 const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
-    alignItems: 'center',
+  },
+  completedIcon: {
+    alignSelf: 'center',
   },
   codeRow: {
     flexDirection: 'row',
