@@ -104,7 +104,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      <TelCard tone="cream">
+      <TelCard tone="cream" style={styles.missionCard}>
         <TelText variant="overline" color="secondary">Misión diaria</TelText>
         <TelText variant="subtitle" color="primary">Completa una ráfaga y una prenda de conocimiento</TelText>
         <TelText color="primarySoft">
@@ -131,9 +131,11 @@ function QuickAction({ icon, label, description, onPress }: QuickActionProps) {
       onPress={onPress}
       style={({ pressed }) => [styles.quickAction, pressed && styles.quickActionPressed]}
     >
-      <Ionicons color={colors.accent} name={icon} size={28} />
-      <TelText variant="bodyStrong" color="primary">{label}</TelText>
-      <TelText variant="caption" color="muted">{description}</TelText>
+      <Ionicons color={colors.accent} name={icon} size={26} />
+      <View style={styles.quickActionText}>
+        <TelText variant="bodyStrong" color="primary">{label}</TelText>
+        <TelText variant="caption" color="muted">{description}</TelText>
+      </View>
     </Pressable>
   );
 }
@@ -187,11 +189,21 @@ const styles = StyleSheet.create({
   quickAction: {
     flexBasis: '48%',
     flexGrow: 1,
-    minHeight: 132,
-    borderRadius: radius.lg,
+    minHeight: 64,
+    borderRadius: radius.md,
     backgroundColor: colors.white,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  quickActionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  missionCard: {
     padding: spacing.md,
-    justifyContent: 'space-between',
   },
   quickActionPressed: {
     transform: [{ scale: 0.98 }],
