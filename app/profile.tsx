@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -142,16 +142,28 @@ export default function ProfileScreen() {
           />
           <TelButton label="Guardar" variant="secondary" fullWidth={false} onPress={() => void saveAlias()} />
         </View>
-        <View style={styles.settingRow}>
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityLabel="Activar o desactivar hápticos"
+          aria-checked={settings.haptics}
+          onPress={() => void toggleHaptics(!settings.haptics)}
+          style={styles.settingRow}
+        >
           <TelText color="primary">Vibración y hápticos</TelText>
-          <Switch
-            accessibilityLabel="Activar o desactivar hápticos"
-            value={settings.haptics}
-            onValueChange={(value) => void toggleHaptics(value)}
-            trackColor={{ false: colors.muted, true: colors.secondary }}
-            thumbColor={colors.white}
-          />
-        </View>
+          {/* Toda la fila es el control: el interruptor solo muestra el estado. */}
+          <View
+            pointerEvents="none"
+            aria-hidden
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Switch
+              value={settings.haptics}
+              trackColor={{ false: colors.muted, true: colors.secondary }}
+              thumbColor={colors.white}
+            />
+          </View>
+        </Pressable>
         <TelButton label="Borrar datos locales" variant="danger" onPress={() => void resetLocalData()} />
       </TelCard>
     </Screen>
