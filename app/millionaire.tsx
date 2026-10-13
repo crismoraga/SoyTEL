@@ -12,6 +12,11 @@ import { colors, radius, spacing } from '@/theme';
 
 const prizeLadder = [100, 200, 300, 500, 800, 1200, 1800, 2600, 4000, 6000];
 
+// Los premios de cuatro cifras no caben en una píldora de ~27 px: se abrevian como «1,2k».
+function formatPrize(prize: number) {
+  return prize < 1000 ? String(prize) : `${String(prize / 1000).replace('.', ',')}k`;
+}
+
 export default function MillionaireScreen() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -102,8 +107,14 @@ export default function MillionaireScreen() {
               index < questionIndex && styles.ladderStepDone,
             ]}
           >
-            <TelText variant="caption" color={index <= questionIndex ? 'white' : 'muted'} align="center">
-              {prize}
+            <TelText
+              variant="caption"
+              color={index <= questionIndex ? 'white' : 'muted'}
+              align="center"
+              numberOfLines={1}
+              style={styles.ladderText}
+            >
+              {formatPrize(prize)}
             </TelText>
           </View>
         ))}
@@ -178,6 +189,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.white,
     justifyContent: 'center',
+  },
+  ladderText: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   ladderStepActive: {
     backgroundColor: colors.secondary,
