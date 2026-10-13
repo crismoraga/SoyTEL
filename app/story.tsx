@@ -247,7 +247,7 @@ export default function StoryScreen() {
 
   return (
     <Screen dark contentStyle={styles.centered}>
-      <Ionicons color={colors.success} name="checkmark-circle" size={88} />
+      <Ionicons color={colors.success} name="checkmark-circle" size={88} style={styles.doneIcon} />
       <TelText variant="hero" color="white" align="center">Capítulo {chapter.number} completado</TelText>
       <TelText color="accentSoft" align="center">
         +{chapter.rewardXp} XP. {chapter.number >= storyChapters.length
@@ -329,6 +329,9 @@ const styles = StyleSheet.create({
   telixImage: {
     width: 120,
     height: 120,
+  },
+  doneIcon: {
+    alignSelf: 'center',
   },
   options: {
     gap: spacing.sm,
