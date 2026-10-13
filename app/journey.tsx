@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share, StyleSheet, TextInput, View } from 'react-native';
+import { Share, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -49,6 +49,8 @@ export default function JourneyScreen() {
   const [joinFocused, setJoinFocused] = useState(false);
   const [checkpoint, setCheckpoint] = useState(0);
   const [startedAt, setStartedAt] = useState(() => Date.now());
+  const { height } = useWindowDimensions();
+  const compact = height < 700;
 
   async function createSession() {
     const now = Date.now();
@@ -159,29 +161,35 @@ export default function JourneyScreen() {
   if (session) {
     const currentCheckpoint = checkpoints[checkpoint];
     return (
-      <Screen>
-        <TelCard tone="dark">
+      <Screen contentStyle={compact ? styles.compactContent : undefined}>
+        <TelCard tone="dark" style={compact && styles.compactCard}>
           <TelText variant="overline" color="accentSoft">ID de recorrido</TelText>
           <View style={styles.codeRow}>
-            <TelText variant="hero" color="white">{session.code}</TelText>
-            <TelButton label="Compartir" variant="secondary" fullWidth={false} onPress={() => void shareCode()} />
+            <TelText variant="title" color="white">{session.code}</TelText>
+            <TelButton
+              label="Compartir"
+              variant="secondary"
+              fullWidth={false}
+              style={styles.shareButton}
+              onPress={() => void shareCode()}
+            />
           </View>
           <TelText variant="caption" color="accentSoft">
             Modo demostración local: la sincronización realtime se conectará mediante Supabase.
           </TelText>
         </TelCard>
 
-        <TelCard tone="cream">
+        <TelCard tone="cream" style={compact && styles.compactCard}>
           <TelText variant="overline" color="secondary">Checkpoint {checkpoint + 1}/{checkpoints.length}</TelText>
-          <TelText variant="title" color="primary">{currentCheckpoint.title}</TelText>
+          <TelText variant={compact ? 'subtitle' : 'title'} color="primary">{currentCheckpoint.title}</TelText>
           <TelText color="primarySoft">{currentCheckpoint.task}</TelText>
           <TelButton label={currentCheckpoint.action} onPress={() => void completeCheckpoint()} />
         </TelCard>
 
-        <TelCard>
+        <TelCard style={compact && styles.compactCard}>
           <TelText variant="subtitle" color="primary">Equipo</TelText>
           {session.participants.map((participant) => (
-            <View key={participant.id} style={styles.participantRow}>
+            <View key={participant.id} style={[styles.participantRow, compact && styles.compactRow]}>
               <TelText color="primary">{participant.alias}</TelText>
               <TelText variant="caption" color="muted">
                 {participant.checkpoint}/{checkpoints.length} estaciones
@@ -194,19 +202,19 @@ export default function JourneyScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onBack={() => router.back()} contentStyle={compact ? styles.compactContent : undefined}>
       <TelText variant="title" color="primary">Recorrido conjunto</TelText>
       <TelText color="muted">
         Crea una sesión y comparte su ID para que otras personas completen las estaciones contigo.
       </TelText>
 
-      <TelCard tone="dark">
+      <TelCard tone="dark" style={compact && styles.compactCard}>
         <TelText variant="overline" color="accentSoft">Crear</TelText>
         <TelText variant="subtitle" color="white">Genera un recorrido de 5 estaciones</TelText>
         <TelButton label="Crear ID de recorrido" onPress={() => void createSession()} />
       </TelCard>
 
-      <TelCard tone="cream">
+      <TelCard tone="cream" style={compact && styles.compactCard}>
         <TelText variant="overline" color="secondary">Unirse</TelText>
         <TelText variant="subtitle" color="primary">Ingresa el ID compartido</TelText>
         <View style={styles.joinInput}>
@@ -251,11 +259,24 @@ const styles = StyleSheet.create({
   completedIcon: {
     alignSelf: 'center',
   },
+  compactContent: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  compactCard: {
+    padding: spacing.md,
+  },
+  compactRow: {
+    minHeight: 32,
+  },
   codeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
+  },
+  shareButton: {
+    minHeight: 44,
   },
   participantRow: {
     minHeight: 40,
