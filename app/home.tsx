@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -16,6 +16,9 @@ const logo = require('../assets/logo.png');
 
 export default function HomeScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { height } = useWindowDimensions();
+  // En pantallas bajas todo se compacta para que «Jugar ahora» quede a la vista sin desplazar.
+  const compact = height < 700;
 
   useFocusEffect(
     useCallback(() => {
@@ -35,7 +38,7 @@ export default function HomeScreen() {
   const progress = profile ? progressToNextLevel(profile.xp) : 0;
 
   return (
-    <Screen>
+    <Screen contentStyle={compact ? styles.compactContent : undefined}>
       <View style={styles.header}>
         <View style={styles.identity}>
           <Image source={logo} style={styles.logo} resizeMode="contain" />
@@ -54,15 +57,26 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <TelCard tone="dark">
+      <TelCard tone="dark" style={compact && styles.compactCard}>
         <TelText variant="overline" color="accentSoft">Nivel {profile?.level ?? 1}</TelText>
-        <TelText variant="title" color="white">Restaura la red del campus</TelText>
+        <TelText variant={compact ? 'subtitle' : 'title'} color="white">Restaura la red del campus</TelText>
         <View accessibilityLabel={`Progreso de experiencia ${Math.round(progress * 100)} por ciento`} style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.max(6, progress * 100)}%` }]} />
         </View>
         <TelText variant="caption" color="accentSoft">
           {profile?.xp ?? 0} XP · Racha de {profile?.streakDays ?? 0} días · {unlockedCount}/{achievements.length} logros
         </TelText>
+      </TelCard>
+
+      <TelCard tone="cream" style={[styles.missionCard, compact && styles.compactCard]}>
+        <TelText variant="overline" color="secondary">Misión diaria</TelText>
+        <TelText variant="subtitle" color="primary">Completa una ráfaga y una prenda de conocimiento</TelText>
+        {!compact && (
+          <TelText color="primarySoft">
+            Las sesiones cortas mantienen la racha y mejoran el ánimo de Telix.
+          </TelText>
+        )}
+        <TelButton label="Jugar ahora" variant="primary" onPress={() => router.push('/burst')} />
       </TelCard>
 
       <View style={styles.quickGrid}>
@@ -87,7 +101,7 @@ export default function HomeScreen() {
         <QuickAction
           icon="book"
           label="Historia"
-          description="La señal perdida"
+          description="3 capítulos"
           onPress={() => router.push('/story')}
         />
         <QuickAction
@@ -103,15 +117,6 @@ export default function HomeScreen() {
           onPress={() => router.push('/mascot')}
         />
       </View>
-
-      <TelCard tone="cream" style={styles.missionCard}>
-        <TelText variant="overline" color="secondary">Misión diaria</TelText>
-        <TelText variant="subtitle" color="primary">Completa una ráfaga y una prenda de conocimiento</TelText>
-        <TelText color="primarySoft">
-          Las sesiones cortas mantienen la racha y mejoran el ánimo de Telix.
-        </TelText>
-        <TelButton label="Jugar ahora" variant="primary" onPress={() => router.push('/burst')} />
-      </TelCard>
     </Screen>
   );
 }
@@ -134,7 +139,7 @@ function QuickAction({ icon, label, description, onPress }: QuickActionProps) {
       <Ionicons color={colors.accent} name={icon} size={26} />
       <View style={styles.quickActionText}>
         <TelText variant="bodyStrong" color="primary">{label}</TelText>
-        <TelText variant="caption" color="muted">{description}</TelText>
+        <TelText variant="caption" color="muted" numberOfLines={1}>{description}</TelText>
       </View>
     </Pressable>
   );
@@ -201,6 +206,14 @@ const styles = StyleSheet.create({
   quickActionText: {
     flex: 1,
     minWidth: 0,
+  },
+  compactContent: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  compactCard: {
+    padding: spacing.md,
+    gap: spacing.xs,
   },
   missionCard: {
     padding: spacing.md,
