@@ -41,7 +41,7 @@ export default function HomeScreen() {
           <Image source={logo} style={styles.logo} resizeMode="contain" />
           <View style={styles.identityText}>
             <TelText variant="caption" color="muted">Hola,</TelText>
-            <TelText variant="subtitle" color="primary">{profile?.alias ?? 'Explorador TEL'}</TelText>
+            <TelText variant="subtitle" color="primary" numberOfLines={1}>{profile?.alias ?? 'Explorador TEL'}</TelText>
           </View>
         </View>
         <Pressable
@@ -143,13 +143,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.sm,
   },
   identity: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
   identityText: {
+    flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   logo: {
