@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,7 @@ import { TelText } from '@/components/TelText';
 import { achievements } from '@/data/achievements';
 import { progressToNextLevel } from '@/lib/progression';
 import { defaultProfile, loadProfile, loadResults, saveProfile, updateAlias } from '@/storage/profile';
-import { getSettings, initSettings, updateSettings, type AppSettings } from '@/storage/settings';
+import { defaultSettings, getSettings, initSettings, updateSettings, type AppSettings } from '@/storage/settings';
 import { colors, radius, spacing } from '@/theme';
 import type { GameResult, UserProfile } from '@/types/game';
 
@@ -45,32 +45,40 @@ export default function ProfileScreen() {
     setSettings(await updateSettings({ haptics: value }));
   }
 
-  async function resetLocalData() {
-    Alert.alert(
-      'Borrar datos locales',
-      'Se reiniciarán XP, logros, resultados y configuración de este dispositivo.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Borrar',
-          style: 'destructive',
-          onPress: () => {
-            void AsyncStorage.multiRemove([
-              '@soytel/profile',
-              '@soytel/results',
-              '@soytel/story',
-              '@soytel/mascot-days',
-              '@soytel/mascot-log',
-              '@soytel/settings',
-            ]).then(async () => {
-              setProfile(defaultProfile);
-              setResults([]);
-              await saveProfile(defaultProfile);
-            });
-          },
-        },
-      ],
-    );
+  async function clearLocalData() {
+    await AsyncStorage.multiRemove([
+      '@soytel/profile',
+      '@soytel/results',
+      '@soytel/story',
+      '@soytel/mascot-days',
+      '@soytel/mascot-log',
+      '@soytel/settings',
+    ]);
+    setProfile(defaultProfile);
+    setResults([]);
+    setAliasDraft(defaultProfile.alias);
+    await saveProfile(defaultProfile);
+    setSettings(await updateSettings(defaultSettings));
+  }
+
+  function resetLocalData() {
+    const title = 'Borrar datos locales';
+    const detail = 'Se reiniciarán XP, logros, resultados y configuración de este dispositivo.';
+
+    // Alert.alert con botones no hace nada en react-native-web.
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}
+
+${detail}`)) {
+        void clearLocalData();
+      }
+      return;
+    }
+
+    Alert.alert(title, detail, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: () => void clearLocalData() },
+    ]);
   }
 
   const progress = profile ? progressToNextLevel(profile.xp) : 0;
@@ -164,7 +172,7 @@ export default function ProfileScreen() {
             />
           </View>
         </Pressable>
-        <TelButton label="Borrar datos locales" variant="danger" onPress={() => void resetLocalData()} />
+        <TelButton label="Borrar datos locales" variant="danger" onPress={resetLocalData} />
       </TelCard>
     </Screen>
   );
