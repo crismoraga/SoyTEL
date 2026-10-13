@@ -132,37 +132,44 @@ export default function BurstScreen() {
     return <Screen dark contentStyle={styles.centered} />;
   }
 
+  const isFeedback = phase === 'feedback';
+
   return (
-    <Screen dark scroll={false} contentStyle={styles.gameArea}>
+    <Screen dark scroll={isFeedback}>
       <View style={styles.topBar}>
         <TelText variant="bodyStrong" color="white">Reto {round + 1}/{games.length}</TelText>
-        <View style={[styles.timer, secondsLeft <= 3 && styles.timerDanger]}>
-          <TelText variant="bodyStrong" color="white" align="center">{secondsLeft}s</TelText>
-        </View>
-      </View>
-
-      <View style={styles.prompt}>
-        <TelText variant="overline" color="accentSoft" align="center">{current.title}</TelText>
-        <TelText variant="title" color="white" align="center">{current.instruction}</TelText>
-        {phase === 'feedback' && (
-          <TelText variant="bodyStrong" color={lastAnswerCorrect ? 'success' : 'warning'} align="center">
-            {lastAnswerCorrect ? '¡Conexión establecida!' : 'Se perdió el paquete.'}
-          </TelText>
+        {!isFeedback && (
+          <View style={[styles.timer, secondsLeft <= 3 && styles.timerDanger]}>
+            <TelText variant="bodyStrong" color="white" align="center">{secondsLeft}s</TelText>
+          </View>
         )}
       </View>
 
-      <current.Component
-        durationSeconds={current.durationSeconds}
-        active={phase === 'playing'}
-        onAnswer={(isCorrect, bonus) => void answer(isCorrect, bonus)}
-      />
+      <View style={styles.stage}>
+        <View style={styles.prompt}>
+          <TelText variant="overline" color="accentSoft" align="center">{current.title}</TelText>
+          <TelText variant="title" color="white" align="center">{current.instruction}</TelText>
+          {isFeedback && (
+            <TelText variant="bodyStrong" color={lastAnswerCorrect ? 'success' : 'warning'} align="center">
+              {lastAnswerCorrect ? '¡Conexión establecida!' : 'Se perdió el paquete.'}
+            </TelText>
+          )}
+        </View>
 
-      {phase === 'feedback' && (
-        <TelButton
-          label={round + 1 >= games.length ? 'Ver resultado' : 'Siguiente reto'}
-          onPress={() => void next()}
-        />
-      )}
+        {/* En feedback se desmonta el microjuego: así el botón siempre cabe en pantallas bajas. */}
+        {isFeedback ? (
+          <TelButton
+            label={round + 1 >= games.length ? 'Ver resultado' : 'Siguiente reto'}
+            onPress={() => void next()}
+          />
+        ) : (
+          <current.Component
+            durationSeconds={current.durationSeconds}
+            active
+            onAnswer={(isCorrect, bonus) => void answer(isCorrect, bonus)}
+          />
+        )}
+      </View>
     </Screen>
   );
 }
@@ -171,13 +178,16 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
   },
-  gameArea: {
-    justifyContent: 'space-between',
-  },
   topBar: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  stage: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    gap: spacing.lg,
   },
   timer: {
     width: 62,
