@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
 import { TelCard } from '@/components/TelCard';
@@ -69,7 +69,7 @@ export default function AchievementsScreen() {
   const unlocked = profile?.unlockedAchievements ?? [];
 
   return (
-    <Screen>
+    <Screen contentStyle={styles.content} onBack={() => router.back()}>
       <TelText variant="overline" color="secondary">Sala de trofeos</TelText>
       <TelText variant="title" color="primary">Logros y medallas</TelText>
       <TelText color="muted">
@@ -84,13 +84,13 @@ export default function AchievementsScreen() {
         const ratio = Math.min(1, current / achievement.threshold);
 
         return (
-          <TelCard key={achievement.id} tone={isUnlocked ? 'cream' : 'light'}>
+          <TelCard key={achievement.id} tone={isUnlocked ? 'cream' : 'light'} style={styles.card}>
             <View style={styles.row}>
               <View style={[styles.medal, { backgroundColor: isUnlocked ? tierColors[achievement.tier] : 'rgba(102,113,124,0.15)' }]}>
                 <Ionicons
                   color={isUnlocked ? colors.white : colors.muted}
                   name={isUnlocked ? 'medal' : 'lock-closed'}
-                  size={26}
+                  size={20}
                 />
               </View>
               <View style={styles.body}>
@@ -123,21 +123,27 @@ export default function AchievementsScreen() {
 }
 
 const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+  },
+  card: {
+    padding: spacing.sm,
+  },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'flex-start',
   },
   medal: {
-    width: 52,
-    height: 52,
+    width: 40,
+    height: 40,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   body: {
     flex: 1,
-    gap: spacing.xs,
+    gap: spacing.xxs,
   },
   titleRow: {
     flexDirection: 'row',
