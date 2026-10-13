@@ -106,31 +106,6 @@ ${detail}`)) {
         </TelText>
       </TelCard>
 
-      <TelCard style={styles.card}>
-        <View style={styles.cardHeader}>
-          <TelText variant="subtitle" color="primary">Logros</TelText>
-          <TelButton label="Ver todos" variant="ghost" fullWidth={false} style={styles.seeAll} onPress={() => router.push('/achievements')} />
-        </View>
-        {achievements.slice(0, 3).map((achievement) => {
-          const unlocked = profile?.unlockedAchievements.includes(achievement.id) ?? false;
-          return (
-            <View key={achievement.id} style={styles.achievementRow}>
-              <Ionicons
-                color={unlocked ? colors.warning : colors.muted}
-                name={unlocked ? 'medal' : 'medal-outline'}
-                size={22}
-              />
-              <View style={styles.achievementText}>
-                <TelText variant="bodyStrong" color={unlocked ? 'primary' : 'muted'}>
-                  {achievement.title}
-                </TelText>
-                <TelText variant="caption" color="muted" numberOfLines={1}>{achievement.description}</TelText>
-              </View>
-            </View>
-          );
-        })}
-      </TelCard>
-
       <TelCard tone="cream" style={styles.card}>
         <TelText variant="subtitle" color="primary">Ajustes</TelText>
         <TelText color="primarySoft">
@@ -173,6 +148,31 @@ ${detail}`)) {
           </View>
         </Pressable>
         <TelButton label="Borrar datos locales" variant="danger" onPress={resetLocalData} />
+      </TelCard>
+
+      <TelCard style={styles.card}>
+        <View style={styles.cardHeader}>
+          <TelText variant="subtitle" color="primary">Logros</TelText>
+          <TelButton label="Ver todos" variant="ghost" fullWidth={false} style={styles.seeAll} onPress={() => router.push('/achievements')} />
+        </View>
+        {achievements.slice(0, 3).map((achievement) => {
+          const unlocked = profile?.unlockedAchievements.includes(achievement.id) ?? false;
+          return (
+            <View key={achievement.id} style={styles.achievementRow}>
+              <Ionicons
+                color={unlocked ? colors.warning : colors.muted}
+                name={unlocked ? 'medal' : 'medal-outline'}
+                size={22}
+              />
+              <View style={styles.achievementText}>
+                <TelText variant="bodyStrong" color={unlocked ? 'primary' : 'muted'}>
+                  {achievement.title}
+                </TelText>
+                <TelText variant="caption" color="muted" numberOfLines={1}>{achievement.description}</TelText>
+              </View>
+            </View>
+          );
+        })}
       </TelCard>
     </Screen>
   );
