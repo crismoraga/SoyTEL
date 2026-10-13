@@ -206,6 +206,8 @@ const styles = StyleSheet.create({
   },
   aliasInput: {
     flex: 1,
+    // En web el input conserva su ancho intrínseco y empuja «Guardar» fuera de la tarjeta.
+    minWidth: 0,
     minHeight: 48,
     borderRadius: radius.md,
     backgroundColor: colors.white,
