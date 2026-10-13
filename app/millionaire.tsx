@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -24,6 +24,8 @@ export default function MillionaireScreen() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [lifelineUsed, setLifelineUsed] = useState(false);
   const [hiddenOptions, setHiddenOptions] = useState<number[]>([]);
+  const { height } = useWindowDimensions();
+  const compact = height < 700;
   const [finished, setFinished] = useState(false);
   const startedAt = useMemo(() => Date.now(), []);
   const question = quizQuestions[questionIndex];
@@ -135,6 +137,12 @@ export default function MillionaireScreen() {
           const isSelected = selected === index;
           const isCorrect = selected !== null && index === question.answerIndex;
           const isWrong = isSelected && index !== question.answerIndex;
+
+          // En pantallas bajas, tras responder solo quedan la correcta y la elegida:
+          // así la explicación y «Siguiente» caben sin desplazar.
+          if (compact && selected !== null && !isCorrect && !isWrong) {
+            return null;
+          }
 
           return (
             <TelButton
