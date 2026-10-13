@@ -96,13 +96,15 @@ export default function BurstScreen() {
 
   if (phase === 'intro') {
     return (
-      <Screen dark contentStyle={styles.centered}>
-        <TelText variant="overline" color="accentSoft" align="center">Modo WarioWare</TelText>
-        <TelText variant="hero" color="white" align="center">Ráfaga TEL</TelText>
-        <TelText color="accentSoft" align="center">
-          {ROUNDS_PER_SESSION} microretos al azar de un set de {microGameRegistry.length}: responde, memoriza, sintoniza y envía paquetes antes de que se acabe el tiempo.
-        </TelText>
-        <TelButton label="Iniciar ráfaga" onPress={start} />
+      <Screen dark onBack={() => (router.canGoBack() ? router.back() : router.replace('/games'))}>
+        <View style={styles.intro}>
+          <TelText variant="overline" color="accentSoft" align="center">Modo WarioWare</TelText>
+          <TelText variant="hero" color="white" align="center">Ráfaga TEL</TelText>
+          <TelText color="accentSoft" align="center">
+            {ROUNDS_PER_SESSION} microretos al azar de un set de {microGameRegistry.length}: responde, memoriza, sintoniza y envía paquetes antes de que se acabe el tiempo.
+          </TelText>
+          <TelButton label="Iniciar ráfaga" onPress={start} />
+        </View>
       </Screen>
     );
   }
@@ -177,6 +179,11 @@ export default function BurstScreen() {
 const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
+  },
+  intro: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    gap: spacing.md,
   },
   topBar: {
     minHeight: 44,
