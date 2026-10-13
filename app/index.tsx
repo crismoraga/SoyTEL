@@ -40,7 +40,7 @@ export default function WelcomeScreen() {
 
       <View style={styles.actions}>
         <TelButton label="Comenzar aventura" onPress={() => void start()} />
-        <TelButton label="Explorar juegos" variant="ghost" onPress={() => router.push('/games')} />
+        <TelButton label="Explorar juegos" variant="ghost" surface="dark" onPress={() => router.push('/games')} />
       </View>
     </Screen>
   );

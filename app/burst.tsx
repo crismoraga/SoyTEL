@@ -123,7 +123,7 @@ export default function BurstScreen() {
           </TelText>
         </TelCard>
         <TelButton label="Jugar otra vez" onPress={start} />
-        <TelButton label="Volver al inicio" variant="ghost" onPress={() => router.replace('/home')} />
+        <TelButton label="Volver al inicio" variant="ghost" surface="dark" onPress={() => router.replace('/home')} />
       </Screen>
     );
   }

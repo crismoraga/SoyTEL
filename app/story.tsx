@@ -162,7 +162,7 @@ export default function StoryScreen() {
           </TelCard>
         )}
 
-        <TelButton label="Volver" variant="ghost" onPress={() => router.back()} />
+        <TelButton label="Volver" variant="ghost" surface="dark" onPress={() => router.back()} />
       </Screen>
     );
   }
@@ -255,7 +255,7 @@ export default function StoryScreen() {
           : 'La señal se acerca. El siguiente capítulo ya está desbloqueado.'}
       </TelText>
       <TelButton label="Volver al mapa" onPress={() => setPhase('map')} />
-      <TelButton label="Ir al inicio" variant="ghost" onPress={() => router.replace('/home')} />
+      <TelButton label="Ir al inicio" variant="ghost" surface="dark" onPress={() => router.replace('/home')} />
     </Screen>
   );
 }

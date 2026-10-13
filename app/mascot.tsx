@@ -123,7 +123,7 @@ export default function MascotScreen() {
       <View style={styles.actions}>
         <TelButton label="Alimentar con datos" onPress={() => void interact('feed')} />
         <TelButton label="Entrenar diagnóstico" variant="secondary" onPress={() => void interact('train')} />
-        <TelButton label="Enviar reporte" variant="ghost" onPress={() => void interact('listen')} />
+        <TelButton label="Enviar reporte" variant="ghost" surface="dark" onPress={() => void interact('listen')} />
         <TelButton label="Ir a jugar" variant="primary" onPress={() => router.push('/games')} />
       </View>
     </Screen>

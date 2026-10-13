@@ -5,7 +5,9 @@ import { TelText } from './TelText';
 
 interface TelButtonProps extends Omit<PressableProps, 'children'> {
   label: string;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+  /** Fondo sobre el que se dibuja el botón; solo cambia el texto de la variante ghost. */
+  surface?: 'light' | 'dark';
   loading?: boolean;
   fullWidth?: boolean;
 }
@@ -13,6 +15,7 @@ interface TelButtonProps extends Omit<PressableProps, 'children'> {
 export function TelButton({
   label,
   variant = 'primary',
+  surface = 'light',
   loading = false,
   fullWidth = true,
   disabled,
@@ -20,6 +23,7 @@ export function TelButton({
   ...props
 }: PropsWithChildren<TelButtonProps>) {
   const isDisabled = disabled || loading;
+  const labelColor = variant !== 'ghost' ? 'white' : surface === 'dark' ? 'white' : 'primary';
 
   return (
     <Pressable
@@ -37,11 +41,11 @@ export function TelButton({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'ghost' ? colors.primary : colors.white} />
+        <ActivityIndicator color={colors[labelColor]} />
       ) : (
         <TelText
           variant="bodyStrong"
-          color={variant === 'ghost' ? 'primary' : 'white'}
+          color={labelColor}
           align="center"
         >
           {label}
@@ -75,6 +79,9 @@ const styles = StyleSheet.create({
   },
   danger: {
     backgroundColor: colors.danger,
+  },
+  success: {
+    backgroundColor: colors.success,
   },
   pressed: {
     opacity: 0.86,

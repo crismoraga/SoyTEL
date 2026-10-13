@@ -71,7 +71,7 @@ export default function OnboardingScreen() {
             ))}
           </View>
           <TelButton label={step + 1 >= slides.length ? 'Crear mi perfil' : 'Siguiente'} onPress={() => setStep((value) => value + 1)} />
-          <TelButton label="Saltar" variant="ghost" onPress={() => setStep(slides.length)} />
+          <TelButton label="Saltar" variant="ghost" surface="dark" onPress={() => setStep(slides.length)} />
         </View>
       </Screen>
     );
