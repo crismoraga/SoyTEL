@@ -13,6 +13,7 @@ import { colors, radius, spacing } from '@/theme';
 import type { UserProfile } from '@/types/game';
 
 const MAX_DAILY_INTERACTIONS = 3;
+const CARE_DAYS_GOAL = 7;
 
 function moodLabel(value: number): string {
   if (value >= 85) return 'radiante';
@@ -81,7 +82,7 @@ export default function MascotScreen() {
           : 'Telix escuchó tu reporte de señal.',
     );
 
-    if (days.length >= 7) {
+    if (days.length >= CARE_DAYS_GOAL) {
       await unlockAchievement('telix-friend');
       setMessage('¡Logro desbloqueado: Aliado de Telix! Siete días de cuidado.');
     }
@@ -94,10 +95,11 @@ export default function MascotScreen() {
   }
 
   const mood = profile?.mascotMood ?? 0;
-  const interactionsLeft = MAX_DAILY_INTERACTIONS - (log?.count ?? 0);
+  const interactionsToday = Math.min(MAX_DAILY_INTERACTIONS, log?.count ?? 0);
+  const careDays = Math.min(CARE_DAYS_GOAL, daysCount);
 
   return (
-    <Screen dark contentStyle={styles.content}>
+    <Screen dark contentStyle={styles.content} onBack={() => router.back()}>
       <View style={styles.header}>
         <View>
           <TelText variant="overline" color="accentSoft">Mascota</TelText>
@@ -119,7 +121,7 @@ export default function MascotScreen() {
         <TelText variant="subtitle" color="primary">Telix está {moodLabel(mood)}</TelText>
         <TelText color="primarySoft">{message}</TelText>
         <TelText variant="caption" color="secondary">
-          Interacciones de hoy: {interactionsLeft}/{MAX_DAILY_INTERACTIONS} · Días de cuidado: {daysCount}/7
+          Interacciones de hoy: {interactionsToday}/{MAX_DAILY_INTERACTIONS} · Días de cuidado: {careDays}/{CARE_DAYS_GOAL}
         </TelText>
         <TelText variant="caption" color="secondary">
           Juega cada día para mantener su señal alta: el ánimo baja si lo abandonas.
