@@ -140,7 +140,8 @@ export default function MillionaireScreen() {
               key={option}
               label={option}
               disabled={hidden || selected !== null}
-              variant={isCorrect ? 'secondary' : isWrong ? 'danger' : 'ghost'}
+              variant={isCorrect ? 'success' : isWrong ? 'danger' : 'ghost'}
+              style={isCorrect || isWrong ? styles.optionRevealed : undefined}
               onPress={() => void choose(index)}
             />
           );
@@ -206,6 +207,10 @@ const styles = StyleSheet.create({
   },
   options: {
     gap: spacing.xs,
+  },
+  // Anula la opacidad de botón deshabilitado para que acierto y error no se vean apagados.
+  optionRevealed: {
+    opacity: 1,
   },
   finished: {
     alignItems: 'center',
