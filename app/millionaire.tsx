@@ -85,7 +85,8 @@ export default function MillionaireScreen() {
   }
 
   return (
-    <Screen>
+    // La key reinicia el scroll arriba en cada pregunta; al responder se baja hasta la explicación.
+    <Screen key={questionIndex} autoScrollKey={selected}>
       <View style={styles.header}>
         <View>
           <TelText variant="overline" color="secondary">Quién quiere ser Telemático</TelText>
@@ -158,12 +159,14 @@ export default function MillionaireScreen() {
         </TelCard>
       )}
 
-      <TelButton
-        label={lifelineUsed ? 'Comodín usado' : 'Usar 50:50'}
-        variant="secondary"
-        disabled={lifelineUsed || selected !== null}
-        onPress={useFiftyFifty}
-      />
+      {selected === null && (
+        <TelButton
+          label={lifelineUsed ? 'Comodín usado' : 'Usar 50:50'}
+          variant="secondary"
+          disabled={lifelineUsed}
+          onPress={useFiftyFifty}
+        />
+      )}
     </Screen>
   );
 }
