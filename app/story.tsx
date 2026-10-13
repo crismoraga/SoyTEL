@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -25,6 +25,8 @@ export default function StoryScreen() {
   const [selected, setSelected] = useState<number | null>(null);
   const [challengeFailed, setChallengeFailed] = useState(false);
   const [chapterStartedAt, setChapterStartedAt] = useState(0);
+  const { height } = useWindowDimensions();
+  const compact = height < 700;
 
   useFocusEffect(
     useCallback(() => {
@@ -197,9 +199,9 @@ export default function StoryScreen() {
   if (phase === 'challenge') {
     const isCorrect = selected === chapter.challenge.answerIndex;
     return (
-      <Screen dark>
+      <Screen dark autoScrollKey={selected !== null}>
         <TelText variant="overline" color="accentSoft">Reto del capítulo</TelText>
-        <TelText variant="title" color="white">{chapter.challenge.prompt}</TelText>
+        <TelText variant={compact ? 'subtitle' : 'title'} color="white">{chapter.challenge.prompt}</TelText>
 
         <View style={styles.options}>
           {chapter.challenge.options.map((option, index) => {
@@ -214,6 +216,7 @@ export default function StoryScreen() {
                 onPress={() => void answerChallenge(index)}
                 style={({ pressed }) => [
                   styles.option,
+                  compact && styles.optionCompact,
                   pressed && styles.optionPressed,
                   showCorrect && styles.optionCorrect,
                   isSelected && !showCorrect && styles.optionWrong,
@@ -226,7 +229,7 @@ export default function StoryScreen() {
         </View>
 
         {selected !== null && (
-          <TelCard tone="cream">
+          <TelCard tone="cream" style={compact && styles.compactCard}>
             <TelText variant="bodyStrong" color="primary">
               {isCorrect ? '¡Exacto!' : 'Casi…'}
             </TelText>
@@ -263,6 +266,9 @@ export default function StoryScreen() {
 const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
+  },
+  compactCard: {
+    padding: spacing.md,
   },
   mapContainer: {
     height: 340,
@@ -342,6 +348,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
+  },
+  optionCompact: {
+    minHeight: 52,
   },
   optionPressed: {
     backgroundColor: colors.accentSoft,
