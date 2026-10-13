@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -11,9 +11,6 @@ import { feedbackSuccess, feedbackWarning } from '@/lib/feedback';
 import { recordGameResult } from '@/storage/profile';
 import { completeChapter, loadStoryProgress, type StoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
-
-const campusMap = require('../assets/Assets_SoyTEL_4.png');
-const telixSprite = require('../assets/Assets_SoyTEL_2.png');
 
 type StoryPhase = 'map' | 'dialogue' | 'challenge' | 'done';
 
@@ -115,7 +112,6 @@ export default function StoryScreen() {
         </TelText>
 
         <View style={styles.mapContainer}>
-          <Image source={campusMap} style={styles.mapImage} resizeMode="cover" />
           <View style={styles.mapOverlay}>
             {storyChapters.map((item, index) => {
               const unlocked = isUnlocked(index);
@@ -177,7 +173,7 @@ export default function StoryScreen() {
     return (
       <Screen dark contentStyle={styles.centered}>
         <View style={styles.dialogueAvatar}>
-          <Image source={telixSprite} style={styles.telixImage} resizeMode="contain" />
+          <Ionicons color={colors.accentSoft} name="planet" size={88} />
         </View>
         <TelText variant="overline" color="accentSoft" align="center">
           Capítulo {chapter.number} · {chapter.title}
@@ -276,10 +272,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(167,212,237,0.25)',
-  },
-  mapImage: {
-    width: '100%',
-    height: '100%',
+    backgroundColor: 'rgba(111,179,217,0.1)',
   },
   mapOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -331,10 +324,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     overflow: 'hidden',
-  },
-  telixImage: {
-    width: 120,
-    height: 120,
   },
   doneIcon: {
     alignSelf: 'center',
