@@ -1,15 +1,13 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
-import { TelCard } from '@/components/TelCard';
-import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 export default function GamesScreen() {
   return (
-    <Screen>
+    <Screen onBack={() => router.back()} contentStyle={styles.container}>
       <TelText variant="title" color="primary">Explorar juegos</TelText>
       <TelText color="muted">
         Retos cortos diseñados para aprender conceptos telemáticos sin manuales extensos.
@@ -64,32 +62,51 @@ interface GameCardProps {
 
 function GameCard({ icon, title, subtitle, duration, action }: GameCardProps) {
   return (
-    <TelCard>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Jugar ${title}. ${duration}. ${subtitle}`}
+      onPress={action}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
       <View style={styles.titleRow}>
         <View style={styles.iconWrap}>
-          <Ionicons color={colors.white} name={icon} size={24} />
+          <Ionicons color={colors.white} name={icon} size={22} />
         </View>
         <View style={styles.cardText}>
-          <TelText variant="subtitle" color="primary">{title}</TelText>
+          <TelText variant="bodyStrong" color="primary">{title}</TelText>
           <TelText variant="caption" color="secondary">{duration}</TelText>
         </View>
+        <Ionicons color={colors.accent} name="chevron-forward" size={22} />
       </View>
-      <TelText color="muted">{subtitle}</TelText>
-      <TelButton label="Jugar" variant="secondary" onPress={action} />
-    </TelCard>
+      <TelText variant="caption" color="muted">{subtitle}</TelText>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    gap: spacing.sm,
+  },
+  card: {
+    borderRadius: radius.lg,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  cardPressed: {
+    transform: [{ scale: 0.98 }],
+    backgroundColor: colors.accentSoft,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
   iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
