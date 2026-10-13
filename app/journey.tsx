@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { Share, StyleSheet, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -40,10 +40,13 @@ const checkpoints = [
   },
 ];
 
+const INVALID_CODE_MESSAGE = 'Ingresa un ID de 6 caracteres, sin ceros ni unos para evitar confusiones.';
+
 export default function JourneyScreen() {
   const [session, setSession] = useState<JourneySession | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [joinFocused, setJoinFocused] = useState(false);
   const [checkpoint, setCheckpoint] = useState(0);
   const [startedAt, setStartedAt] = useState(() => Date.now());
 
@@ -66,10 +69,17 @@ export default function JourneyScreen() {
     await feedbackHeavy();
   }
 
+  function changeJoinCode(text: string) {
+    const typed = text.toUpperCase();
+    const filtered = typed.replace(/[^2-9A-HJ-NP-Z]/g, '').slice(0, 6);
+    setJoinCode(filtered);
+    setError(filtered === typed ? null : INVALID_CODE_MESSAGE);
+  }
+
   function joinSession() {
     const normalized = joinCode.trim().toUpperCase();
     if (!isValidJourneyCode(normalized)) {
-      setError('Ingresa un ID de 6 caracteres, sin ceros ni unos para evitar confusiones.');
+      setError(INVALID_CODE_MESSAGE);
       return;
     }
 
@@ -199,28 +209,36 @@ export default function JourneyScreen() {
       <TelCard tone="cream">
         <TelText variant="overline" color="secondary">Unirse</TelText>
         <TelText variant="subtitle" color="primary">Ingresa el ID compartido</TelText>
-        <View style={styles.joinInput} accessibilityLabel="ID de recorrido">
-          {joinCode.padEnd(6, '•').split('').slice(0, 6).map((character, index) => (
-            <View key={`${character}-${index}`} style={styles.joinDigit}>
-              <TelText variant="subtitle" color="primary" align="center">{character}</TelText>
+        <View style={styles.joinInput}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.joinDigit,
+                joinFocused && index === Math.min(joinCode.length, 5) && styles.joinDigitActive,
+              ]}
+            >
+              <TelText variant="subtitle" color="primary" align="center">{joinCode[index] ?? '•'}</TelText>
             </View>
           ))}
-        </View>
-        <View style={styles.keyboard}>
-          {'ABCDEFGHJKMNPQRSTUVWXYZ23456789'.split('').map((character) => (
-            <TelButton
-              key={character}
-              label={character}
-              variant="ghost"
-              fullWidth={false}
-              style={styles.key}
-              onPress={() => setJoinCode((value) => (value + character).slice(0, 6))}
-            />
-          ))}
-          <TelButton label="⌫" variant="secondary" fullWidth={false} style={styles.key} onPress={() => setJoinCode((value) => value.slice(0, -1))} />
+          <TextInput
+            accessibilityLabel="ID de recorrido"
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect={false}
+            caretHidden
+            maxLength={6}
+            onBlur={() => setJoinFocused(false)}
+            onChangeText={changeJoinCode}
+            onFocus={() => setJoinFocused(true)}
+            onSubmitEditing={joinSession}
+            returnKeyType="done"
+            style={styles.joinField}
+            value={joinCode}
+          />
         </View>
         {error && <TelText variant="caption" color="danger">{error}</TelText>}
-        <TelButton label="Unirme al recorrido" onPress={joinSession} disabled={joinCode.length !== 6} />
+        <TelButton label="Unirme al recorrido" onPress={joinSession} />
       </TelCard>
     </Screen>
   );
@@ -253,20 +271,20 @@ const styles = StyleSheet.create({
   },
   joinDigit: {
     width: 42,
-    height: 54,
+    height: 48,
     borderRadius: radius.sm,
+    borderWidth: 2,
+    borderColor: colors.white,
     backgroundColor: colors.white,
     justifyContent: 'center',
   },
-  keyboard: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: spacing.xs,
+  joinDigitActive: {
+    borderColor: colors.accent,
   },
-  key: {
-    width: 42,
-    minHeight: 42,
-    paddingHorizontal: 0,
+  // El campo real cubre las casillas y queda invisible: solo recibe el foco y el teclado.
+  joinField: {
+    ...StyleSheet.absoluteFillObject,
+    color: 'transparent',
+    opacity: 0.02,
   },
 });
