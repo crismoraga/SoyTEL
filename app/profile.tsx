@@ -76,10 +76,10 @@ export default function ProfileScreen() {
   const progress = profile ? progressToNextLevel(profile.xp) : 0;
 
   return (
-    <Screen>
+    <Screen contentStyle={styles.content} onBack={() => router.back()}>
       <View style={styles.header}>
         <View style={styles.avatar}>
-          <Ionicons color={colors.white} name="person" size={42} />
+          <Ionicons color={colors.white} name="person" size={30} />
         </View>
         <View style={styles.headerText}>
           <TelText variant="caption" color="muted">Perfil local</TelText>
@@ -87,7 +87,7 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <TelCard tone="dark">
+      <TelCard tone="dark" style={styles.card}>
         <TelText variant="overline" color="accentSoft">Nivel {profile?.level ?? 1}</TelText>
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.max(6, progress * 100)}%` }]} />
@@ -98,32 +98,32 @@ export default function ProfileScreen() {
         </TelText>
       </TelCard>
 
-      <TelCard>
+      <TelCard style={styles.card}>
         <View style={styles.cardHeader}>
           <TelText variant="subtitle" color="primary">Logros</TelText>
-          <TelButton label="Ver todos" variant="ghost" fullWidth={false} onPress={() => router.push('/achievements')} />
+          <TelButton label="Ver todos" variant="ghost" fullWidth={false} style={styles.seeAll} onPress={() => router.push('/achievements')} />
         </View>
-        {achievements.slice(0, 4).map((achievement) => {
+        {achievements.slice(0, 3).map((achievement) => {
           const unlocked = profile?.unlockedAchievements.includes(achievement.id) ?? false;
           return (
             <View key={achievement.id} style={styles.achievementRow}>
               <Ionicons
                 color={unlocked ? colors.warning : colors.muted}
                 name={unlocked ? 'medal' : 'medal-outline'}
-                size={26}
+                size={22}
               />
               <View style={styles.achievementText}>
                 <TelText variant="bodyStrong" color={unlocked ? 'primary' : 'muted'}>
                   {achievement.title}
                 </TelText>
-                <TelText variant="caption" color="muted">{achievement.description}</TelText>
+                <TelText variant="caption" color="muted" numberOfLines={1}>{achievement.description}</TelText>
               </View>
             </View>
           );
         })}
       </TelCard>
 
-      <TelCard tone="cream">
+      <TelCard tone="cream" style={styles.card}>
         <TelText variant="subtitle" color="primary">Ajustes</TelText>
         <TelText color="primarySoft">
           Tu progreso vive en este dispositivo, sin cuentas ni correos.
@@ -159,14 +159,25 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+  },
+  card: {
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  seeAll: {
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   avatar: {
-    width: 78,
-    height: 78,
+    width: 56,
+    height: 56,
     borderRadius: radius.pill,
     backgroundColor: colors.secondary,
     alignItems: 'center',
