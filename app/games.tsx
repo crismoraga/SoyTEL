@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -6,12 +6,18 @@ import { TelText } from '@/components/TelText';
 import { colors, radius, spacing } from '@/theme';
 
 export default function GamesScreen() {
+  const { height } = useWindowDimensions();
+  // En pantallas bajas se omite la introducción para mostrar más juegos de una vez.
+  const compact = height < 700;
+
   return (
     <Screen onBack={() => router.back()} contentStyle={styles.container}>
       <TelText variant="title" color="primary">Explorar juegos</TelText>
-      <TelText color="muted">
-        Retos cortos diseñados para aprender conceptos telemáticos sin manuales extensos.
-      </TelText>
+      {!compact && (
+        <TelText color="muted">
+          Retos cortos diseñados para aprender conceptos telemáticos sin manuales extensos.
+        </TelText>
+      )}
 
       <GameCard
         icon="flash"
