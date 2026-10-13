@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/components/Screen';
@@ -26,6 +26,9 @@ export default function MascotScreen() {
   const [log, setLog] = useState<MascotLog | null>(null);
   const [daysCount, setDaysCount] = useState(0);
   const [message, setMessage] = useState('Telix está listo para restaurar la red.');
+  const { height } = useWindowDimensions();
+  // El orbe cede altura en pantallas bajas para que las cuatro acciones queden a la vista.
+  const orbSize = Math.max(88, Math.min(200, Math.round(height * 0.3) - 80));
 
   useFocusEffect(
     useCallback(() => {
@@ -94,7 +97,7 @@ export default function MascotScreen() {
   const interactionsLeft = MAX_DAILY_INTERACTIONS - (log?.count ?? 0);
 
   return (
-    <Screen dark>
+    <Screen dark contentStyle={styles.content}>
       <View style={styles.header}>
         <View>
           <TelText variant="overline" color="accentSoft">Mascota</TelText>
@@ -105,11 +108,14 @@ export default function MascotScreen() {
         </View>
       </View>
 
-      <View accessibilityLabel={`Telix está ${moodLabel(mood)}`} style={styles.mascotOrb}>
-        <Ionicons color={colors.accentSoft} name="planet" size={120} />
+      <View
+        accessibilityLabel={`Telix está ${moodLabel(mood)}`}
+        style={[styles.mascotOrb, { height: orbSize, borderRadius: orbSize / 2 }]}
+      >
+        <Ionicons color={colors.accentSoft} name="planet" size={Math.round(orbSize / 2)} />
       </View>
 
-      <TelCard tone="cream">
+      <TelCard tone="cream" style={styles.card}>
         <TelText variant="subtitle" color="primary">Telix está {moodLabel(mood)}</TelText>
         <TelText color="primarySoft">{message}</TelText>
         <TelText variant="caption" color="secondary">
@@ -121,39 +127,57 @@ export default function MascotScreen() {
       </TelCard>
 
       <View style={styles.actions}>
-        <TelButton label="Alimentar con datos" onPress={() => void interact('feed')} />
-        <TelButton label="Entrenar diagnóstico" variant="secondary" onPress={() => void interact('train')} />
-        <TelButton label="Enviar reporte" variant="ghost" surface="dark" onPress={() => void interact('listen')} />
-        <TelButton label="Ir a jugar" variant="primary" onPress={() => router.push('/games')} />
+        <View style={styles.actionRow}>
+          <TelButton label="Alimentar con datos" fullWidth={false} style={styles.action} onPress={() => void interact('feed')} />
+          <TelButton label="Entrenar diagnóstico" variant="secondary" fullWidth={false} style={styles.action} onPress={() => void interact('train')} />
+        </View>
+        <View style={styles.actionRow}>
+          <TelButton label="Enviar reporte" variant="ghost" surface="dark" fullWidth={false} style={styles.action} onPress={() => void interact('listen')} />
+          <TelButton label="Ir a jugar" variant="primary" fullWidth={false} style={styles.action} onPress={() => router.push('/games')} />
+        </View>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   moodBadge: {
-    width: 72,
-    height: 72,
+    width: 56,
+    height: 56,
     borderRadius: radius.pill,
     backgroundColor: colors.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
   mascotOrb: {
-    minHeight: 240,
-    borderRadius: 120,
     backgroundColor: 'rgba(111, 179, 217, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(167, 212, 237, 0.35)',
   },
+  card: {
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
   actions: {
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  action: {
+    flex: 1,
+    paddingHorizontal: spacing.xs,
   },
 });
