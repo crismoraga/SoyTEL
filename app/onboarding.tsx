@@ -78,31 +78,34 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <Screen dark scroll={false} contentStyle={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.aliasContainer}
-      >
-        <TelText variant="overline" color="accentSoft" align="center">Último paso</TelText>
-        <TelText variant="title" color="white" align="center">¿Cómo te llamará la red?</TelText>
-        <TelText color="accentSoft" align="center">
-          Elige un alias para tus logros y recorridos. Sin cuentas, sin correos: tu progreso vive en este dispositivo.
-        </TelText>
-        <TextInput
-          accessibilityLabel="Tu alias"
-          placeholder="Ej: Nodo Valparaíso"
-          placeholderTextColor={colors.muted}
-          value={alias}
-          onChangeText={(value) => setAlias(value.slice(0, 24))}
-          style={styles.input}
-          maxLength={24}
-          autoCapitalize="words"
-          returnKeyType="done"
-          onSubmitEditing={() => void finish()}
-        />
-        <TelButton label="Comenzar aventura" loading={saving} onPress={() => void finish()} />
-      </KeyboardAvoidingView>
-    </Screen>
+    // Envuelve la pantalla completa: al abrirse el teclado se acorta el área y el paso puede desplazarse.
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.keyboard}
+    >
+      <Screen dark contentStyle={styles.container}>
+        <View style={styles.aliasContainer}>
+          <TelText variant="overline" color="accentSoft" align="center">Último paso</TelText>
+          <TelText variant="title" color="white" align="center">¿Cómo te llamará la red?</TelText>
+          <TelText color="accentSoft" align="center">
+            Elige un alias para tus logros y recorridos. Sin cuentas, sin correos: tu progreso vive en este dispositivo.
+          </TelText>
+          <TextInput
+            accessibilityLabel="Tu alias"
+            placeholder="Ej: Nodo Valparaíso"
+            placeholderTextColor={colors.muted}
+            value={alias}
+            onChangeText={(value) => setAlias(value.slice(0, 24))}
+            style={styles.input}
+            maxLength={24}
+            autoCapitalize="words"
+            returnKeyType="done"
+            onSubmitEditing={() => void finish()}
+          />
+          <TelButton label="Comenzar aventura" loading={saving} onPress={() => void finish()} />
+        </View>
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -143,6 +146,9 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: colors.accent,
     width: 26,
+  },
+  keyboard: {
+    flex: 1,
   },
   aliasContainer: {
     flex: 1,
