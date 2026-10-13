@@ -99,6 +99,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: spacing.md,
     padding: spacing.lg,
+    // En tablets el contenido no se estira a todo el ancho.
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   back: {
     width: 44,
