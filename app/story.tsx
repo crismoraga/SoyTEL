@@ -12,7 +12,6 @@ import { recordGameResult } from '@/storage/profile';
 import { completeChapter, loadStoryProgress, type StoryProgress } from '@/storage/story';
 import { colors, radius, spacing } from '@/theme';
 
-const MAP_HEIGHT = 340;
 const MAP_PADDING = spacing.sm;
 const BADGE_SIZE = 48;
 // Desplazamiento horizontal de cada nodo: dibuja la ruta en zigzag sin que los nodos se crucen.
@@ -30,6 +29,7 @@ export default function StoryScreen() {
   const [chapterStartedAt, setChapterStartedAt] = useState(0);
   const { height } = useWindowDimensions();
   const compact = height < 700;
+  const mapHeight = Math.max(200, Math.min(340, height - 440));
 
   useFocusEffect(
     useCallback(() => {
@@ -110,7 +110,7 @@ export default function StoryScreen() {
 
   if (phase === 'map') {
     // Cada nodo ocupa su propia fila; los centros de las insignias definen la ruta punteada.
-    const rowGap = (MAP_HEIGHT - MAP_PADDING * 2 - BADGE_SIZE * storyChapters.length) / (storyChapters.length - 1);
+    const rowGap = (mapHeight - MAP_PADDING * 2 - BADGE_SIZE * storyChapters.length) / (storyChapters.length - 1);
     const centers = storyChapters.map((_, index) => ({
       x: MAP_PADDING + NODE_OFFSETS[index % NODE_OFFSETS.length] + BADGE_SIZE / 2,
       y: MAP_PADDING + index * (BADGE_SIZE + rowGap) + BADGE_SIZE / 2,
@@ -135,11 +135,13 @@ export default function StoryScreen() {
       <Screen dark>
         <TelText variant="overline" color="accentSoft">Modo historia</TelText>
         <TelText variant="hero" color="white">La señal perdida</TelText>
-        <TelText color="accentSoft">
-          Alguien —o algo— dejó el campus sin conexión. Ayuda a Telix a restaurarla capítulo a capítulo.
-        </TelText>
+        {!allDone && (
+          <TelText color="accentSoft">
+            Alguien —o algo— dejó el campus sin conexión. Ayuda a Telix a restaurarla capítulo a capítulo.
+          </TelText>
+        )}
 
-        <View style={styles.mapContainer}>
+        <View style={[styles.mapContainer, { height: mapHeight }]}>
           {pathDots.map((dot) => (
             <View
               key={dot.key}
@@ -181,7 +183,7 @@ export default function StoryScreen() {
         </View>
 
         {allDone && (
-          <TelCard tone="cream">
+          <TelCard tone="cream" style={compact && styles.compactCard}>
             <TelText variant="subtitle" color="primary">¡Historia completada!</TelText>
             <TelText color="primarySoft">
               Restauraste la red del campus. Nuevos capítulos llegarán en futuras actualizaciones.
@@ -296,7 +298,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   mapContainer: {
-    height: MAP_HEIGHT,
     justifyContent: 'space-between',
     padding: MAP_PADDING,
     borderRadius: radius.lg,
