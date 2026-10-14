@@ -23,8 +23,10 @@ export function feedbackWait(ms: number, pace: number): number {
 // logrado); precisión = aciertos sobre intentos.
 export function scoreRound(correct: number, attempts: number, total: number, noun: string): RoundResult {
   const size = Math.max(1, Math.floor(total));
-  const ok = Math.max(0, Math.min(Math.floor(correct), size));
-  const tries = Math.max(0, Math.floor(attempts));
+  const rawOk = Math.floor(correct);
+  const ok = Math.max(0, Math.min(rawOk, size));
+  const rawTries = Math.max(0, Math.floor(attempts));
+  const tries = rawOk > size ? Math.min(rawTries, size) : rawTries;
   return { score: ok / size, accuracy: tries > 0 ? Math.min(1, ok / tries) : 0, detail: `${ok} de ${size} ${noun}` };
 }
 
@@ -176,6 +178,10 @@ export function shortWhy(rules: readonly FirewallRule[], connection: Connection,
     return later ? `regla ${number}, se lee primero` : `regla ${number}`;
   }
   return rule.match.kind === 'any' ? `regla ${number}, todo lo demás` : `regla ${number}`;
+}
+
+export function feedbackLine(ok: boolean, body: string): string {
+  return ok ? `¡Bien! ${capitalize(body)}` : `Ojo: ${body}`;
 }
 
 // Reacción a una respuesta: al acertar, ánimo + número de regla; al errar, la regla que aplica y por qué.
@@ -366,7 +372,7 @@ export function listNames(names: readonly string[]): string {
 }
 
 export function explainChannel(scenario: WifiScenario, picked: WifiChoice, streak = 1): string {
-  if (picked === scenario.best) return `${cheer(streak)} Canal ${picked} libre.`;
+  if (picked === scenario.best) return `${cheer(streak)} canal ${picked} libre.`;
   const hits = overlappingNeighbors(picked, scenario.neighbors)
     .slice(0, 2)
     .map((neighbor) => neighbor.name);
@@ -532,9 +538,9 @@ export function placementResult(slot: SlotId, device: DeviceId): { ok: boolean; 
   if (SLOT_NEEDS[slot] === device) return { ok: true, text: need.role };
   const given = DEVICES[device];
   if (device === 'printer' || device === 'camera') {
-    return { ok: false, text: `${given.article} ${lower(given.name)} usa la red, no la arma. Ahí va el ${lower(need.name)}.` };
+    return { ok: false, text: `${given.article} ${lower(given.name)} usa la red, pero no la arma: ahí va el ${lower(need.name)}.` };
   }
-  return { ok: false, text: `Ahí va el ${lower(need.name)}: ${need.does}.` };
+  return { ok: false, text: `${given.article} ${lower(given.name)} ${given.does}; ahí va el ${lower(need.name)}, que ${need.does}.` };
 }
 
 export interface Online {
