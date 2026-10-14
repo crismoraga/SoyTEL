@@ -51,6 +51,23 @@ export function holdMs(ok: boolean, pace: number): number {
   return Math.round((ok ? 900 : 2600) * factor);
 }
 
+// ——— Elogios ———
+
+const praises = ['¡Bien!', '¡Eso!', '¡Justo!', '¡Genial!', '¡Perfecto!', '¡Así!'];
+
+// Lo primero que se lee al acertar: un elogio que va cambiando y, con tres aciertos seguidos, la racha.
+export function praiseFor(index: number, streak: number): string {
+  if (streak >= 3) return `¡Racha x${Math.floor(streak)}!`;
+  return praises[Math.abs(Math.floor(index)) % praises.length];
+}
+
+// Aciertos seguidos al final de las respuestas dadas.
+export function streakOf(marks: readonly boolean[]): number {
+  let streak = 0;
+  for (let position = marks.length - 1; position >= 0 && marks[position]; position -= 1) streak += 1;
+  return streak;
+}
+
 // ——— Switch ———
 
 // Respuesta «A todos»: el switch no sabe dónde está el destino y lo reenvía por todos los puertos.
@@ -247,23 +264,21 @@ export function switchTableAfter(frame: SwitchFrame): MacEntry[] {
   return [...frame.table, ...frame.learned];
 }
 
-export function switchFeedback(data: SwitchRoundData, index: number, choice: number): Feedback {
+// Poco texto: el elogio o la explicación en una línea (con `streak`, los aciertos seguidos contando este).
+export function switchFeedback(data: SwitchRoundData, index: number, choice: number, streak = 0): Feedback {
   const frame = data.frames[index];
   const dest = data.devices[frame.to - 1];
   const ok = checkSwitchAnswer(frame, choice);
+  const cheer = praiseFor(index, streak);
   if (!data.learning) {
-    return ok
-      ? { ok, text: `¡Bien! ${sentence(dest.det)} está en el puerto ${frame.to}.` }
-      : { ok, text: `Iba al puerto ${frame.to}, donde está ${dest.det}.` };
+    return ok ? { ok, text: `${cheer} ${dest.name} → puerto ${frame.to}` } : { ok, text: `Iba al puerto ${frame.to}, donde está ${dest.det}.` };
   }
   if (frame.answer === FLOOD) {
-    return ok
-      ? { ok, text: `¡Bien! Lo mandó a todos y anotó: MAC ${dest.mac} está en el puerto ${frame.to}.` }
-      : { ok, text: `MAC ${dest.mac} aún no estaba en la tabla: había que mandarlo A todos.` };
+    return ok ? { ok, text: `${cheer} Anotó MAC ${dest.mac} → puerto ${frame.to}` } : { ok, text: 'Aún no lo conocía: ¡A todos!' };
   }
-  if (ok) return { ok, text: `¡Bien! MAC ${dest.mac} estaba en la tabla: puerto ${frame.to}.` };
-  if (choice === FLOOD) return { ok, text: `Ya estaba en la tabla: iba solo al puerto ${frame.to}, donde está ${dest.det}.` };
-  return { ok, text: `Iba al puerto ${frame.to}, donde está ${dest.det} (MAC ${dest.mac}).` };
+  if (ok) return { ok, text: `${cheer} MAC ${dest.mac} → puerto ${frame.to}` };
+  if (choice === FLOOD) return { ok, text: `Ya lo conocía: puerto ${frame.to}, ${dest.det}.` };
+  return { ok, text: `Iba al puerto ${frame.to}, donde está ${dest.det}.` };
 }
 
 // ——— Router ———
@@ -271,7 +286,7 @@ export function switchFeedback(data: SwitchRoundData, index: number, choice: num
 export type ExitId = 'b215' | 'b213' | 'biblioteca' | 'internet';
 type LocalId = Exclude<ExitId, 'internet'>;
 
-export const ROUTER_DEFAULT_HINT = 'Si ninguna fila calza, el router usa la ruta por defecto: sale a Internet.';
+export const ROUTER_DEFAULT_HINT = 'Si ninguna fila calza, sale por la ruta por defecto: Internet.';
 
 export interface RouteRow {
   id: ExitId;
@@ -372,18 +387,17 @@ export function checkRouterAnswer(packet: RouterPacket, choice: ExitId): boolean
   return choice === packet.exit;
 }
 
-export function routerFeedback(data: RouterRoundData, index: number, choice: ExitId): Feedback {
+export function routerFeedback(data: RouterRoundData, index: number, choice: ExitId, streak = 0): Feedback {
   const packet = data.packets[index];
   const right = data.rows.find((row) => row.id === packet.exit) ?? defaultRow;
   const ok = checkRouterAnswer(packet, choice);
+  const cheer = praiseFor(index, streak);
   if (packet.exit === 'internet') {
-    return ok
-      ? { ok, text: `¡Bien! ${packet.ip} no está en la tabla: sale por Internet.` }
-      : { ok, text: `${packet.ip} no calza con ninguna fila: va por Internet (ruta por defecto).` };
+    return ok ? { ok, text: `${cheer} ${packet.ip} → Internet` } : { ok, text: `${packet.ip} no calza: va a Internet.` };
   }
-  if (ok) return { ok, text: `¡Bien! ${packet.ip} calza con ${right.network}: sale por ${right.name}.` };
-  if (choice === 'internet') return { ok, text: `${packet.ip} sí calza con ${right.network}: sale por ${right.name}, no por Internet.` };
-  return { ok, text: `${packet.ip} calza con ${right.network}: sale por ${right.name}.` };
+  if (ok) return { ok, text: `${cheer} ${right.network} → ${right.name}` };
+  if (choice === 'internet') return { ok, text: `${packet.ip} sí calza: ${right.network} → ${right.name}.` };
+  return { ok, text: `${packet.ip} va a ${right.name} (${right.network}).` };
 }
 
 // ——— Geometría de los tableros (a partir del tamaño que entrega FitBox) ———

@@ -58,7 +58,9 @@ describe('microjuegos: nada de alturas fijas grandes', () => {
     expect(gameFiles.length).toBeGreaterThanOrEqual(12);
     for (const file of gameFiles) {
       const source = fs.readFileSync(path.join(gamesDir, file), 'utf8');
-      const fixed = [...source.matchAll(/\b(?:min|max)?[hH]eight:\s*(\d+)\b/g)].map((match) => Number(match[1])).filter((value) => value > 200);
+      // Solo los estilos: las constantes de referencia (por ejemplo la casa de Wi-Fi Boost) no fijan nada en pantalla.
+      const styles = source.slice(source.indexOf('StyleSheet.create('));
+      const fixed = [...styles.matchAll(/\b(?:min|max)?[hH]eight:\s*(\d+)\b/g)].map((match) => Number(match[1])).filter((value) => value > 200);
       expect({ file, fixed }).toEqual({ file, fixed: [] });
     }
   });

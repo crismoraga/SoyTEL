@@ -4,8 +4,8 @@ import { withLock } from './locks';
 // Avance en los desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado).
 const PUZZLES_KEY = '@soytel/puzzles';
 
-export type PuzzleId = 'red' | 'memoria' | 'binario' | 'cifrado';
-export const puzzleIds: PuzzleId[] = ['red', 'memoria', 'binario', 'cifrado'];
+export type PuzzleId = 'red' | 'memoria' | 'binario' | 'cifrado' | 'paquete';
+export const puzzleIds: PuzzleId[] = ['red', 'memoria', 'binario', 'cifrado', 'paquete'];
 
 export interface PuzzleProgress {
   // Nivel más alto resuelto (0 = ninguno).
@@ -21,6 +21,7 @@ const empty = (): PuzzleProgressMap => ({
   memoria: { level: 0, best: 0, solved: 0 },
   binario: { level: 0, best: 0, solved: 0 },
   cifrado: { level: 0, best: 0, solved: 0 },
+  paquete: { level: 0, best: 0, solved: 0 },
 });
 
 export async function loadPuzzleProgress(): Promise<PuzzleProgressMap> {

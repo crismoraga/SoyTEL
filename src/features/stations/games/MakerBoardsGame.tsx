@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
+import { Celebration } from '@/components/feedback/Celebration';
+import { FitBox } from '@/components/FitBox';
 import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
-import type { IconName } from '@/components/TelIcon';
+import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
+import { useMotionEnabled } from '@/lib/motion';
 import { mulberry32 } from '@/route/random';
-import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
+import { colors, monoFamily, radius, spacing } from '@/theme';
+import { GameBoard, Hint, ScorePop, StageBanner, StationHud, StationSummary, clamp, useAskContinue, useDeadline, useFlash, useGameTimeout, useNow, usePace, usePop, useStageFlow, useSubmitOnce, type StationGameProps } from '../kit';
 import {
+  blockCode,
   boardInfo,
   CHOOSE_MAX,
   CODE_MAX,
-  codeBlocks,
   codeScore,
+  paletteBlocks,
   pickScenarios,
   pins,
   requiredWires,
@@ -23,58 +27,71 @@ import {
   SLOTS,
   WIRE_MAX,
   wireHint,
-  wireScore,
+  wireLayout,
+  wirePoints,
   type BlockId,
   type BoardId,
   type Pin,
+  type Scenario,
   type Terminal,
 } from '../logic/maker';
 
 type StageKey = 'choose' | 'wire' | 'code';
 
-const STAGES: { key: StageKey; title: string; body: string; icon: IconName; seconds: number }[] = [
-  { key: 'choose', title: 'Elige la placa', body: 'Arduino, ESP32 o Raspberry Pi: cada proyecto necesita la placa adecuada.', icon: 'board', seconds: 26 },
-  { key: 'wire', title: 'Conecta el LED', body: 'Toca un pin de la placa y luego la pata del circuito. La resistencia va al pin 13 y el LED a tierra.', icon: 'plug', seconds: 22 },
-  { key: 'code', title: 'Programa el parpadeo', body: 'Arma el loop() para que el LED se encienda y apague cada medio segundo.', icon: 'code', seconds: 30 },
+// Cada etapa: la meta en una frase y la idea en dos líneas cortas.
+const STAGES: { key: StageKey; title: string; goal: string; body: string; icon: IconName; seconds: number }[] = [
+  {
+    key: 'choose',
+    title: 'Elige la placa',
+    goal: 'Elige la placa más simple que sirve para cada proyecto.',
+    body: 'Arduino controla LEDs y motores; el ESP32 suma Wi-Fi y Bluetooth.\nLa Raspberry Pi es un mini computador con Linux, para cosas más pesadas.',
+    icon: 'board',
+    seconds: 40,
+  },
+  {
+    key: 'wire',
+    title: 'Conecta el LED',
+    goal: 'Une D13 a la resistencia y la pata (−) del LED a GND.',
+    body: 'Sin resistencia le llega demasiada corriente al LED y se quema.\nLa corriente sale del pin D13, pasa por la resistencia y el LED, y vuelve a GND.',
+    icon: 'circuit',
+    seconds: 30,
+  },
+  {
+    key: 'code',
+    title: 'Programa el parpadeo',
+    goal: 'Arma loop() para que el LED se prenda y apague cada 0,5 s.',
+    body: 'loop() se repite sin parar mientras la placa tiene energía.\nPara parpadear: prender, esperar, apagar y esperar.',
+    icon: 'code',
+    seconds: 40,
+  },
 ];
 
+const SECONDS = STAGES.map((item) => item.seconds);
 const ACCENT = '#E0B84A';
+const TERMINAL_LABEL: Record<Terminal, string> = { resistor: 'Resistencia 220 Ω', cathode: 'LED (−)' };
 
 // B213 · Hardware: Arduino, ESP32 y Raspberry Pi en tres desafíos rápidos.
 export function MakerBoardsGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [cases] = useState(() => pickScenarios(mulberry32(seed ^ 0xb0a4)));
-  const [stageIndex, setStageIndex] = useState(0);
-  const [banner, setBanner] = useState(true);
-  const [endsAt, setEndsAt] = useState<number | null>(null);
-  const [points, setPoints] = useState<Record<StageKey, number>>({ choose: 0, wire: 0, code: 0 });
+  const flow = useStageFlow(SECONDS, pace);
   const [chooseHits, setChooseHits] = useState(0);
-  const [finished, setFinished] = useState(false);
-  const now = useNow(endsAt !== null, 250);
-  const stage = STAGES[stageIndex];
-  const total = points.choose + points.wire + points.code;
-
-  const startStage = useCallback(() => {
-    setBanner(false);
-    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
-  }, [pace, stageIndex]);
-
-  const nextStage = useCallback(() => {
-    setEndsAt(null);
-    if (stageIndex < STAGES.length - 1) {
-      setStageIndex(stageIndex + 1);
-      setBanner(true);
-    } else {
-      setFinished(true);
-    }
-  }, [stageIndex]);
-
-  const setStagePoints = useCallback((value: number) => setPoints((current) => ({ ...current, [stage.key]: value })), [stage.key]);
-  const accuracy = (chooseHits / cases.length + points.wire / WIRE_MAX + points.code / CODE_MAX) / 3;
+  const [points, setPoints] = useState({ wire: 0, code: 0 });
+  const now = useNow(flow.endsAt !== null, 250);
+  const stage = STAGES[flow.index];
+  const choosePoints = Math.round((chooseHits * CHOOSE_MAX) / cases.length);
+  const total = choosePoints + points.wire + points.code;
+  const accuracy = clamp((chooseHits / cases.length + points.wire / WIRE_MAX + points.code / CODE_MAX) / 3, 0, 1);
   const submit = useSubmitOnce(onComplete);
+  // Si el stand cierra el proyecto antes, se entrega lo logrado hasta ese momento.
   useDeadline(deadline, () => submit({ score: total, accuracy }));
 
-  if (finished) {
+  // Callbacks estables: cada etapa los usa en efectos y no deben cambiar en cada render.
+  const addHit = useCallback(() => setChooseHits((value) => value + 1), []);
+  const setWire = useCallback((value: number) => setPoints((current) => (current.wire === value ? current : { ...current, wire: value })), []);
+  const setCode = useCallback((value: number) => setPoints((current) => (current.code === value ? current : { ...current, code: value })), []);
+
+  if (flow.finished) {
     return (
       <StationSummary
         title="Placas maker"
@@ -82,41 +99,30 @@ export function MakerBoardsGame({ seed, deadline, onComplete }: StationGameProps
         message={points.code >= 300 ? '¡Tu LED parpadea! Ya programaste tu primera placa.' : 'Buen intento: el hardware se aprende probando.'}
         accent={ACCENT}
         rows={[
-          { label: 'Placa correcta', value: points.choose, max: CHOOSE_MAX, icon: 'board' },
-          { label: 'Circuito', value: points.wire, max: WIRE_MAX, icon: 'plug' },
+          { label: 'Placa correcta', value: choosePoints, max: CHOOSE_MAX, icon: 'board' },
+          { label: 'Circuito', value: points.wire, max: WIRE_MAX, icon: 'circuit' },
           { label: 'Programa', value: points.code, max: CODE_MAX, icon: 'code' },
         ]}
-        learned="Arduino es un microcontrolador simple, el ESP32 suma Wi-Fi y Bluetooth, y la Raspberry Pi es un computador con Linux. Un LED necesita resistencia y el código se repite en loop()."
+        learned="Cada proyecto pide su placa (Arduino para lo simple, ESP32 con Wi-Fi o Bluetooth, Raspberry Pi para un computador) y un LED necesita resistencia y un loop() con delay para parpadear."
         onSubmit={() => submit({ score: total, accuracy })}
       />
     );
   }
 
-  const secondsLeft = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
+  const secondsLeft = flow.endsAt !== null ? clamp(Math.ceil((flow.endsAt - now) / 1000), 0, Math.round(stage.seconds * pace)) : null;
 
   return (
-    <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
-      {endsAt && stage.key === 'choose' && (
-        <ChooseStage
-          cases={cases}
-          endsAt={endsAt}
-          onHit={() => {
-            setChooseHits((value) => value + 1);
-            setPoints((current) => ({ ...current, choose: current.choose + CHOOSE_MAX / cases.length }));
-          }}
-          onFinish={nextStage}
-        />
-      )}
-      {endsAt && stage.key === 'wire' && <WireStage endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
-      {endsAt && stage.key === 'code' && <CodeStage endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
-      {banner && <StageBanner key={stage.key} index={stageIndex + 1} title={stage.title} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={startStage} />}
-      {banner && <View style={styles.bannerSpace} />}
+    <View style={styles.root}>
+      <StationHud stage={flow.index + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
+      {flow.endsAt !== null && stage.key === 'choose' && <ChooseStage cases={cases} endsAt={flow.endsAt} onHit={addHit} onFinish={() => flow.finish(0)} />}
+      {flow.endsAt !== null && stage.key === 'wire' && <WireStage endsAt={flow.endsAt} onPoints={setWire} onFinish={() => flow.finish(1)} />}
+      {flow.endsAt !== null && stage.key === 'code' && <CodeStage endsAt={flow.endsAt} onPoints={setCode} onFinish={() => flow.finish(2)} />}
+      {flow.banner && <StageBanner key={stage.key} index={flow.index + 1} title={stage.title} goal={stage.goal} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={flow.start} />}
     </View>
   );
 }
 
-function BoardArt({ board, size = 88 }: { board: BoardId; size?: number }) {
+function BoardArt({ board, size }: { board: BoardId; size: number }) {
   const color = boardInfo[board].color;
   return (
     <Svg width={size} height={size * 0.7} viewBox="0 0 100 70">
@@ -151,17 +157,22 @@ function BoardArt({ board, size = 88 }: { board: BoardId; size?: number }) {
 
 // ——— Etapa 1: elegir placa ———
 
-function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typeof pickScenarios>; endsAt: number; onHit: () => void; onFinish: () => void }) {
+function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: Scenario[]; endsAt: number; onHit: () => void; onFinish: () => void }) {
+  const motion = useMotionEnabled();
+  const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<BoardId | null>(null);
+  const [pop, showPop] = usePop();
   const done = useRef(false);
   const askContinue = useAskContinue();
   const current = cases[index];
+  // El dibujo de la placa se ajusta al ancho de cada tarjeta (3 en fila).
+  const art = clamp(Math.floor((width - 32 - 16) / 3) - 16, 48, 96);
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    askContinue(onFinish);
+    askContinue(onFinish, 'Tiempo agotado · Seguir');
   }, [askContinue, onFinish]);
   useGameTimeout(endsAt, timeout);
 
@@ -170,8 +181,10 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
     setPicked(board);
     if (board === current.answer) {
       onHit();
+      showPop(`+${Math.round(CHOOSE_MAX / cases.length)}`);
       void feedbackSuccess();
     } else {
+      showPop('¡Casi!', 'bad');
       void feedbackWarning();
     }
     // La explicación de la placa queda en pantalla hasta que el jugador sigue.
@@ -188,13 +201,14 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
     }, last ? 'Continuar' : 'Siguiente proyecto');
   }
 
+  const hint = picked ? (picked === current.answer ? `¡Bien! ${current.why}` : `Era otra placa. ${current.why}`) : 'Arduino: lo básico · ESP32: + Wi-Fi y Bluetooth · Pi: mini PC con Linux';
   return (
-    <View style={styles.stageGap}>
-      <Animated.View key={current.id} entering={FadeInDown.duration(200)} style={styles.scenario}>
+    <View style={styles.stage}>
+      <Animated.View key={current.id} entering={motion ? FadeInDown.duration(200) : undefined} style={styles.scenario}>
         <TelText variant="small" color="secondary">
-          PROYECTO {index + 1} DE {cases.length}
+          {`PROYECTO ${index + 1} DE ${cases.length}`}
         </TelText>
-        <TelText variant="heading" color="primary">
+        <TelText variant="subtitle" color="primary">
           {current.text}
         </TelText>
       </Animated.View>
@@ -211,130 +225,177 @@ function ChooseStage({ cases, endsAt, onHit, onFinish }: { cases: ReturnType<typ
               scaleTo={0.93}
               style={[styles.boardCard, state === 'right' && styles.boardRight, state === 'wrong' && styles.boardWrong]}
             >
-              <BoardArt board={board} size={84} />
+              <BoardArt board={board} size={art} />
               <TelText variant="label" color="cream" align="center">
                 {boardInfo[board].name}
               </TelText>
+              {state !== 'idle' ? (
+                <View style={[styles.boardBadge, { backgroundColor: state === 'right' ? colors.success : colors.danger }]}>
+                  <TelIcon name={state === 'right' ? 'check' : 'close'} size={14} color={colors.white} />
+                </View>
+              ) : null}
             </PressableScale>
           );
         })}
       </View>
-      <Hint tone={picked ? (picked === current.answer ? 'good' : 'bad') : 'info'}>{picked ? current.why : boardInfo.esp32.detail.replace('Microcontrolador', 'Pista: el ESP32 es un microcontrolador')}</Hint>
+      <Hint tone={picked ? (picked === current.answer ? 'good' : 'bad') : 'info'}>{hint}</Hint>
+      <ScorePop pop={pop} />
     </View>
   );
 }
 
 // ——— Etapa 2: cablear ———
 
-const TERMINAL_LABEL: Record<Terminal, string> = { resistor: 'Resistencia 220 Ω', cathode: 'LED (−)' };
-
 function WireStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (value: number) => void; onFinish: () => void }) {
-  const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
+  const [pinSel, setPinSel] = useState<Pin | null>(null);
+  const [termSel, setTermSel] = useState<Terminal | null>(null);
   const [wires, setWires] = useState<Partial<Record<Terminal, Pin>>>({});
   const [mistakes, setMistakes] = useState(0);
-  const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' }>({ text: 'Toca un pin de la placa y luego una pata del circuito.', tone: 'info' });
-  const [spark, setSpark] = useState(false);
+  const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' } | null>(null);
+  const [spark, flashSpark] = useFlash<boolean>(500);
+  const [pop, showPop] = usePop();
+  const [confetti, setConfetti] = useState<number | null>(null);
   const done = useRef(false);
   const askContinue = useAskContinue();
+  const connected = Object.keys(wires).length;
+  const complete = connected === 2;
+
+  // Los puntos suben con cada cable bien puesto y bajan con cada error.
+  useEffect(() => {
+    onPoints(wirePoints(connected, mistakes));
+  }, [connected, mistakes, onPoints]);
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    const correct = Object.keys(wires).length;
-    onPoints(correct === 2 ? wireScore(mistakes) : correct * 60);
-    askContinue(onFinish);
-  }, [askContinue, mistakes, onFinish, onPoints, wires]);
+    askContinue(onFinish, 'Tiempo agotado · Seguir');
+  }, [askContinue, onFinish]);
   useGameTimeout(endsAt, timeout);
 
-  function connect(terminal: Terminal) {
-    if (done.current || wires[terminal]) return;
-    if (!selectedPin) {
-      setHint({ text: 'Primero elige un pin de la placa (izquierda).', tone: 'info' });
-      return;
-    }
-    if (requiredWires[terminal] === selectedPin) {
-      const next = { ...wires, [terminal]: selectedPin };
+  function attempt(pin: Pin, terminal: Terminal) {
+    setPinSel(null);
+    setTermSel(null);
+    if (requiredWires[terminal] === pin) {
+      const next = { ...wires, [terminal]: pin };
       setWires(next);
-      setSelectedPin(null);
-      void feedbackSuccess();
       if (Object.keys(next).length === 2) {
         done.current = true;
-        onPoints(wireScore(mistakes));
-        setHint({ text: '¡Circuito cerrado! Corriente: pin 13 → resistencia → LED → GND.', tone: 'good' });
+        setHint({ text: '¡Circuito cerrado! D13 → resistencia → LED → GND.', tone: 'good' });
+        showPop(`+${wirePoints(2, mistakes)}`);
+        setConfetti(1);
+        void feedbackSuccess();
         askContinue(onFinish);
       } else {
-        setHint({ text: `¡Bien! ${TERMINAL_LABEL[terminal]} conectada a ${selectedPin}.`, tone: 'good' });
+        setHint({ text: `¡Bien! ${TERMINAL_LABEL[terminal]} va a ${pin}.`, tone: 'good' });
+        showPop('+60');
+        void feedbackSuccess();
       }
     } else {
-      setMistakes(mistakes + 1);
-      setSpark(true);
-      setTimeout(() => setSpark(false), 500);
-      setHint({ text: wireHint(selectedPin, terminal), tone: 'bad' });
-      setSelectedPin(null);
+      setMistakes((value) => value + 1);
+      flashSpark(true);
+      setHint({ text: wireHint(pin, terminal), tone: 'bad' });
+      showPop('−50', 'bad');
       void feedbackWarning();
     }
   }
 
-  const complete = Object.keys(wires).length === 2;
-  const pinY = (pin: Pin) => 36 + pins.indexOf(pin) * 50;
-  const terminalPos: Record<Terminal, { x: number; y: number }> = { resistor: { x: 196, y: 70 }, cathode: { x: 250, y: 190 } };
+  // Se puede empezar por el pin o por el extremo del circuito: el segundo toque cierra el cable.
+  function pickPin(pin: Pin) {
+    if (done.current) return;
+    void feedbackTap();
+    if (termSel) {
+      attempt(pin, termSel);
+    } else {
+      setPinSel(pin);
+      setHint({ text: `Pin ${pin}: ahora toca la resistencia o el LED (−).`, tone: 'info' });
+    }
+  }
+
+  function pickTerminal(terminal: Terminal) {
+    if (done.current || wires[terminal]) return;
+    void feedbackTap();
+    if (pinSel) {
+      attempt(pinSel, terminal);
+    } else {
+      setTermSel(terminal);
+      setHint({ text: `${TERMINAL_LABEL[terminal]}: ahora toca un pin de la placa.`, tone: 'info' });
+    }
+  }
 
   return (
-    <View style={styles.stageGap}>
-      <GameBoard style={styles.breadboard}>
-        <Svg width={300} height={230} viewBox="0 0 300 230" style={styles.circuitSvg}>
-          <Rect x={8} y={10} width={72} height={210} rx={10} fill={boardInfo.arduino.color} />
-          {(Object.keys(wires) as Terminal[]).map((terminal) => {
-            const pin = wires[terminal] as Pin;
-            const target = terminalPos[terminal];
-            return <Path key={terminal} d={`M86 ${pinY(pin)} C140 ${pinY(pin)} ${target.x - 60} ${target.y} ${target.x} ${target.y}`} stroke={terminal === 'cathode' ? '#222' : '#E0605A'} strokeWidth={5} fill="none" strokeLinecap="round" />;
-          })}
-          <Rect x={186} y={62} width={14} height={60} rx={5} fill="#D9B98A" />
-          <Rect x={186} y={78} width={14} height={4} fill="#8A4B2A" />
-          <Rect x={186} y={88} width={14} height={4} fill="#1E1E1E" />
-          <Rect x={186} y={98} width={14} height={4} fill="#8A4B2A" />
-          <Line x1={193} y1={122} x2={193} y2={150} stroke="#9AA5B1" strokeWidth={3} />
-          <Circle cx={214} cy={164} r={22} fill={complete ? '#FF6B6B' : '#7A2F2F'} opacity={complete ? 0.95 : 0.8} />
-          <Line x1={214} y1={186} x2={250} y2={190} stroke="#9AA5B1" strokeWidth={3} />
-          {spark && <Path d="M150 110 l14 -18 l-4 14 l16 -6 l-18 22 l4 -14 z" fill="#FFD84A" />}
-        </Svg>
-        {pins.map((pin) => (
-          <PressableScale
-            key={pin}
-            accessibilityRole="button"
-            accessibilityLabel={`Pin ${pin}`}
-            disabled={complete}
-            onPress={() => {
-              setSelectedPin(pin);
-              void feedbackTap();
-            }}
-            style={[styles.pin, { top: pinY(pin) - 14 }, selectedPin === pin && styles.pinSelected]}
-          >
-            <TelText variant="small" color={selectedPin === pin ? 'primary' : 'cream'} style={font('bodyHeavy')}>
-              {pin}
-            </TelText>
-          </PressableScale>
-        ))}
-        {(Object.keys(terminalPos) as Terminal[]).map((terminal) => (
-          <PressableScale
-            key={terminal}
-            accessibilityRole="button"
-            accessibilityLabel={`Conectar a ${TERMINAL_LABEL[terminal]}`}
-            disabled={Boolean(wires[terminal]) || complete}
-            onPress={() => connect(terminal)}
-            style={[styles.terminal, { marginLeft: -150 + terminalPos[terminal].x - 22, top: terminalPos[terminal].y - 18 }, Boolean(wires[terminal]) && styles.terminalDone]}
-          >
-            <View style={styles.terminalDot} />
-          </PressableScale>
-        ))}
-        <TelText variant="small" color="accentSoft" style={styles.resistorLabel}>
-          220 Ω
-        </TelText>
-        <TelText variant="small" color="accentSoft" style={styles.ledLabel}>
-          LED (−)
-        </TelText>
+    <View style={styles.stage}>
+      <GameBoard style={styles.wireBoard}>
+        <FitBox>
+          {(size) => {
+            const layout = wireLayout(size);
+            const tx = layout.terminalX;
+            const top = layout.terminalY.resistor;
+            const bottom = layout.terminalY.cathode;
+            const resistorY = top + (bottom - top) * 0.32;
+            const ledY = top + (bottom - top) * 0.68;
+            const wireStartX = layout.pad + layout.pinW;
+            return (
+              <View style={{ width: layout.width, height: layout.height }}>
+                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                  <Svg width={layout.width} height={layout.height}>
+                    <Rect x={0} y={0} width={layout.boardW} height={layout.height} rx={10} fill={boardInfo.arduino.color} />
+                    <Line x1={tx} y1={top} x2={tx} y2={bottom} stroke="#9AA5B1" strokeWidth={3} />
+                    <Rect x={tx - 9} y={resistorY - 20} width={18} height={40} rx={5} fill="#D9B98A" />
+                    <Rect x={tx - 9} y={resistorY - 10} width={18} height={4} fill="#8A4B2A" />
+                    <Rect x={tx - 9} y={resistorY} width={18} height={4} fill="#1E1E1E" />
+                    <Rect x={tx - 9} y={resistorY + 10} width={18} height={4} fill="#8A4B2A" />
+                    {complete ? <Circle cx={tx} cy={ledY} r={26} fill="#FF6B6B" opacity={0.28} /> : null}
+                    <Circle cx={tx} cy={ledY} r={15} fill={complete ? '#FF6B6B' : '#7A2F2F'} stroke="#C9D1D8" strokeWidth={2} />
+                    {(Object.keys(wires) as Terminal[]).map((terminal) => {
+                      const pin = wires[terminal] as Pin;
+                      const startY = layout.pinTop[pin] + layout.pinH / 2;
+                      const endY = layout.terminalY[terminal];
+                      const midX = (wireStartX + tx) / 2;
+                      return <Path key={terminal} d={`M${wireStartX} ${startY} C${midX} ${startY} ${midX} ${endY} ${tx - 22} ${endY}`} stroke={terminal === 'cathode' ? '#F4ECD7' : '#FF8A80'} strokeWidth={5} fill="none" strokeLinecap="round" />;
+                    })}
+                    {spark ? <Path d={`M${layout.width / 2 - 10} ${layout.height / 2 - 24} l16 -2 l-6 16 l18 -4 l-24 30 l4 -18 z`} fill="#FFD84A" /> : null}
+                  </Svg>
+                </View>
+                {pins.map((pin) => (
+                  <PressableScale
+                    key={pin}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pin ${pin}`}
+                    disabled={complete}
+                    onPress={() => pickPin(pin)}
+                    style={[styles.pin, { left: layout.pad, top: layout.pinTop[pin], width: layout.pinW, height: layout.pinH }, pinSel === pin && styles.pinSelected]}
+                  >
+                    <TelText variant="label" color={pinSel === pin ? 'primary' : 'cream'}>
+                      {pin}
+                    </TelText>
+                  </PressableScale>
+                ))}
+                {(Object.keys(layout.terminalY) as Terminal[]).map((terminal) => (
+                  <PressableScale
+                    key={terminal}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Conectar a ${TERMINAL_LABEL[terminal]}`}
+                    disabled={Boolean(wires[terminal]) || complete}
+                    onPress={() => pickTerminal(terminal)}
+                    style={[styles.terminal, { left: tx - layout.terminalSize / 2, top: layout.terminalY[terminal] - layout.terminalSize / 2, width: layout.terminalSize, height: layout.terminalSize }, termSel === terminal && styles.terminalSelected, Boolean(wires[terminal]) && styles.terminalDone]}
+                  >
+                    <View style={styles.terminalDot} />
+                  </PressableScale>
+                ))}
+                <TelText variant="small" color="accentSoft" style={[styles.partLabel, { left: tx + 16, top: resistorY - 8 }]}>
+                  220 Ω
+                </TelText>
+                <TelText variant="small" color="accentSoft" style={[styles.partLabel, { left: tx + 22, top: ledY - 8 }]}>
+                  LED
+                </TelText>
+              </View>
+            );
+          }}
+        </FitBox>
       </GameBoard>
-      <Hint tone={hint.tone}>{hint.text}</Hint>
+      <Hint tone={hint ? hint.tone : 'info'}>{hint ? hint.text : 'Toca un pin de la placa y luego un extremo del circuito (o al revés).'}</Hint>
+      <ScorePop pop={pop} />
+      <Celebration burstKey={confetti} count={24} />
     </View>
   );
 }
@@ -355,19 +416,35 @@ function BlinkingLed({ on }: { on: boolean }) {
 }
 
 function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (value: number) => void; onFinish: () => void }) {
+  const motion = useMotionEnabled();
   const [program, setProgram] = useState<BlockId[]>([]);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<ReturnType<typeof simulate> | null>(null);
+  const [pop, showPop] = usePop();
+  const [confetti, setConfetti] = useState<number | null>(null);
   const done = useRef(false);
   const askContinue = useAskContinue();
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    onPoints(attempt > 0 ? codeScore(attempt, false) : 0);
-    askContinue(onFinish, 'Ver resultado');
-  }, [askContinue, attempt, onFinish, onPoints]);
+    askContinue(onFinish, 'Tiempo agotado · Seguir');
+  }, [askContinue, onFinish]);
   useGameTimeout(endsAt, timeout);
+
+  function add(id: BlockId) {
+    if (done.current || program.length >= SLOTS) return;
+    setResult(null);
+    setProgram([...program, id]);
+    void feedbackTap();
+  }
+
+  function undo() {
+    if (done.current || !program.length) return;
+    setResult(null);
+    setProgram(program.slice(0, -1));
+    void feedbackTap();
+  }
 
   function upload() {
     if (program.length < SLOTS || done.current) return;
@@ -375,117 +452,124 @@ function CodeStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     const nextAttempt = attempt + 1;
     setAttempt(nextAttempt);
     setResult(outcome);
+    const points = codeScore(nextAttempt, outcome.blinks);
+    onPoints(points);
     if (outcome.blinks) {
       done.current = true;
-      onPoints(codeScore(nextAttempt, true));
+      showPop(`+${points}`);
+      setConfetti(1);
       void feedbackSuccess();
       askContinue(onFinish, 'Ver resultado');
     } else {
+      showPop('¡Casi!', 'bad');
       void feedbackWarning();
+      // Hay dos intentos: tras el segundo se cierra la etapa.
       if (nextAttempt >= 2) {
         done.current = true;
-        onPoints(codeScore(nextAttempt, false));
         askContinue(onFinish, 'Ver resultado');
       }
     }
   }
 
-  const usedIds = new Set(program);
-
+  const blinking = Boolean(result?.blinks);
   return (
-    <View style={styles.stageGap}>
+    <View style={styles.stage}>
       <View style={styles.editor}>
-        <TelText variant="label" color="accent" style={font('bodyBold')}>
-          {'void loop() {'}
-        </TelText>
+        <View style={styles.editorHead}>
+          <TelText variant="small" color="accent" style={styles.mono}>
+            {'void loop() {'}
+          </TelText>
+          <BlinkingLed on={blinking} />
+        </View>
         {Array.from({ length: SLOTS }, (_, index) => {
           const block = program[index];
-          const code = codeBlocks.find((item) => item.id === block)?.code;
           return (
             <View key={index} style={[styles.slotLine, block && styles.slotFilled]}>
-              <TelText variant="label" color={block ? 'cream' : 'slate'} style={font('bodyBold')}>
-                {code ?? `  // paso ${index + 1}`}
+              <TelText variant="small" color={block ? 'cream' : 'slate'} style={styles.mono} numberOfLines={1}>
+                {block ? `${index + 1}  ${blockCode(block)}` : `${index + 1}  // paso ${index + 1}`}
               </TelText>
             </View>
           );
         })}
-        <TelText variant="label" color="accent" style={font('bodyBold')}>
+        <TelText variant="small" color="accent" style={styles.mono}>
           {'}'}
         </TelText>
       </View>
       <View style={styles.palette}>
-        {codeBlocks.map((block) => (
+        {paletteBlocks.map((block) => (
           <PressableScale
             key={block.id}
             accessibilityRole="button"
             accessibilityLabel={`Agregar ${block.code}`}
-            disabled={usedIds.has(block.id) || program.length >= SLOTS || Boolean(result?.blinks)}
-            onPress={() => {
-              setResult(null);
-              setProgram([...program, block.id]);
-              void feedbackTap();
-            }}
-            scaleTo={0.94}
-            style={[styles.block, usedIds.has(block.id) && styles.blockUsed]}
+            disabled={program.length >= SLOTS || blinking}
+            onPress={() => add(block.id)}
+            scaleTo={0.92}
+            style={styles.block}
           >
-            <TelText variant="small" color={usedIds.has(block.id) ? 'slate' : 'primary'} style={font('bodyBold')}>
-              {block.code}
+            <TelIcon name={block.icon} size={18} color={colors.primary} />
+            <TelText variant="small" color="primary" numberOfLines={1} maxFontSizeMultiplier={1.15}>
+              {block.label}
             </TelText>
           </PressableScale>
         ))}
       </View>
       <View style={styles.codeActions}>
-        <TelButton label="Borrar" variant="outlineLight" icon="refresh" size="sm" fullWidth={false} disabled={!program.length || Boolean(result?.blinks)} onPress={() => setProgram([])} />
+        <TelButton label="Deshacer" variant="outlineLight" icon="refresh" fullWidth={false} disabled={!program.length || blinking} onPress={undo} />
         <View style={styles.flex}>
-          <TelButton label="Subir a la placa" variant="cream" icon="send" size="sm" disabled={program.length < SLOTS || Boolean(result?.blinks)} onPress={upload} />
+          <TelButton label="Subir a la placa" variant="cream" icon="send" disabled={program.length < SLOTS || blinking} onPress={upload} />
         </View>
-        <BlinkingLed on={Boolean(result?.blinks)} />
       </View>
-      {result && (
-        <Animated.View entering={ZoomIn.duration(200)}>
+      {result ? (
+        <Animated.View entering={motion ? ZoomIn.duration(200) : undefined}>
           <Hint tone={result.blinks ? 'good' : 'bad'}>{result.message}</Hint>
         </Animated.View>
+      ) : (
+        <Hint>Pista: prender, esperar, apagar y esperar. Tienes 2 intentos.</Hint>
       )}
-      {!result && (
-        <Animated.View entering={FadeIn}>
-          <Hint>Pista: encender, esperar, apagar, esperar.</Hint>
-        </Animated.View>
-      )}
+      <ScorePop pop={pop} />
+      <Celebration burstKey={confetti} count={26} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-    minHeight: 480,
+  root: {
+    flex: 1,
+    minHeight: 0,
+    gap: 6,
   },
-  bannerSpace: {
-    height: 420,
+  stage: {
+    flex: 1,
+    minHeight: 0,
+    gap: 6,
   },
   flex: {
     flex: 1,
   },
-  stageGap: {
-    gap: spacing.sm,
+  mono: {
+    fontFamily: monoFamily,
   },
   scenario: {
-    padding: spacing.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
     borderRadius: radius.lg,
     backgroundColor: colors.cream,
-    gap: 4,
-    minHeight: 96,
+    gap: 2,
     justifyContent: 'center',
   },
   boards: {
+    flex: 1,
+    minHeight: 0,
+    maxHeight: 200,
     flexDirection: 'row',
     gap: spacing.xs,
   },
   boardCard: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    paddingVertical: spacing.sm,
+    padding: 6,
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,
     borderWidth: 2,
@@ -499,19 +583,23 @@ const styles = StyleSheet.create({
     borderColor: '#E58A8A',
     backgroundColor: '#6E2A2A',
   },
-  breadboard: {
-    height: 240,
+  boardBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  circuitSvg: {
-    marginTop: 4,
+  wireBoard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pin: {
     position: 'absolute',
-    left: '50%',
-    marginLeft: -150 + 14,
-    width: 60,
-    height: 36,
     borderRadius: 10,
     backgroundColor: '#0E5A60',
     borderWidth: 2,
@@ -525,15 +613,15 @@ const styles = StyleSheet.create({
   },
   terminal: {
     position: 'absolute',
-    left: '50%',
-    width: 44,
-    height: 44,
     borderRadius: 22,
     borderWidth: 3,
     borderColor: colors.cream,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  terminalSelected: {
+    backgroundColor: 'rgba(244, 236, 215, 0.25)',
   },
   terminalDone: {
     borderStyle: 'solid',
@@ -545,26 +633,28 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: colors.cream,
   },
-  resistorLabel: {
+  partLabel: {
     position: 'absolute',
-    top: 96,
-    left: '50%',
-    marginLeft: 58,
-  },
-  ledLabel: {
-    position: 'absolute',
-    top: 214,
-    left: '50%',
-    marginLeft: 4,
   },
   editor: {
-    padding: spacing.md,
+    flex: 1,
+    minHeight: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
     borderRadius: radius.lg,
     backgroundColor: '#07131D',
-    gap: 6,
+    gap: 3,
+  },
+  editorHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 20,
   },
   slotLine: {
-    minHeight: 34,
+    flex: 1,
+    minHeight: 20,
+    maxHeight: 40,
     borderRadius: 8,
     paddingHorizontal: 10,
     justifyContent: 'center',
@@ -579,18 +669,16 @@ const styles = StyleSheet.create({
   },
   palette: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
+    gap: 4,
   },
   block: {
-    paddingHorizontal: 10,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.cream,
+    flex: 1,
+    minHeight: 52,
+    alignItems: 'center',
     justifyContent: 'center',
-  },
-  blockUsed: {
-    backgroundColor: colors.primarySoft,
+    gap: 2,
+    borderRadius: 12,
+    backgroundColor: colors.cream,
   },
   codeActions: {
     flexDirection: 'row',
@@ -598,10 +686,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   led: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FF4D4D',
-    boxShadow: '0px 0px 18px rgba(255, 77, 77, 0.9)',
+    boxShadow: '0px 0px 14px rgba(255, 77, 77, 0.9)',
   },
 });

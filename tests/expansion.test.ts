@@ -107,7 +107,7 @@ describe('memory puzzle', () => {
   });
 
   it('is listed with the other untimed challenges and has a tutorial', () => {
-    expect(puzzles.map((puzzle) => puzzle.id)).toEqual(['red', 'memoria', 'binario', 'cifrado']);
+    expect(puzzles.map((puzzle) => puzzle.id)).toEqual(['red', 'memoria', 'binario', 'cifrado', 'paquete']);
     puzzles.forEach((puzzle) => expect(getTutorial(`puzzle-${puzzle.id}`)?.steps.length).toBeGreaterThanOrEqual(3));
     expect(puzzles.find((puzzle) => puzzle.id === 'memoria')?.levelName(3)).toBe('8 parejas');
   });

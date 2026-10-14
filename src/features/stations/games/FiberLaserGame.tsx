@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, G, Line, Path, Polygon, Polyline, Rect } from 'react-native-svg';
 import { FitBox, type FitSize } from '@/components/FitBox';
 import { PressableScale } from '@/components/PressableScale';
@@ -56,19 +56,19 @@ const STAGES: { key: StageKey; title: string; body: string; icon: IconName }[] =
   {
     key: 'light',
     title: 'Mete la luz en la fibra',
-    body: 'Lleva la luz hasta el receptor.\nLa fibra guía la luz rebotando por dentro; si entra muy inclinada, se escapa.',
+    body: 'Lleva la luz al receptor.\nLa fibra guía la luz rebotando por dentro; si entra muy inclinada, se escapa.',
     icon: 'angle',
   },
   {
     key: 'splice',
     title: 'Empalma la fibra',
-    body: 'Alinea los dos extremos de la fibra.\nSi los núcleos no coinciden, se pierde luz. Muévelos hasta que pase el 90 %.',
+    body: 'Alinea los dos extremos.\nSi los núcleos no coinciden, se pierde luz. Llega al 90 %.',
     icon: 'fiber',
   },
   {
     key: 'message',
     title: 'Envía un mensaje con luz',
-    body: 'Envía la letra bit por bit.\nLuz encendida es 1 y apagada es 0: así viajan los datos por la fibra.',
+    body: 'Envía la letra bit por bit.\nLuz es 1 y apagado es 0: así viajan los datos.',
     icon: 'modulation',
   },
 ];
@@ -296,6 +296,9 @@ function OpticsBoard({ size, target, index, angle, solved, verdict, hold, onAngl
   const guided = trace.outcome === 'guided';
   const laser = laserPoint(layout, angle);
   const grab = useRef<RayPoint>({ x: 0, y: 0 });
+  const motion = useMotionEnabled();
+  // Camino del punto de luz decorativo (en píxeles): del láser, por los rebotes, hasta el receptor.
+  const runPath = [laser, { x: fx, y: ay }, ...trace.points.slice(1).map((point) => ({ x: fx + point.x, y: ay + point.y }))].map((point) => ({ x: point.x * scene.scale, y: point.y * scene.scale }));
 
   // Arrastrar mueve el láser siguiendo al dedo; se proyecta sobre su arco alrededor de la fibra.
   const handlers = usePanHandlers({
@@ -364,6 +367,12 @@ function OpticsBoard({ size, target, index, angle, solved, verdict, hold, onAngl
         {verdict === 'ok' && <Badge x={receiverX + 15} y={ay - 30} ok />}
         {verdict === 'bad' && leak && <Badge x={leak.x + fx + 6} y={ay + leak.y + Math.sign(leak.y) * 14} ok={false} />}
       </Svg>
+      {motion && verdict === 'ok' && (
+        <>
+          <Burst key={`burst-${index}`} x={(receiverX + 15) * scene.scale} y={ay * scene.scale} size={46 * scene.scale} color={LIT} />
+          <RayRunner key={`run-${index}`} points={runPath} />
+        </>
+      )}
       <View pointerEvents="none" style={styles.overlayTop}>
         <TelText variant="small" color="accentSoft" align="right" maxFontSizeMultiplier={1.2}>
           {target.name} · {index + 1} de {LIGHT_COUNT}
@@ -373,7 +382,7 @@ function OpticsBoard({ size, target, index, angle, solved, verdict, hold, onAngl
         </TelText>
       </View>
       <View pointerEvents="none" style={styles.overlayBottom}>
-        <TelText variant="heading" color="cream" align="right" tabular maxFontSizeMultiplier={1.2}>
+        <TelText variant="subtitle" color="cream" align="right" tabular maxFontSizeMultiplier={1.2}>
           Ángulo {signed(angle)}°
         </TelText>
         <TelText variant="small" color="accentSoft" align="right" maxFontSizeMultiplier={1.2}>
@@ -495,6 +504,7 @@ function SpliceBoard({ size, target, index, offset, tilt, locked, coupling, onMo
   const rightStart = leftEnd + gap;
   const reach = SCENE_W - rightStart + 60;
   const grab = useRef(0);
+  const motion = useMotionEnabled();
 
   // Arrastrar hacia arriba o abajo mueve el extremo derecho 1:1 (el giro se ajusta con los botones).
   const handlers = usePanHandlers({
@@ -511,6 +521,12 @@ function SpliceBoard({ size, target, index, offset, tilt, locked, coupling, onMo
   const spillTo = offset >= 0 ? Math.min(yc + offset - r, yc + r) : yc + r;
   const pct = Math.round(coupling * 100);
   const meterColor = coupling >= SPLICE_LOCK ? LIT : coupling >= 0.6 ? colors.warning : colors.danger;
+  // Al fijar el empalme, un punto de luz recorre la fibra ya unida (decorativo).
+  const flowPath = [
+    { x: 0, y: yc },
+    { x: leftEnd, y: yc },
+    { x: SCENE_W, y: yc + offset },
+  ].map((point) => ({ x: point.x * scene.scale, y: point.y * scene.scale }));
 
   return (
     <View
@@ -547,10 +563,18 @@ function SpliceBoard({ size, target, index, offset, tilt, locked, coupling, onMo
           </>
         )}
       </Svg>
-      <View pointerEvents="none" style={styles.meter}>
+      {motion && locked && (
+        <>
+          <Burst key="joint" x={leftEnd * scene.scale} y={yc * scene.scale} size={46 * scene.scale} color={colors.cream} />
+          <RayRunner key="flow" points={flowPath} />
+        </>
+      )}
+      <View pointerEvents="none" style={styles.chip}>
         <TelText variant="small" color="accentSoft" maxFontSizeMultiplier={1.2}>
           Empalme {index + 1} de {SPLICE_COUNT}
         </TelText>
+      </View>
+      <View pointerEvents="none" style={styles.meter}>
         <View style={styles.meterRow}>
           <EndView ratio={Math.abs(offset) / target.coreDiameter} />
           <TelText variant="heading" color="cream" tabular maxFontSizeMultiplier={1.2}>
@@ -730,6 +754,7 @@ function MessageBoard({ size, received, letters, decoded, last, pulses }: Messag
           {slots}
         </TelText>
       </View>
+      {motion && decoded.length > 0 && <Burst key={decoded.length} x={(PULSE_TO + 52) * s} y={ay * s} size={50 * s} color={LIT} />}
       {motion && (
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           {pulses.map((pulse) => (
@@ -754,18 +779,63 @@ function Pulse({ bit, ok, from, to, y, r }: { bit: number; ok: boolean; from: nu
   return <Animated.View style={[styles.pulse, bit === 1 ? styles.pulseOn : styles.pulseOff, !ok && styles.pulseBad, { left: from - r, top: y - r, width: 2 * r, height: 2 * r, borderRadius: r }, animated]} />;
 }
 
+// Anillo decorativo que se expande y se desvanece (luz recibida, empalme fijado, letra completa).
+function Burst({ x, y, size, color }: { x: number; y: number; size: number; color: string }) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.set(withTiming(1, { duration: 560, easing: Easing.out(Easing.cubic) }));
+  }, [progress]);
+  const animated = useAnimatedStyle(() => ({ opacity: 1 - progress.value, transform: [{ scale: 0.4 + progress.value * 1.6 }] }));
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, borderRadius: size / 2, borderWidth: 3, borderColor: color }, animated]} />;
+}
+
+// Punto de luz decorativo que recorre un camino (por ejemplo, el rayo rebotando hasta el receptor).
+function RayRunner({ points }: { points: RayPoint[] }) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.set(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }));
+  }, [progress]);
+  const times: number[] = [0];
+  points.slice(1).forEach((point, position) => {
+    times.push(times[position] + Math.max(0.01, Math.hypot(point.x - points[position].x, point.y - points[position].y)));
+  });
+  const stops = times.map((time) => time / times[times.length - 1]);
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const animated = useAnimatedStyle(() => ({
+    opacity: progress.value > 0.9 ? (1 - progress.value) * 10 : 1,
+    transform: [{ translateX: interpolate(progress.value, stops, xs) }, { translateY: interpolate(progress.value, stops, ys) }],
+  }));
+  return <Animated.View pointerEvents="none" style={[styles.runner, animated]} />;
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
   root: {
     flex: 1,
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   stage: {
     flex: 1,
     minHeight: 0,
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  chip: {
+    position: 'absolute',
+    left: 8,
+    bottom: 6,
+  },
+  runner: {
+    position: 'absolute',
+    left: -6,
+    top: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.white,
+    boxShadow: '0px 0px 12px rgba(255, 90, 90, 1)',
   },
   summaryScroll: {
     flexGrow: 1,

@@ -28,8 +28,14 @@ export interface RoundResult {
   detail: string;
 }
 
+// Qué lado de la carrera muestra la ronda: el circuito mezcla redes, hardware/telecomunicaciones y
+// software para que se vea que Telemática es todo eso.
+export type B215Track = 'redes' | 'hardware' | 'telecom' | 'software';
+
 export interface B215Round {
   id: string;
+  // Lado de la carrera (por defecto, redes).
+  track?: B215Track;
   // Nombre de la ronda ("Ruta del paquete").
   title: string;
   // Equipo o idea que enseña ("Switch", "Router", "Firewall", "DNS", "Wi-Fi", "Cableado").

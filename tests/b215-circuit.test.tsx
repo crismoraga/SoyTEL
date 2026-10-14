@@ -93,6 +93,37 @@ describe('Circuito B215', () => {
     expect(onComplete).toHaveBeenCalledWith({ score: 1000, accuracy: 1 });
   });
 
+  it('muestra los lados de la carrera (redes, hardware, software) y da estrellas según el resultado', () => {
+    pick.mockReturnValue([
+      { ...fakeRound('a', 1), track: 'redes' },
+      { ...fakeRound('b', 0.6), track: 'hardware' },
+      { ...fakeRound('c', 0.1), track: 'software' },
+    ]);
+    render(<B215Circuit seed={1} onComplete={jest.fn()} />);
+    expect(screen.getByText('Redes')).toBeTruthy();
+    expect(screen.getByText('Hardware')).toBeTruthy();
+    expect(screen.getByText('Software')).toBeTruthy();
+    // El tiempo de la ronda se ve antes de empezar.
+    expect(screen.getByText('30 s')).toBeTruthy();
+    press('¡Vamos!');
+    press('terminar a');
+    expect(screen.getByLabelText('3 de 3 estrellas')).toBeTruthy();
+    expect(screen.getByText('¡Muy bien!')).toBeTruthy();
+    press('Siguiente ronda');
+    press('¡Vamos!');
+    press('terminar b');
+    expect(screen.getByLabelText('2 de 3 estrellas')).toBeTruthy();
+    press('Siguiente ronda');
+    press('¡Vamos!');
+    press('terminar c');
+    expect(screen.getByLabelText('1 de 3 estrellas')).toBeTruthy();
+    expect(screen.getByText('¡Buen intento!')).toBeTruthy();
+    press('Ver resultado');
+    expect(screen.getByText('Redes · Ronda a')).toBeTruthy();
+    expect(screen.getByText('Hardware · Ronda b')).toBeTruthy();
+    expect(screen.getByText('Software · Ronda c')).toBeTruthy();
+  });
+
   it('reparte el puntaje por ronda y nunca pasa de 1000', () => {
     expect([0, 1, 2].map((index) => roundMax(3, index))).toEqual([333, 333, 334]);
     expect([0, 1].map((index) => roundMax(2, index))).toEqual([500, 500]);
@@ -368,13 +399,28 @@ describe('Ruta del paquete · tablero', () => {
     expect(screen.getByText('1/16')).toBeTruthy();
   });
 
-  it('avisa si el último punto se alcanza antes de cubrir todo y si el camino queda sin salida', () => {
+  it('avisa si el último punto se alcanza antes de cubrir todo y si el dedo baja lejos del paquete', () => {
     const early: ZipPuzzle = { size: 4, checkpoints: [0, 3, 4, 12], solution: SNAKE };
     render(<ZipBoard puzzle={early} onSolved={jest.fn()} />);
     layoutBoard();
     trace([0, 1, 2, 3, 7, 6, 5, 4, 8, 12], 4);
     expect(screen.getByText('Antes del 4, pasa por todas las casillas.')).toBeTruthy();
     expect(screen.getByText('9/16')).toBeTruthy();
+
+    // Un toque lejos del paquete no hace nada, pero explica de dónde se arrastra.
+    drag([centerOf(14, 4)]);
+    expect(screen.getByText('Arrastra desde el paquete: va al final del cable.')).toBeTruthy();
+    expect(screen.getByText('9/16')).toBeTruthy();
+  });
+
+  it('avisa cuando el camino deja una casilla sin salida', () => {
+    render(<ZipBoard puzzle={snake} onSolved={jest.fn()} />);
+    layoutBoard();
+    // La casilla 4 solo se alcanzaría desde la cabeza (8) y ahí se acabaría el camino.
+    trace([0, 1, 5, 9, 8], 4);
+    expect(screen.getByText('Así quedarán casillas sin paso. Retrocede un poco.')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Deshacer'));
+    expect(screen.getByText('4/16')).toBeTruthy();
   });
 
   it('resuelve el tablero: estalla, avisa una sola vez y ya no acepta más', () => {

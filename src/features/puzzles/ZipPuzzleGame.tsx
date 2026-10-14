@@ -40,6 +40,9 @@ export function ZipPuzzleGame({ level, seed, onSolved, say }: PuzzleGameProps) {
       case 'stuck':
         say('Así quedarán casillas sin paso. Retrocede un poco o toca Deshacer.', 'bad');
         break;
+      case 'lost':
+        say('Arrastra desde el paquete: está al final del cable.', 'tip');
+        break;
       case 'reset':
         say('Volvimos al inicio. Parte desde el 1.', 'idle');
         break;

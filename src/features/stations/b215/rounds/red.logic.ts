@@ -36,6 +36,19 @@ function lower(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
+// Aciertos seguidos al final de la lista.
+export function streakOf(hits: readonly boolean[]): number {
+  let streak = 0;
+  for (let index = hits.length - 1; index >= 0 && hits[index]; index -= 1) streak += 1;
+  return streak;
+}
+
+// Palabra de ánimo según la racha: corta, para que se lea de un vistazo.
+export function cheer(streak: number): string {
+  if (streak >= 3) return `¡Racha x${streak}!`;
+  return streak === 2 ? '¡Eso es!' : '¡Bien!';
+}
+
 // ——— Ronda A · Firewall: ¿pasa o no pasa? ———
 
 export type ServiceId = 'https' | 'http' | 'dns' | 'ssh' | 'telnet' | 'ftp' | 'rdp' | 'minecraft' | 'mysql';
@@ -153,12 +166,26 @@ export function explainDecision(rules: readonly FirewallRule[], connection: Conn
   return `${service.name} no está permitido: cae en «Todo lo demás» (regla ${number}).`;
 }
 
-export function feedbackLine(ok: boolean, body: string): string {
-  return ok ? `¡Bien! ${capitalize(body)}` : `Ojo: ${body}`;
+// La regla que decidió, en pocas palabras (se muestra al acertar).
+export function shortWhy(rules: readonly FirewallRule[], connection: Connection, decision: Decision): string {
+  const rule = rules[decision.ruleIndex];
+  if (!rule) return 'se bloquea por defecto';
+  const number = decision.ruleIndex + 1;
+  if (rule.match.kind === 'origin') {
+    const later = rules.some((other, index) => index > decision.ruleIndex && other.action === 'allow' && ruleMatches(other, connection));
+    return later ? `regla ${number}, se lee primero` : `regla ${number}`;
+  }
+  return rule.match.kind === 'any' ? `regla ${number}, todo lo demás` : `regla ${number}`;
+}
+
+// Reacción a una respuesta: al acertar, ánimo + número de regla; al errar, la regla que aplica y por qué.
+export function reactionLine(ok: boolean, streak: number, rules: readonly FirewallRule[], connection: Connection, decision: Decision): string {
+  if (!ok) return `Ojo: ${explainDecision(rules, connection, decision)}`;
+  return `${cheer(streak)} ${capitalize(shortWhy(rules, connection, decision))}.`;
 }
 
 export function firewallPrompt(level: number): string {
-  return normalizeLevel(level) === 2 ? 'Las reglas se leen en orden: gana la primera que calza.' : '¿Pasa o se bloquea? Compara la conexión con las reglas.';
+  return normalizeLevel(level) === 2 ? 'Se leen en orden: gana la primera que calza.' : '¿Pasa o se bloquea?';
 }
 
 function longestRun(values: string[]): number {
@@ -338,14 +365,20 @@ export function listNames(names: readonly string[]): string {
   return `${quoted.slice(0, -1).join(', ')} y ${quoted[quoted.length - 1]}`;
 }
 
-export function explainChannel(scenario: WifiScenario, picked: WifiChoice): string {
+export function explainChannel(scenario: WifiScenario, picked: WifiChoice, streak = 1): string {
+  if (picked === scenario.best) return `${cheer(streak)} Canal ${picked} libre.`;
   const hits = overlappingNeighbors(picked, scenario.neighbors)
     .slice(0, 2)
     .map((neighbor) => neighbor.name);
-  if (picked === scenario.best) {
-    return hits.length > 0 ? `¡Bien! El canal ${picked} es el más libre: solo te pisa ${listNames(hits)}.` : `¡Bien! El canal ${picked} es el más libre: nadie te pisa.`;
-  }
   return `El canal ${picked} se pisa con ${listNames(hits)}. El más libre es el ${scenario.best}.`;
+}
+
+// Barras de señal (1 a 4) del Wi-Fi del laboratorio en ese canal, comparado con los otros dos: el mejor canal
+// siempre muestra 3 o 4 barras y los demás 1 o 2.
+export function signalBars(scenario: WifiScenario, channel: WifiChoice): number {
+  const worst = Math.max(1, ...WIFI_CHANNELS.map((item) => scenario.costs[item]));
+  const bars = 1 + Math.round((1 - scenario.costs[channel] / worst) * 3);
+  return channel === scenario.best ? Math.max(3, bars) : Math.min(2, bars);
 }
 
 export function describeScenario(scenario: WifiScenario): string {
@@ -353,8 +386,8 @@ export function describeScenario(scenario: WifiScenario): string {
   return `Gráfico de canales Wi-Fi. Redes vecinas: ${parts.join(', ')}.`;
 }
 
-export const WIFI_PROMPT_FIRST = 'Los canales 1, 6 y 11 no se pisan entre sí. Elige el que tenga menos redes encima.';
-export const WIFI_PROMPT = 'Busca el canal con menos redes encima.';
+export const WIFI_PROMPT_FIRST = '1, 6 y 11 no se pisan. Elige el canal con menos redes encima.';
+export const WIFI_PROMPT = 'Elige el canal más libre.';
 
 const NEIGHBOR_NAMES = [
   'Casa_Pérez',
@@ -499,9 +532,9 @@ export function placementResult(slot: SlotId, device: DeviceId): { ok: boolean; 
   if (SLOT_NEEDS[slot] === device) return { ok: true, text: need.role };
   const given = DEVICES[device];
   if (device === 'printer' || device === 'camera') {
-    return { ok: false, text: `${given.article} ${lower(given.name)} usa la red, pero no la arma: ahí va el ${lower(need.name)}.` };
+    return { ok: false, text: `${given.article} ${lower(given.name)} usa la red, no la arma. Ahí va el ${lower(need.name)}.` };
   }
-  return { ok: false, text: `${given.article} ${lower(given.name)} ${given.does}; ahí va el ${lower(need.name)}, que ${need.does}.` };
+  return { ok: false, text: `Ahí va el ${lower(need.name)}: ${need.does}.` };
 }
 
 export interface Online {

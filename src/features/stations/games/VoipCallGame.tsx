@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, ZoomIn, ZoomOut } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Celebration } from '@/components/feedback/Celebration';
+import { FitBox } from '@/components/FitBox';
 import { PressableScale } from '@/components/PressableScale';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
-import { mulberry32, seededShuffle } from '@/route/random';
+import { useMotionEnabled } from '@/lib/motion';
+import { mulberry32 } from '@/route/random';
 import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
+import { GameBoard, Hint, ScorePop, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useDeadline, useFlash, useGameTimeout, useNow, usePace, usePop, useStageFlow, useSubmitOnce, type StationGameProps } from '../kit';
 import {
   DIAL_MAX,
+  dialLayout,
   dialScore,
   EXTENSION,
   JITTER_MAX,
@@ -18,86 +22,95 @@ import {
   PHRASE,
   schedulePackets,
   SIP_MAX,
-  sipDecoys,
-  sipFlow,
-  sipScore,
-  type SipMessage,
+  sipOptions,
+  sipProgressScore,
+  sipSteps,
+  type SipOption,
   type VoicePacket,
 } from '../logic/voip';
 
 type StageKey = 'dial' | 'sip' | 'jitter';
 
-const STAGES: { key: StageKey; title: string; body: string; icon: IconName; seconds: number }[] = [
-  { key: 'dial', title: 'Marca el anexo', body: `Usa el teléfono IP del proyecto: llama al anexo ${EXTENSION} de la sala B213.`, icon: 'phone', seconds: 15 },
-  { key: 'sip', title: 'Señalización SIP', body: 'Antes de hablar, los teléfonos negocian la llamada. Toca los mensajes SIP en el orden correcto.', icon: 'network', seconds: 25 },
-  { key: 'jitter', title: 'Jitter buffer', body: 'La voz viaja en paquetes que llegan desordenados. Tócalos en orden (1, 2, 3…) antes de que caduquen.', icon: 'sound', seconds: 30 },
+// Cada etapa: la meta en una frase y la idea en dos líneas cortas.
+const STAGES: { key: StageKey; title: string; goal: string; body: string; icon: IconName; seconds: number }[] = [
+  {
+    key: 'dial',
+    title: 'Marca el anexo',
+    goal: `Marca el anexo ${EXTENSION} y presiona el botón verde.`,
+    body: 'Un teléfono IP manda tu voz por la red de datos, como un mensaje de chat.\nPrimero hay que marcar el anexo: el número interno de la sala.',
+    icon: 'phone',
+    seconds: 20,
+  },
+  {
+    key: 'sip',
+    title: 'Señalización SIP',
+    goal: 'Elige el mensaje correcto en cada paso de la llamada.',
+    body: 'Antes de hablar, los teléfonos se ponen de acuerdo con mensajes SIP.\nCada paso cuenta qué pasó: toca el mensaje que corresponde.',
+    icon: 'handshake',
+    seconds: 40,
+  },
+  {
+    key: 'jitter',
+    title: 'Jitter buffer',
+    goal: 'Toca los paquetes en orden (#1, #2, #3…) antes de que caduquen.',
+    body: 'La voz viaja en paquetes que llegan con retraso y desordenados.\nEl jitter buffer los espera y los ordena para que la voz se oiga bien.',
+    icon: 'sound',
+    seconds: 30,
+  },
 ];
 
+const SECONDS = STAGES.map((item) => item.seconds);
 const ACCENT = '#4FB38A';
+// Puntos de cada paquete que llega a tiempo (JITTER_MAX repartido entre las palabras).
+const PACKET_POINTS = Math.round(JITTER_MAX / PHRASE.length);
 
 // B213 · Redes: una llamada por IP desde un teléfono fijo, de la marcación al audio.
 export function VoipCallGame({ seed, deadline, onComplete }: StationGameProps) {
   const pace = usePace();
   const [random] = useState(() => mulberry32(seed ^ 0x7011));
-  const [stageIndex, setStageIndex] = useState(0);
-  const [banner, setBanner] = useState(true);
-  const [endsAt, setEndsAt] = useState<number | null>(null);
-  const [points, setPoints] = useState<Record<StageKey, number>>({ dial: 0, sip: 0, jitter: 0 });
+  const flow = useStageFlow(SECONDS, pace);
+  const [points, setPoints] = useState({ dial: 0, sip: 0, jitter: 0 });
   const [delivered, setDelivered] = useState(0);
-  const [finished, setFinished] = useState(false);
-  const now = useNow(endsAt !== null, 250);
-  const stage = STAGES[stageIndex];
+  const now = useNow(flow.endsAt !== null, 250);
+  const stage = STAGES[flow.index];
   const total = points.dial + points.sip + points.jitter;
-
-  const startStage = useCallback(() => {
-    setBanner(false);
-    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
-  }, [pace, stageIndex]);
-
-  const nextStage = useCallback(() => {
-    setEndsAt(null);
-    if (stageIndex < STAGES.length - 1) {
-      setStageIndex(stageIndex + 1);
-      setBanner(true);
-    } else {
-      setFinished(true);
-    }
-  }, [stageIndex]);
-
-  const setStagePoints = useCallback((value: number) => setPoints((current) => ({ ...current, [stage.key]: value })), [stage.key]);
+  const accuracy = clamp(total / 1000, 0, 1);
   const submit = useSubmitOnce(onComplete);
-  useDeadline(deadline, () => submit({ score: total, accuracy: delivered / PHRASE.length }));
+  // Si el stand cierra el proyecto antes, se entrega lo logrado hasta ese momento.
+  useDeadline(deadline, () => submit({ score: total, accuracy }));
 
-  if (finished) {
+  // Callbacks estables: cada etapa los usa en efectos y no deben cambiar en cada render.
+  const setDial = useCallback((value: number) => setPoints((current) => (current.dial === value ? current : { ...current, dial: value })), []);
+  const setSip = useCallback((value: number) => setPoints((current) => (current.sip === value ? current : { ...current, sip: value })), []);
+  const setJitter = useCallback((value: number) => setPoints((current) => (current.jitter === value ? current : { ...current, jitter: value })), []);
+
+  if (flow.finished) {
     return (
       <StationSummary
         title="Llamada IP"
         total={total}
-        message={`Calidad de voz (MOS): ${mosScore(delivered).toFixed(1)} de 4,5`}
+        message={`Calidad de voz (MOS): ${mosScore(delivered).toFixed(1).replace('.', ',')} de 4,5`}
         accent={ACCENT}
         rows={[
           { label: 'Marcación', value: points.dial, max: DIAL_MAX, icon: 'phone' },
-          { label: 'Señalización SIP', value: points.sip, max: SIP_MAX, icon: 'network' },
+          { label: 'Señalización SIP', value: points.sip, max: SIP_MAX, icon: 'handshake' },
           { label: 'Voz sin cortes', value: points.jitter, max: JITTER_MAX, icon: 'sound' },
         ]}
-        learned="En telefonía IP, SIP establece la llamada (INVITE, Ringing, OK, ACK) y la voz viaja en paquetes RTP. El jitter buffer los reordena para que escuches sin cortes."
-        onSubmit={() => submit({ score: total, accuracy: delivered / PHRASE.length })}
+        learned="En una llamada IP, SIP arma la llamada (INVITE, Ringing, OK, ACK) y la voz viaja en paquetes RTP que el jitter buffer ordena."
+        onSubmit={() => submit({ score: total, accuracy })}
       />
     );
   }
 
-  const secondsLeft = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
+  const secondsLeft = flow.endsAt !== null ? clamp(Math.ceil((flow.endsAt - now) / 1000), 0, Math.round(stage.seconds * pace)) : null;
 
   return (
-    <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
-      {endsAt && stage.key === 'dial' && <DialStage endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
-      {endsAt && stage.key === 'sip' && <SipStage random={random} endsAt={endsAt} onPoints={setStagePoints} onFinish={nextStage} />}
-      {endsAt && stage.key === 'jitter' && (
-        <JitterStage random={random} endsAt={endsAt} onPoints={setStagePoints} onDelivered={setDelivered} onFinish={nextStage} />
-      )}
-      {banner && <StageBanner key={stage.key} index={stageIndex + 1} title={stage.title} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={startStage} />}
-      {banner && <View style={styles.bannerSpace} />}
+    <View style={styles.root}>
+      <StationHud stage={flow.index + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
+      {flow.endsAt !== null && stage.key === 'dial' && <DialStage endsAt={flow.endsAt} onPoints={setDial} onFinish={() => flow.finish(0)} />}
+      {flow.endsAt !== null && stage.key === 'sip' && <SipStage random={random} endsAt={flow.endsAt} onPoints={setSip} onFinish={() => flow.finish(1)} />}
+      {flow.endsAt !== null && stage.key === 'jitter' && <JitterStage random={random} endsAt={flow.endsAt} onPoints={setJitter} onDelivered={setDelivered} onFinish={() => flow.finish(2)} />}
+      {flow.banner && <StageBanner key={stage.key} index={flow.index + 1} title={stage.title} goal={stage.goal} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={flow.start} />}
     </View>
   );
 }
@@ -109,8 +122,10 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (value: number) => void; onFinish: () => void }) {
   const [typed, setTyped] = useState('');
   const [wrong, setWrong] = useState(0);
-  const [calling, setCalling] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'wrong' | 'calling'>('idle');
   const [startedAt] = useState(() => gameNow());
+  const [confetti, setConfetti] = useState<number | null>(null);
+  const [pop, showPop] = usePop();
   const done = useRef(false);
   const askContinue = useAskContinue();
   const pace = usePace();
@@ -119,68 +134,86 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
     if (done.current) return;
     done.current = true;
     onPoints(0);
-    askContinue(onFinish);
+    askContinue(onFinish, 'Tiempo agotado · Seguir');
   }, [askContinue, onFinish, onPoints]);
   useGameTimeout(endsAt, timeout);
 
+  function press(key: string) {
+    if (done.current) return;
+    setTyped((value) => (value + key).slice(0, 6));
+    setStatus('idle');
+    void feedbackTap();
+  }
+
   function call() {
-    if (calling || done.current) return;
+    if (done.current) return;
     if (typed === EXTENSION) {
       done.current = true;
-      setCalling(true);
-      onPoints(dialScore((gameNow() - startedAt) / pace, wrong));
+      setStatus('calling');
+      const points = dialScore((gameNow() - startedAt) / pace, wrong);
+      onPoints(points);
+      showPop(`+${points}`);
+      setConfetti(1);
       void feedbackSuccess();
       askContinue(onFinish);
     } else {
-      setWrong(wrong + 1);
+      setWrong((value) => value + 1);
       setTyped('');
+      setStatus('wrong');
+      showPop('−20', 'bad');
       void feedbackWarning();
     }
   }
 
+  const caption = status === 'calling' ? `✓ Llamando al ${EXTENSION}…` : status === 'wrong' ? `✗ Ese no es: marca ${EXTENSION}` : `Marca el anexo ${EXTENSION}`;
+
   return (
-    <View style={styles.stageGap}>
-      <View style={styles.deskPhone}>
-        <View style={styles.lcd}>
-          <TelText variant="small" color="primary">
-            {calling ? 'LLAMANDO…' : 'ANEXO'}
-          </TelText>
-          <TelText variant="hero" color="primary" style={font('display')} tabular>
-            {typed || '—'}
-          </TelText>
-        </View>
-        <View style={styles.keypad}>
-          {KEYS.map((key) => (
-            <PressableScale
-              key={key}
-              accessibilityRole="button"
-              accessibilityLabel={`Tecla ${key}`}
-              disabled={calling}
-              onPress={() => {
-                setTyped((value) => (value + key).slice(0, 6));
-                void feedbackTap();
-              }}
-              scaleTo={0.9}
-              style={styles.key}
-            >
-              <TelText variant="title" color="primary">
-                {key}
-              </TelText>
-            </PressableScale>
-          ))}
-        </View>
-        <View style={styles.phoneActions}>
-          <PressableScale accessibilityRole="button" accessibilityLabel="Borrar" disabled={calling} onPress={() => setTyped('')} style={[styles.phoneAction, styles.clear]}>
-            <TelIcon name="close" size={24} color={colors.white} />
-          </PressableScale>
-          <PressableScale accessibilityRole="button" accessibilityLabel="Llamar" disabled={calling} onPress={call} style={[styles.phoneAction, styles.callButton]}>
-            <TelIcon name="phone" size={26} color={colors.white} />
-          </PressableScale>
-        </View>
-      </View>
-      <Hint tone={calling ? 'good' : wrong ? 'bad' : 'info'}>
-        {calling ? '¡Marcaste bien! Tu teléfono envía la invitación a la central.' : wrong ? `Ese no es el anexo. Recuerda: ${EXTENSION} (sala B213).` : `Marca ${EXTENSION} y presiona el botón verde.`}
-      </Hint>
+    <View style={styles.stage}>
+      <FitBox maxWidth={360}>
+        {(size) => {
+          const layout = dialLayout({ width: size.width - 16, height: size.height - 16 });
+          const lcdWidth = layout.width - 48 - 56 - 2 * layout.gap;
+          return (
+            <View style={[styles.deskPhone, { width: layout.width + 16, gap: layout.gap }]}>
+              <View style={[styles.lcdRow, { height: layout.lcdH, gap: layout.gap }]}>
+                <View style={[styles.lcd, status === 'wrong' && styles.lcdWrong, status === 'calling' && styles.lcdCalling, { width: lcdWidth }]}>
+                  <TelText variant="small" color="primary" numberOfLines={1}>
+                    {caption}
+                  </TelText>
+                  <TelText variant="title" color="primary" style={font('display')} tabular numberOfLines={1}>
+                    {typed || '—'}
+                  </TelText>
+                </View>
+                <PressableScale accessibilityRole="button" accessibilityLabel="Borrar" disabled={status === 'calling'} onPress={() => setTyped('')} style={[styles.sideKey, styles.clear, { width: 48 }]}>
+                  <TelIcon name="close" size={24} color={colors.white} />
+                </PressableScale>
+                <PressableScale accessibilityRole="button" accessibilityLabel="Llamar" disabled={status === 'calling'} onPress={call} style={[styles.sideKey, styles.callButton, { width: 56 }]}>
+                  <TelIcon name="phone" size={26} color={colors.white} />
+                </PressableScale>
+              </View>
+              <View style={[styles.keypad, { width: layout.width, gap: layout.gap }]}>
+                {KEYS.map((key) => (
+                  <PressableScale
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Tecla ${key}`}
+                    disabled={status === 'calling'}
+                    onPress={() => press(key)}
+                    scaleTo={0.9}
+                    style={[styles.key, { width: layout.keyW, height: layout.keyH }]}
+                  >
+                    <TelText variant="title" color="primary">
+                      {key}
+                    </TelText>
+                  </PressableScale>
+                ))}
+              </View>
+            </View>
+          );
+        }}
+      </FitBox>
+      <ScorePop pop={pop} />
+      <Celebration burstKey={confetti} count={22} />
     </View>
   );
 }
@@ -188,100 +221,125 @@ function DialStage({ endsAt, onPoints, onFinish }: { endsAt: number; onPoints: (
 // ——— Etapa 2: SIP ———
 
 function SipStage({ random, endsAt, onPoints, onFinish }: { random: () => number; endsAt: number; onPoints: (value: number) => void; onFinish: () => void }) {
-  const [options] = useState(() => seededShuffle([...sipFlow, ...sipDecoys], random));
+  const motion = useMotionEnabled();
+  // Las tres opciones de cada paso, mezcladas una sola vez con la semilla.
+  const [options] = useState(() => sipSteps.map((item) => sipOptions(item, random)));
   const [step, setStep] = useState(0);
   const [mistakes, setMistakes] = useState(0);
-  const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' }>({ text: 'Primero, ¿qué envía tu teléfono para iniciar la llamada?', tone: 'info' });
-  const [shake, setShake] = useState<string | null>(null);
+  const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' | 'info' } | null>(null);
+  const [shake, flashShake] = useFlash<string>(400);
+  const [pop, showPop] = usePop();
+  const [confetti, setConfetti] = useState<number | null>(null);
   const done = useRef(false);
   const askContinue = useAskContinue();
+  const complete = step >= sipSteps.length;
+  const at = Math.min(step, sipSteps.length - 1);
+  const current = sipSteps[at];
+
+  // Los puntos suben con cada paso correcto y bajan con cada error.
+  useEffect(() => {
+    onPoints(sipProgressScore(step, mistakes));
+  }, [mistakes, onPoints, step]);
 
   const timeout = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    onPoints(Math.round((sipScore(mistakes) * step) / sipFlow.length));
-    askContinue(onFinish);
-  }, [askContinue, mistakes, onFinish, onPoints, step]);
+    askContinue(onFinish, 'Tiempo agotado · Seguir');
+  }, [askContinue, onFinish]);
   useGameTimeout(endsAt, timeout);
 
-  function choose(message: SipMessage) {
+  function choose(option: SipOption) {
     if (done.current) return;
-    const expected = sipFlow[step];
-    if (message.id === expected.id) {
+    if (option.correct) {
       const next = step + 1;
       setStep(next);
-      setHint({ text: `${message.label}: ${message.meaning}`, tone: 'good' });
-      void feedbackTap();
-      if (next >= sipFlow.length) {
+      setHint({ text: `${option.label}: ${option.why}`, tone: 'good' });
+      showPop(`+${Math.round(300 / sipSteps.length)}`);
+      if (next >= sipSteps.length) {
         done.current = true;
-        onPoints(sipScore(mistakes));
+        setConfetti(1);
         void feedbackSuccess();
         askContinue(onFinish);
+      } else {
+        void feedbackTap();
       }
     } else {
-      setMistakes(mistakes + 1);
-      setShake(message.id);
-      setTimeout(() => setShake(null), 400);
-      setHint({ text: sipDecoys.some((decoy) => decoy.id === message.id) ? message.meaning : `Todavía no: ${message.label} va más adelante.`, tone: 'bad' });
+      setMistakes((value) => value + 1);
+      flashShake(option.id);
+      setHint({ text: option.why, tone: 'bad' });
+      showPop('−45', 'bad');
       void feedbackWarning();
     }
   }
 
   return (
-    <View style={styles.stageGap}>
+    <View style={styles.stage}>
       <GameBoard style={styles.ladder}>
         <View style={styles.ladderHead}>
-          <TelText variant="label" color="cream">
+          <TelText variant="small" color="cream">
             Tu teléfono
           </TelText>
-          <TelText variant="label" color="cream">
-            Anexo {EXTENSION}
+          <TelText variant="small" color="cream">
+            {`Anexo ${EXTENSION}`}
           </TelText>
         </View>
         <View style={styles.ladderBody}>
           <View style={[styles.lane, styles.laneLeft]} />
           <View style={[styles.lane, styles.laneRight]} />
-          {sipFlow.slice(0, step).map((message) => (
-            <Animated.View key={message.id} entering={FadeInDown.duration(220)} style={styles.arrowRow}>
-              <View style={[styles.arrowLine, message.direction === 'in' && styles.arrowIn]}>
-                <TelText variant="small" color="primary" style={styles.arrowLabel}>
-                  {message.label}
-                </TelText>
-                <TelIcon name={message.direction === 'out' ? 'arrowRight' : 'arrowLeft'} size={16} color={colors.primary} />
+          {sipSteps.map((item, index) => {
+            const state = index < step ? 'done' : index === step && !complete ? 'now' : 'todo';
+            return (
+              <View key={item.message.id} style={styles.ladderRow}>
+                {state === 'done' ? (
+                  <Animated.View entering={motion ? FadeInDown.duration(220) : undefined} style={[styles.pill, item.message.direction === 'in' && styles.pillIn]}>
+                    <TelText variant="small" color="primary">
+                      {item.message.label}
+                    </TelText>
+                    <TelIcon name={item.message.direction === 'out' ? 'arrowRight' : 'arrowLeft'} size={14} color={colors.primary} />
+                  </Animated.View>
+                ) : (
+                  <View style={[styles.pill, styles.pillEmpty, state === 'now' && styles.pillNow]}>
+                    <TelText variant="small" color={state === 'now' ? 'cream' : 'slate'}>
+                      {state === 'now' ? '¿?' : `${index + 1}`}
+                    </TelText>
+                  </View>
+                )}
               </View>
-            </Animated.View>
-          ))}
-          {step >= sipFlow.length && (
-            <Animated.View entering={FadeIn.delay(200)} style={styles.rtp}>
-              <TelIcon name="sound" size={18} color={colors.cream} />
-              <TelText variant="small" color="cream">
-                Audio RTP ⇄
-              </TelText>
-            </Animated.View>
-          )}
+            );
+          })}
+          <View style={styles.ladderRow}>
+            {complete ? (
+              <Animated.View entering={motion ? FadeIn.delay(150) : undefined} style={[styles.pill, styles.rtp]}>
+                <TelIcon name="sound" size={14} color={colors.cream} />
+                <TelText variant="small" color="cream">
+                  Audio RTP ⇄
+                </TelText>
+              </Animated.View>
+            ) : (
+              <View style={[styles.pill, styles.pillEmpty]}>
+                <TelText variant="small" color="slate">
+                  Audio
+                </TelText>
+              </View>
+            )}
+          </View>
         </View>
       </GameBoard>
-      <View style={styles.sipOptions}>
-        {options.map((message) => {
-          const used = sipFlow.slice(0, step).some((item) => item.id === message.id);
-          return (
-            <PressableScale
-              key={message.id}
-              accessibilityRole="button"
-              accessibilityLabel={message.label}
-              disabled={used}
-              onPress={() => choose(message)}
-              scaleTo={0.92}
-              style={[styles.sipChip, used && styles.sipUsed, shake === message.id && styles.sipWrong]}
-            >
-              <TelText variant="label" color={used ? 'slate' : 'primary'} style={font('bodyBold')}>
-                {message.label}
-              </TelText>
-            </PressableScale>
-          );
-        })}
+      <TelText variant="label" color="cream" align="center" style={styles.prompt}>
+        {complete ? '¡Llamada establecida! Ya pueden hablar.' : current.prompt}
+      </TelText>
+      <View style={styles.optionRow}>
+        {options[at].map((option) => (
+          <PressableScale key={option.id} accessibilityRole="button" accessibilityLabel={option.label} disabled={complete} onPress={() => choose(option)} scaleTo={0.94} style={[styles.option, complete && styles.optionOff, shake === option.id && styles.optionWrong]}>
+            <TelText variant="label" color="primary" align="center" numberOfLines={2}>
+              {option.label}
+            </TelText>
+          </PressableScale>
+        ))}
       </View>
-      <Hint tone={hint.tone}>{hint.text}</Hint>
+      <Hint tone={hint ? hint.tone : 'info'}>{hint ? hint.text : 'Cada mensaje SIP tiene su momento: lee la pregunta y elige.'}</Hint>
+      <ScorePop pop={pop} />
+      <Celebration burstKey={confetti} count={22} />
     </View>
   );
 }
@@ -306,61 +364,73 @@ function JitterStage({
   const [expected, setExpected] = useState(1);
   const [played, setPlayed] = useState<Record<number, 'ok' | 'lost'>>({});
   const [wrong, setWrong] = useState(0);
-  const [shake, setShake] = useState<number | null>(null);
+  const [streak, setStreak] = useState(0);
+  const [hint, setHint] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const [shake, flashShake] = useFlash<number>(350);
+  const [pop, showPop] = usePop();
+  const [confetti, setConfetti] = useState<number | null>(null);
   const done = useRef(false);
   const askContinue = useAskContinue();
   const now = useNow(true, 150);
 
   const delivered = Object.values(played).filter((value) => value === 'ok').length;
+  const finished = expected > PHRASE.length;
 
   const finish = useCallback(() => {
     if (done.current) return;
     done.current = true;
-    onDelivered(delivered);
-    onPoints(jitterScore(delivered, wrong));
     askContinue(onFinish, 'Ver resultado');
-  }, [askContinue, delivered, onDelivered, onFinish, onPoints, wrong]);
+  }, [askContinue, onFinish]);
   useGameTimeout(endsAt, finish);
 
   useEffect(() => {
-    if (!done.current && expected > PHRASE.length) finish();
+    if (expected > PHRASE.length) finish();
   }, [expected, finish]);
 
-  // Si el paquete esperado caducó, se pierde y la voz sigue sin él.
-  const awaited = expected <= PHRASE.length ? packets[expected - 1] : null;
+  // El puntaje y los paquetes entregados se informan al instante: si el stand cierra el juego, cuentan.
+  useEffect(() => {
+    onPoints(jitterScore(delivered, wrong));
+    onDelivered(delivered);
+  }, [delivered, onDelivered, onPoints, wrong]);
+
+  // Si el paquete esperado caduca, se pierde y la voz sigue sin él.
+  const awaited = finished ? null : packets[expected - 1];
   useGameTimeout(
     awaited ? awaited.expiresAt : null,
     () => {
       if (done.current) return;
       setPlayed((current) => ({ ...current, [expected]: 'lost' }));
       setExpected((value) => (value === expected ? value + 1 : value));
+      setStreak(0);
+      setHint({ text: `Se perdió el #${expected}: llegó tarde y la voz se corta.`, tone: 'bad' });
       void feedbackWarning();
     },
     expected,
   );
-
-  useEffect(() => {
-    onPoints(jitterScore(delivered, wrong));
-  }, [delivered, onPoints, wrong]);
 
   function tap(packet: VoicePacket) {
     if (done.current || played[packet.seq]) return;
     if (packet.seq === expected) {
       setPlayed((current) => ({ ...current, [packet.seq]: 'ok' }));
       setExpected(expected + 1);
+      const next = streak + 1;
+      setStreak(next);
+      showPop(next >= 3 ? `¡x${next}! +${PACKET_POINTS}` : `+${PACKET_POINTS}`);
+      setHint({ text: `Se oye «${packet.word}»: el #${packet.seq} llegó a tiempo.`, tone: 'good' });
+      if (packet.seq === PHRASE.length && delivered + 1 >= 8) setConfetti(1);
       void feedbackTap();
     } else {
-      setWrong(wrong + 1);
-      setShake(packet.seq);
-      setTimeout(() => setShake(null), 350);
+      setWrong((value) => value + 1);
+      setStreak(0);
+      flashShake(packet.seq);
+      showPop('−15', 'bad');
+      setHint({ text: `Todavía no: primero va el #${expected}.`, tone: 'bad' });
       void feedbackWarning();
     }
   }
 
-  const visible = packets.filter((packet) => now >= packet.arrivesAt && now < packet.expiresAt && !played[packet.seq]);
-
   return (
-    <View style={styles.stageGap}>
+    <View style={styles.stage}>
       <View style={styles.transcript}>
         <TelIcon name="sound" size={18} color={colors.cream} />
         <TelText variant="label" color="cream" style={styles.flex}>
@@ -368,95 +438,118 @@ function JitterStage({
         </TelText>
       </View>
       <GameBoard style={styles.arrivals}>
-        <TelText variant="small" color="accentSoft">
-          LLEGANDO · SIGUIENTE: #{Math.min(expected, PHRASE.length)}
+        <TelText variant="small" color="accentSoft" align="center">
+          {finished ? 'LLAMADA COMPLETA' : `SIGUIENTE: #${expected}`}
         </TelText>
-        <View style={styles.packetGrid}>
-          {visible.map((packet) => {
-            const life = Math.max(0, (packet.expiresAt - now) / (packet.expiresAt - packet.arrivesAt));
+        <FitBox maxHeight={200}>
+          {({ width, height }) => {
+            const gap = 6;
+            const cell = Math.max(44, Math.floor(Math.min((width - 4 * gap) / 5, (height - gap) / 2, 78)));
             return (
-              <Animated.View key={packet.seq} entering={ZoomIn.duration(160)} exiting={ZoomOut.duration(120)}>
-                <PressableScale
-                  accessibilityRole="button"
-                  accessibilityLabel={`Paquete ${packet.seq}`}
-                  onPress={() => tap(packet)}
-                  scaleTo={0.9}
-                  style={[styles.voicePacket, packet.seq === expected && styles.voiceNext, shake === packet.seq && styles.voiceWrong]}
-                >
-                  <TelText variant="title" color="primary" tabular>
-                    #{packet.seq}
-                  </TelText>
-                  <View style={styles.lifeTrack}>
-                    <View style={[styles.lifeFill, { width: `${life * 100}%`, backgroundColor: life < 0.3 ? colors.danger : ACCENT }]} />
-                  </View>
-                </PressableScale>
-              </Animated.View>
+              <View style={[styles.slotGrid, { width: 5 * cell + 4 * gap, gap }]}>
+                {packets.map((packet) => {
+                  const result = played[packet.seq];
+                  const ready = !result && now >= packet.arrivesAt && now < packet.expiresAt;
+                  const late = !result && now >= packet.expiresAt;
+                  const life = clamp((packet.expiresAt - now) / (packet.expiresAt - packet.arrivesAt), 0, 1);
+                  return (
+                    <PressableScale
+                      key={packet.seq}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Paquete ${packet.seq}`}
+                      accessibilityState={{ disabled: !ready }}
+                      disabled={!ready}
+                      onPress={() => tap(packet)}
+                      scaleTo={0.9}
+                      style={[
+                        styles.slot,
+                        { width: cell, height: cell },
+                        ready && styles.slotReady,
+                        ready && packet.seq === expected && styles.slotNext,
+                        result === 'ok' && styles.slotOk,
+                        (result === 'lost' || late) && styles.slotLost,
+                        shake === packet.seq && styles.slotWrong,
+                      ]}
+                    >
+                      {result === 'ok' ? (
+                        <TelIcon name="check" size={22} color={colors.white} />
+                      ) : result === 'lost' || late ? (
+                        <TelIcon name="close" size={20} color={colors.white} />
+                      ) : null}
+                      <TelText variant={ready ? 'heading' : 'label'} color={ready ? 'primary' : result ? 'white' : 'slate'} tabular>
+                        {ready || result || late ? `#${packet.seq}` : '…'}
+                      </TelText>
+                      {ready ? (
+                        <View style={styles.lifeTrack}>
+                          <View style={[styles.lifeFill, { width: `${life * 100}%`, backgroundColor: life < 0.3 ? colors.danger : ACCENT }]} />
+                        </View>
+                      ) : null}
+                    </PressableScale>
+                  );
+                })}
+              </View>
             );
-          })}
-          {visible.length === 0 && (
-            <TelText variant="caption" color="accentSoft">
-              Esperando paquetes…
-            </TelText>
-          )}
-        </View>
+          }}
+        </FitBox>
       </GameBoard>
-      <Hint tone={wrong ? 'bad' : 'info'}>
-        {expected > PHRASE.length ? `Llamada completa · MOS ${mosScore(delivered).toFixed(1)}` : 'Un paquete que llega tarde ya no sirve: la voz se corta.'}
+      <Hint tone={hint ? hint.tone : 'info'}>
+        {finished ? `Llamada completa · MOS ${mosScore(delivered).toFixed(1).replace('.', ',')}` : hint ? hint.text : 'Un paquete que llega tarde ya no sirve: la voz se corta.'}
       </Hint>
+      <ScorePop pop={pop} />
+      <Celebration burstKey={confetti} count={26} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-    minHeight: 480,
+  root: {
+    flex: 1,
+    minHeight: 0,
+    gap: 6,
   },
-  bannerSpace: {
-    height: 420,
+  stage: {
+    flex: 1,
+    minHeight: 0,
+    gap: 6,
   },
   flex: {
     flex: 1,
   },
-  stageGap: {
-    gap: spacing.sm,
-  },
   deskPhone: {
-    padding: spacing.md,
+    padding: 8,
     borderRadius: radius.xl,
     backgroundColor: '#1B2B38',
-    gap: spacing.sm,
     borderWidth: 2,
     borderColor: '#2E4A5E',
+  },
+  lcdRow: {
+    flexDirection: 'row',
   },
   lcd: {
     borderRadius: radius.md,
     backgroundColor: '#B7E3C8',
-    paddingVertical: 8,
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  lcdWrong: {
+    backgroundColor: '#F2B8B8',
+  },
+  lcdCalling: {
+    backgroundColor: '#8EE3B0',
   },
   keypad: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'center',
   },
   key: {
-    width: '30%',
-    height: 50,
     borderRadius: 14,
     backgroundColor: colors.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phoneActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  phoneAction: {
-    flex: 1,
-    height: 52,
-    borderRadius: 16,
+  sideKey: {
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -467,8 +560,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   ladder: {
-    padding: spacing.sm,
-    minHeight: 250,
+    flex: 1,
+    padding: spacing.xs,
   },
   ladderHead: {
     flexDirection: 'row',
@@ -476,10 +569,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   ladderBody: {
-    marginTop: spacing.xs,
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingBottom: spacing.sm,
+    flex: 1,
+    minHeight: 0,
+    marginTop: 4,
+    gap: 2,
+    paddingBottom: 4,
   },
   lane: {
     position: 'absolute',
@@ -490,97 +584,113 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   laneLeft: {
-    left: 18,
+    left: '11%',
   },
   laneRight: {
-    right: 18,
+    right: '11%',
   },
-  arrowRow: {
-    height: 30,
+  ladderRow: {
+    flex: 1,
+    minHeight: 18,
+    maxHeight: 34,
     justifyContent: 'center',
   },
-  arrowLine: {
+  pill: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    height: 28,
+    marginHorizontal: '11%',
     borderRadius: radius.pill,
     backgroundColor: colors.cream,
   },
-  arrowIn: {
+  pillIn: {
     flexDirection: 'row-reverse',
     backgroundColor: colors.accentSoft,
   },
-  arrowLabel: {
-    letterSpacing: 0.5,
+  pillEmpty: {
+    backgroundColor: 'rgba(167, 212, 237, 0.08)',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(167, 212, 237, 0.3)',
+  },
+  pillNow: {
+    borderColor: ACCENT,
+    borderStyle: 'solid',
+    borderWidth: 2,
   },
   rtp: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 30,
-    borderRadius: radius.pill,
     backgroundColor: ACCENT,
   },
-  sipOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    justifyContent: 'center',
+  prompt: {
+    minHeight: 40,
   },
-  sipChip: {
-    paddingHorizontal: 14,
-    height: 46,
+  optionRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  option: {
+    flex: 1,
+    minHeight: 52,
+    paddingHorizontal: 6,
     borderRadius: 14,
     backgroundColor: colors.cream,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  sipUsed: {
-    backgroundColor: colors.primarySoft,
+  optionOff: {
+    opacity: 0.5,
   },
-  sipWrong: {
-    backgroundColor: colors.danger,
+  optionWrong: {
+    backgroundColor: '#F2A0A0',
   },
   transcript: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
     borderRadius: radius.md,
     backgroundColor: 'rgba(7,31,49,0.6)',
-    minHeight: 56,
+    minHeight: 48,
   },
   arrivals: {
-    padding: spacing.md,
-    gap: spacing.sm,
-    minHeight: 240,
+    flex: 1,
+    padding: spacing.xs,
+    gap: 4,
   },
-  packetGrid: {
+  slotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    justifyContent: 'center',
   },
-  voicePacket: {
-    width: 88,
-    height: 80,
-    borderRadius: 18,
-    backgroundColor: colors.cream,
+  slot: {
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 2,
     borderWidth: 3,
     borderColor: 'transparent',
   },
-  voiceNext: {
+  slotReady: {
+    backgroundColor: colors.cream,
+  },
+  slotNext: {
     borderColor: ACCENT,
   },
-  voiceWrong: {
-    backgroundColor: colors.danger,
+  slotOk: {
+    backgroundColor: '#1F8A5B',
+  },
+  slotLost: {
+    backgroundColor: '#6E2A2A',
+  },
+  slotWrong: {
+    backgroundColor: '#F2A0A0',
   },
   lifeTrack: {
-    width: 60,
+    width: '70%',
     height: 5,
     borderRadius: 3,
     backgroundColor: colors.border,

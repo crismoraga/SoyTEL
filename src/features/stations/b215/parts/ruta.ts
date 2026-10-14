@@ -5,6 +5,7 @@ import { ZIP_ROUND_SECONDS, ZipRound } from '../zip/ZipRound';
 export const rounds: B215Round[] = [
   {
     id: 'ruta-paquete',
+    track: 'redes',
     title: 'Ruta del paquete',
     device: 'Router',
     icon: 'route',

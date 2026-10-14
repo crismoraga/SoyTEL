@@ -10,21 +10,23 @@ import { useMotionEnabled } from '@/lib/motion';
 import { colors, monoFamily, radius } from '@/theme';
 import type { RoundProps } from '../types';
 import {
+  checkRouterAnswer,
   makeRouterRound,
   normalizeLevel,
   ROUND_ITEMS,
   ROUTER_DEFAULT_HINT,
   routerBoardLayout,
   routerFeedback,
+  streakOf,
   type ExitId,
   type Rect,
   type RouteRow,
   type RouterPacket,
   type RouterRoundData,
 } from './equipos.logic';
-import { Flyer, FrameCard, MessageSlot, place, ResultChip, Shaky, useRoundFlow, visualPalette, type Point, type SlotMessage, type Visual } from './SwitchRound';
+import { Burst, Flyer, FrameCard, MessageSlot, place, ResultChip, Shaky, useRoundFlow, visualPalette, type Point, type SlotMessage, type Visual } from './SwitchRound';
 
-const IDLE = 'Busca en la tabla la fila que calza con la IP de destino.';
+const IDLE = 'Toca la fila que calza con la IP.';
 
 interface RouterOutcome {
   index: number;
@@ -45,15 +47,17 @@ interface RowProps {
   visual: Visual;
   disabled: boolean;
   shake: number | null;
+  // Rebote de acierto (token distinto en cada respuesta) y su retraso.
+  bounce: { token: number | null; delay: number };
   onPress: () => void;
 }
 
 // Una fila de la tabla de rutas y, a la vez, una salida del router: «red → salida».
-function RouteRowButton({ row, rect, visual, disabled, shake, onPress }: RowProps) {
+function RouteRowButton({ row, rect, visual, disabled, shake, bounce, onPress }: RowProps) {
   const palette = visualPalette[visual];
   const fallback = row.id === 'internet';
   return (
-    <Shaky token={shake} style={place(rect)}>
+    <Shaky token={shake} pop={bounce.token} popDelay={bounce.delay} style={place(rect)}>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel={`Salir por ${row.name}, ${fallback ? 'todo lo demás' : `red ${row.network}`}`}
@@ -94,8 +98,16 @@ function RouterBoard({ size, data, packet, outcome, motion, onChoose }: BoardPro
   const spineTop = layout.header.y + layout.header.height - 2;
   const last = layout.rows[layout.rows.length - 1];
   const spineBottom = last.y + last.height / 2;
-  const shake = outcome && !outcome.ok && motion ? outcome.index + 1 : null;
+  const token = outcome && motion ? outcome.index + 1 : null;
+  const shake = outcome && !outcome.ok ? token : null;
   const target = layout.rows[data.rows.findIndex((row) => row.id === packet.exit)];
+  const rowCenter = (rect: Rect): Point => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+  // Rebota la fila tocada si acertó; si se equivocó, la correcta (un momento después).
+  const bounceOf = (id: ExitId): { token: number | null; delay: number } => {
+    if (token === null || !outcome) return { token: null, delay: 0 };
+    if (outcome.choice === id && outcome.ok) return { token, delay: 0 };
+    return packet.exit === id && !outcome.ok ? { token, delay: 280 } : { token: null, delay: 0 };
+  };
 
   return (
     <>
@@ -133,10 +145,12 @@ function RouterBoard({ size, data, packet, outcome, motion, onChoose }: BoardPro
           visual={rowVisual(data.rows[position].id, packet, outcome)}
           disabled={disabled}
           shake={outcome?.choice === data.rows[position].id ? shake : null}
+          bounce={bounceOf(data.rows[position].id)}
           onPress={() => onChoose(data.rows[position].id)}
         />
       ))}
-      {motion && outcome && target && <Flyer key={outcome.index} icon="packet" from={router} to={{ x: target.x + target.width / 2, y: target.y + target.height / 2 }} />}
+      {motion && outcome && target && <Flyer key={outcome.index} icon="packet" from={router} to={rowCenter(target)} />}
+      {motion && outcome?.ok && target && <Burst key={`burst-${outcome.index}`} at={rowCenter(target)} label="+1" />}
     </>
   );
 }
@@ -153,7 +167,9 @@ export function RouterRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
 
   function choose(choice: ExitId) {
     if (outcome) return;
-    const result = routerFeedback(data, flow.index, choice);
+    const ok = checkRouterAnswer(packet, choice);
+    // Aciertos seguidos contando este (solo para el elogio: el puntaje no depende de la racha).
+    const result = routerFeedback(data, flow.index, choice, ok ? streakOf(flow.marks) + 1 : 0);
     if (!flow.resolve(result.ok)) return;
     setLast({ index: flow.index, choice, ok: result.ok, text: result.text });
     void (result.ok ? feedbackSuccess() : feedbackWarning());
@@ -168,7 +184,14 @@ export function RouterRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
 
   return (
     <View style={styles.root}>
-      <FrameCard index={flow.index} total={ROUND_ITEMS} icon="packet" label={`Paquete ${flow.index + 1} de ${ROUND_ITEMS} para ${packet.ip}`}>
+      <FrameCard
+        index={flow.index}
+        total={ROUND_ITEMS}
+        icon="packet"
+        label={`Paquete ${flow.index + 1} de ${ROUND_ITEMS} para ${packet.ip}`}
+        marks={flow.marks}
+        state={outcome ? (outcome.ok ? 'ok' : 'bad') : 'idle'}
+      >
         <TelText variant="small" color="secondary" maxFontSizeMultiplier={1.3}>
           Paquete para
         </TelText>
@@ -181,7 +204,7 @@ export function RouterRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
           </TelText>
         )}
       </FrameCard>
-      <FitBox style={styles.board}>{(size) => <RouterBoard size={size} data={data} packet={packet} outcome={outcome} motion={motion} onChoose={choose} />}</FitBox>
+      <FitBox style={styles.board}>{(boardSize) => <RouterBoard size={boardSize} data={data} packet={packet} outcome={outcome} motion={motion} onChoose={choose} />}</FitBox>
       <MessageSlot message={message} idle={IDLE} />
     </View>
   );

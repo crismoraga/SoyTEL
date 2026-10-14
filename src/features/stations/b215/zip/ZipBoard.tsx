@@ -21,6 +21,8 @@ export type ZipEvent =
   | { type: 'undo' }
   | { type: 'reset' }
   | { type: 'stuck' }
+  // El dedo bajó lejos del paquete, donde no pasa nada.
+  | { type: 'lost' }
   | { type: 'solved' };
 
 interface ZipBoardProps {
@@ -39,7 +41,7 @@ interface ZipBoardProps {
 }
 
 interface Note {
-  tone: 'good' | 'bad' | 'warn';
+  tone: 'info' | 'good' | 'bad' | 'warn';
   text: string;
 }
 
@@ -79,7 +81,7 @@ export function ZipBoard({ puzzle, disabled = false, messages = true, minBoard, 
     onChange?.(value);
   }
 
-  function play(cells: number[]) {
+  function play(cells: number[], fresh = false) {
     if (disabled || finished.current || cells.length === 0) return;
     let current = live.current;
     let message: Note | null | undefined;
@@ -123,6 +125,11 @@ export function ZipBoard({ puzzle, disabled = false, messages = true, minBoard, 
     if (changed && zipStuck(puzzle, current.path)) {
       message = { tone: 'warn', text: 'Así quedarán casillas sin paso. Retrocede un poco.' };
       onEvent?.({ type: 'stuck' });
+    }
+    // Un toque nuevo lejos del paquete no hace nada: se explica de dónde se arrastra.
+    if (!changed && message === undefined && fresh && cells[0] !== current.path[current.path.length - 1]) {
+      message = { tone: 'info', text: 'Arrastra desde el paquete: va al final del cable.' };
+      onEvent?.({ type: 'lost' });
     }
     if (message !== undefined) setNote(message);
   }
@@ -198,7 +205,7 @@ interface GridProps {
   disabled: boolean;
   flash: { cell: number; key: number } | null;
   label: string;
-  onCells: (cells: number[]) => void;
+  onCells: (cells: number[], fresh: boolean) => void;
 }
 
 // En la web el navegador no debe desplazar ni ampliar la página mientras se arrastra sobre el tablero.
@@ -215,13 +222,13 @@ function Grid({ puzzle, path, side, next, solved, disabled, flash, label, onCell
       const { locationX, locationY } = event.nativeEvent;
       origin.current = { x: locationX, y: locationY };
       pointer.current = origin.current;
-      onCells(cellsAlong(size, side, null, origin.current));
+      onCells(cellsAlong(size, side, null, origin.current), true);
     },
     onMove: (_, gesture) => {
       const point = { x: origin.current.x + gesture.dx, y: origin.current.y + gesture.dy };
       const cells = cellsAlong(size, side, pointer.current, point);
       pointer.current = point;
-      onCells(cells);
+      onCells(cells, false);
     },
     onRelease: () => {
       pointer.current = null;

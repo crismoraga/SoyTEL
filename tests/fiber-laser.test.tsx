@@ -426,7 +426,8 @@ describe('Viaje de la luz · juego', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
     // 90 + 110 + 110 (luz) + 330 (empalmes) + 340 × 0,94 (un error de bits).
     expect(onComplete.mock.calls[0][0].score).toBe(90 + 110 + 110 + 330 + 320);
-    expect(onComplete.mock.calls[0][0].accuracy).toBeCloseTo((1 / 3 + 1 + 24 / 25) / 3, 6);
+    // Luz: 2 de 3 objetivos sin fallos; empalmes perfectos; mensaje: 24 bits buenos de 24 + 1 error.
+    expect(onComplete.mock.calls[0][0].accuracy).toBeCloseTo((2 / 3 + 1 + 24 / 25) / 3, 6);
   });
 
   it('la luz se confirma sola si el buen ángulo se mantiene, y no si se sale del cono', () => {

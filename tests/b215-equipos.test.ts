@@ -14,11 +14,13 @@ import {
   makeSwitchRound,
   matchingRows,
   normalizeLevel,
+  praiseFor,
   ROUND_ITEMS,
   ROUTER_DEFAULT_HINT,
   routeFor,
   routerBoardLayout,
   routerFeedback,
+  streakOf,
   SWITCH_FLOOD_HINT,
   switchBoardLayout,
   switchFeedback,
@@ -49,6 +51,9 @@ jest.mock('@/lib/feedback', () => ({
   feedbackTap: () => Promise.resolve(),
   feedbackHeavy: () => Promise.resolve(),
 }));
+
+// Todo acierto empieza con un elogio (o con la racha).
+const PRAISE = /^(¡Bien!|¡Eso!|¡Justo!|¡Genial!|¡Perfecto!|¡Así!|¡Racha x\d+!)/;
 
 const SEEDS = Array.from({ length: 300 }, (_, index) => index + 1);
 const LEVELS: Level[] = [0, 1, 2];
@@ -161,7 +166,8 @@ describe('switch: generador', () => {
             const result = switchFeedback(data, index, choice);
             const where = `nivel ${level}, semilla ${seed}, mensaje ${index}, respuesta ${choice}`;
             must(result.ok === (choice === frame.answer), `${where}: ok`);
-            must(!result.text.includes('undefined') && result.text.length <= 90, `${where}: texto «${result.text}»`);
+            must(!result.text.includes('undefined') && result.text.length <= 55, `${where}: texto «${result.text}»`);
+            if (result.ok) must(PRAISE.test(result.text), `${where}: sin elogio «${result.text}»`);
             if (!result.ok && frame.answer !== FLOOD) must(result.text.includes(`puerto ${frame.to}`) && result.text.includes(dest.det), `${where}: no explica el puerto correcto`);
             if (!result.ok && frame.answer === FLOOD) must(result.text.includes('A todos'), `${where}: no explica el «A todos»`);
           }
@@ -236,12 +242,39 @@ describe('router: generador', () => {
       for (const row of data.rows) {
         const result = routerFeedback(data, index, row.id);
         expect(result.ok).toBe(row.id === packet.exit);
-        expect(result.text).toContain(packet.ip);
-        expect(result.text.length).toBeLessThanOrEqual(90);
+        if (!result.ok || packet.exit === 'internet') expect(result.text).toContain(packet.ip);
+        if (result.ok) expect(result.text).toMatch(PRAISE);
+        expect(result.text.length).toBeLessThanOrEqual(55);
         if (packet.exit === 'internet') expect(result.text).toContain('Internet');
         else expect(result.text).toContain(data.rows.find((candidate) => candidate.id === packet.exit)!.name);
       }
     });
+  });
+});
+
+describe('elogios y racha', () => {
+  it('cuenta los aciertos seguidos al final', () => {
+    expect(streakOf([])).toBe(0);
+    expect(streakOf([true, true, false])).toBe(0);
+    expect(streakOf([false, true, true, true])).toBe(3);
+    expect(streakOf([true, true, true, true, true, true])).toBe(6);
+  });
+
+  it('elogia distinto cada vez y desde tres seguidos celebra la racha', () => {
+    const plain = Array.from({ length: 6 }, (_, index) => praiseFor(index, 1));
+    expect(new Set(plain).size).toBe(6);
+    expect(praiseFor(0, 2)).toBe(plain[0]);
+    expect(praiseFor(2, 3)).toBe('¡Racha x3!');
+    expect(praiseFor(5, 6)).toBe('¡Racha x6!');
+  });
+
+  it('la racha llega al texto del acierto, no al de un error', () => {
+    const switchData = makeSwitchRound(4, 1);
+    expect(switchFeedback(switchData, 3, switchData.frames[3].answer, 4).text).toMatch(/^¡Racha x4!/);
+    const routerData = makeRouterRound(4, 1);
+    expect(routerFeedback(routerData, 3, routerData.packets[3].exit, 3).text).toMatch(/^¡Racha x3!/);
+    const wrong = routerData.rows.find((row) => row.id !== routerData.packets[3].exit)!.id;
+    expect(routerFeedback(routerData, 3, wrong, 0).text).not.toMatch(/Racha/);
   });
 });
 
@@ -451,6 +484,40 @@ describe('pantalla', () => {
       expect(mockHaptics.success).toHaveBeenCalledTimes(1);
       expect(mockHaptics.warning).not.toHaveBeenCalled();
     });
+  });
+
+  it('un acierto celebra (tarjeta verde y +1) y un error no; tres seguidos dan racha', () => {
+    const data = makeSwitchRound(11, 1);
+    const { view } = mount(SwitchRound, { level: 1 });
+    expect(view.getByLabelText(/^Mensaje 1 de 6\.[^]*\.$/)).toBeTruthy();
+    expect(view.queryByLabelText(/Correcto\.$/)).toBeNull();
+    expect(view.queryByText('+1')).toBeNull();
+    pressSwitch(view, data.frames[0].answer);
+    expect(view.getByLabelText(/^Mensaje 1 de 6\.[^]* Correcto\.$/)).toBeTruthy();
+    expect(view.getByText('+1')).toBeTruthy();
+    settle();
+    expect(view.queryByText('+1')).toBeNull();
+    pressSwitch(view, data.frames[1].answer);
+    settle();
+    pressSwitch(view, data.frames[2].answer);
+    expect(view.getByText(/^¡Racha x3!/)).toBeTruthy();
+    settle();
+    pressSwitch(view, wrongSwitchChoice(data, data.frames[3]));
+    expect(view.getByLabelText(/Incorrecto\.$/)).toBeTruthy();
+    expect(view.queryByText('+1')).toBeNull();
+    expect(view.queryByText(/Racha/)).toBeNull();
+  });
+
+  it('router: también celebra el acierto con la tarjeta verde y el +1', () => {
+    const data = makeRouterRound(11, 1);
+    const { view } = mount(RouterRound, { level: 1 });
+    pressExit(view, data, data.packets[0].exit);
+    expect(view.getByLabelText(/Correcto\.$/)).toBeTruthy();
+    expect(view.getByText('+1')).toBeTruthy();
+    settle();
+    pressExit(view, data, wrongExit(data, 1));
+    expect(view.getByLabelText(/Incorrecto\.$/)).toBeTruthy();
+    expect(view.queryByText('+1')).toBeNull();
   });
 
   it('switch: sin tiempo y sin respuestas, el resultado es cero', () => {

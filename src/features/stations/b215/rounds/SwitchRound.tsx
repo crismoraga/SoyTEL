@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+  ZoomIn,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { FitBox, type FitSize } from '@/components/FitBox';
 import { DeviceArt } from '@/components/graphics/DeviceArt';
 import { PressableScale } from '@/components/PressableScale';
@@ -14,11 +25,13 @@ import { gameNow, Hint, useGameTimeout } from '../../kit';
 import type { RoundProps, RoundResult } from '../types';
 import {
   buildResult,
+  checkSwitchAnswer,
   FLOOD,
   holdMs,
   makeSwitchRound,
   normalizeLevel,
   ROUND_ITEMS,
+  streakOf,
   SWITCH_FLOOD_HINT,
   switchBoardLayout,
   switchFeedback,
@@ -64,18 +77,18 @@ interface FlowOptions {
 
 // Avance de la ronda: un mensaje a la vez. Al responder se queda el resultado en pantalla un momento (con el
 // reloj pausable del juego) y sigue el próximo; al terminar los seis, o si se acaba el tiempo, entrega el
-// resultado una sola vez.
+// resultado una sola vez. `marks` guarda cómo le fue a cada respuesta (true = acierto).
 export function useRoundFlow({ kind, total, timeUp, pace, onDone }: FlowOptions) {
   const [index, setIndex] = useState(0);
-  const [tally, setTally] = useState({ correct: 0, answered: 0 });
+  const [marks, setMarks] = useState<boolean[]>([]);
   const [holdUntil, setHoldUntil] = useState<number | null>(null);
   const closed = useRef(false);
 
   const finish = useCallback(() => {
     if (closed.current) return;
     closed.current = true;
-    onDone(buildResult(kind, tally.correct, tally.answered, total));
-  }, [kind, onDone, tally, total]);
+    onDone(buildResult(kind, marks.filter(Boolean).length, marks.length, total));
+  }, [kind, marks, onDone, total]);
 
   // Sin tiempo: se entrega de inmediato lo logrado hasta ahí.
   useEffect(() => {
@@ -99,29 +112,59 @@ export function useRoundFlow({ kind, total, timeUp, pace, onDone }: FlowOptions)
   const resolve = useCallback(
     (ok: boolean): boolean => {
       if (closed.current || holdUntil !== null) return false;
-      setTally((current) => ({ correct: current.correct + (ok ? 1 : 0), answered: current.answered + 1 }));
+      setMarks((current) => [...current, ok]);
       setHoldUntil(gameNow() + holdMs(ok, pace));
       return true;
     },
     [holdUntil, pace],
   );
 
-  return { index, holding: holdUntil !== null, resolve };
+  return { index, holding: holdUntil !== null, marks, resolve };
 }
 
-// El mensaje (o paquete) que toca resolver, como una tarjeta crema con su numeración.
-export function FrameCard({ index, total, icon, label, children }: PropsWithChildren<{ index: number; total: number; icon: IconName; label: string }>) {
+export type CardState = 'idle' | 'ok' | 'bad';
+
+const cardTones: Record<CardState, { bg: string; border: string; icon: string }> = {
+  idle: { bg: colors.cream, border: 'transparent', icon: colors.accent },
+  ok: { bg: '#DDF3E6', border: '#6BC59A', icon: colors.success },
+  bad: { bg: '#FBE2E2', border: '#E58A8A', icon: colors.danger },
+};
+
+interface FrameCardProps {
+  index: number;
+  total: number;
+  icon: IconName;
+  label: string;
+  // Cómo le fue a cada respuesta hasta ahora (la tira de abajo se pinta con eso).
+  marks: readonly boolean[];
+  // Al responder, la tarjeta se tiñe de verde o rojo y el ícono cambia a ✓ o ✕.
+  state: CardState;
+}
+
+// El mensaje (o paquete) que toca resolver, como una tarjeta crema con una tira de avance de seis tramos.
+export function FrameCard({ index, total, icon, label, marks, state, children }: PropsWithChildren<FrameCardProps>) {
   const motion = useMotionEnabled();
+  const tone = cardTones[state];
+  const verdict = state === 'ok' ? ' Correcto.' : state === 'bad' ? ' Incorrecto.' : '';
   return (
-    <Animated.View key={index} entering={motion ? FadeInDown.duration(220) : undefined} accessible accessibilityLabel={label} style={styles.card}>
-      <View style={styles.cardIcon}>
-        <TelIcon name={icon} size={18} color={colors.primary} />
-      </View>
+    <Animated.View
+      key={index}
+      entering={motion ? FadeInDown.duration(220) : undefined}
+      accessible
+      accessibilityLabel={`${label}${verdict}`}
+      style={[styles.card, { backgroundColor: tone.bg, borderColor: tone.border }]}
+    >
+      <Animated.View key={state} entering={motion && state !== 'idle' ? ZoomIn.springify().damping(9) : undefined} style={[styles.cardIcon, { backgroundColor: tone.icon }]}>
+        <TelIcon name={state === 'ok' ? 'check' : state === 'bad' ? 'close' : icon} size={18} color={state === 'idle' ? colors.primary : colors.white} strokeWidth={state === 'idle' ? 2 : 3} />
+      </Animated.View>
       <View style={styles.cardText}>{children}</View>
-      <View style={styles.cardCount}>
-        <TelText variant="small" color="secondary" tabular maxFontSizeMultiplier={1.15}>
-          {Math.min(index + 1, total)}/{total}
-        </TelText>
+      <View pointerEvents="none" style={styles.steps}>
+        {Array.from({ length: total }, (_, step) => (
+          <View
+            key={step}
+            style={[styles.step, { backgroundColor: step < marks.length ? (marks[step] ? colors.success : colors.danger) : step === marks.length ? colors.accent : 'rgba(11, 45, 69, 0.16)' }]}
+          />
+        ))}
       </View>
     </Animated.View>
   );
@@ -133,7 +176,7 @@ export interface SlotMessage {
 }
 
 // Franja fija bajo el tablero: la explicación que se da una vez, el resultado de cada respuesta o, en reposo,
-// un recordatorio de qué hacer. Tiene alto reservado para que el tablero no salte al cambiar de texto.
+// un recordatorio corto de qué hacer. Tiene alto reservado para que el tablero no salte al cambiar de texto.
 export function MessageSlot({ message, idle }: { message: SlotMessage | null; idle: string }) {
   const coach = useCoachEnabled();
   return (
@@ -151,14 +194,28 @@ export function MessageSlot({ message, idle }: { message: SlotMessage | null; id
   );
 }
 
-// Sacudida corta: solo adorno (el puntaje no depende de ella).
-export function Shaky({ token, style, children }: PropsWithChildren<{ token: number | null; style?: StyleProp<ViewStyle> }>) {
+interface ShakyProps {
+  // Cambia para sacudir (error).
+  token: number | null;
+  // Cambia para hacer rebotar (acierto), con un retraso opcional para encadenar varios.
+  pop?: number | null;
+  popDelay?: number;
+  style?: StyleProp<ViewStyle>;
+}
+
+// Sacudida (error) y rebote (acierto): solo adorno, el puntaje no depende de ellos.
+export function Shaky({ token, pop = null, popDelay = 0, style, children }: PropsWithChildren<ShakyProps>) {
   const offset = useSharedValue(0);
+  const scale = useSharedValue(1);
   useEffect(() => {
     if (token === null) return;
     offset.set(withSequence(withTiming(-8, { duration: 55 }), withTiming(8, { duration: 90 }), withTiming(-5, { duration: 80 }), withTiming(0, { duration: 60 })));
   }, [token, offset]);
-  const animated = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
+  useEffect(() => {
+    if (pop === null) return;
+    scale.set(withDelay(popDelay, withSequence(withTiming(1.12, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 240 }))));
+  }, [pop, popDelay, scale]);
+  const animated = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }, { scale: scale.value }] }));
   return <Animated.View style={[style, animated]}>{children}</Animated.View>;
 }
 
@@ -185,6 +242,55 @@ export function Flyer({ from, to, delay = 0, icon = 'mail' }: { from: Point; to:
   );
 }
 
+const CONFETTI = ['#6FB3D9', '#F4ECD7', '#F6C945', '#6BC59A', '#E58A5A', '#A7D4ED', '#F6C945', '#6BC59A'];
+
+interface ParticleProps {
+  progress: SharedValue<number>;
+  at: Point;
+  angle: number;
+  reach: number;
+  size: number;
+  color: string;
+}
+
+function Particle({ progress, at, angle, reach, size, color }: ParticleProps) {
+  const animated = useAnimatedStyle(() => ({
+    opacity: progress.value < 0.6 ? 1 : Math.max(0, (1 - progress.value) / 0.4),
+    transform: [
+      { translateX: at.x + Math.cos(angle) * reach * progress.value - size / 2 },
+      { translateY: at.y + Math.sin(angle) * reach * progress.value - size / 2 },
+      { scale: 1 - 0.5 * progress.value },
+    ],
+  }));
+  return <Animated.View pointerEvents="none" style={[styles.particle, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }, animated]} />;
+}
+
+// ¡Acierto!: confeti que sale del punto tocado y un «+1» que sube y se desvanece. Solo adorno.
+export function Burst({ at, label }: { at: Point; label?: string }) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.set(withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }));
+  }, [progress]);
+  const rise = useAnimatedStyle(() => ({
+    opacity: progress.value < 0.55 ? 1 : Math.max(0, (1 - progress.value) / 0.45),
+    transform: [{ translateX: at.x - 18 }, { translateY: at.y - 24 - 34 * progress.value }, { scale: 0.8 + 0.4 * Math.min(1, progress.value * 4) }],
+  }));
+  return (
+    <>
+      {CONFETTI.map((color, position) => (
+        <Particle key={position} progress={progress} at={at} angle={(position / CONFETTI.length) * Math.PI * 2 + 0.3} reach={30 + (position % 3) * 9} size={6 + (position % 2) * 3} color={color} />
+      ))}
+      {label ? (
+        <Animated.View pointerEvents="none" style={[styles.plus, rise]}>
+          <TelText variant="label" color="white" maxFontSizeMultiplier={1}>
+            {label}
+          </TelText>
+        </Animated.View>
+      ) : null}
+    </>
+  );
+}
+
 // Marca de acierto (✓) o error (✕) en la esquina de lo que se tocó.
 export function ResultChip({ ok }: { ok: boolean }) {
   return (
@@ -196,8 +302,8 @@ export function ResultChip({ ok }: { ok: boolean }) {
 
 // ——— Ronda 1: El switch reparte ———
 
-const IDLE_SIMPLE = 'Toca el puerto del equipo que recibe el mensaje.';
-const IDLE_LEARNING = 'Si su MAC está en la tabla, toca su puerto. Si no, toca «A todos».';
+const IDLE_SIMPLE = 'Toca el puerto del destino.';
+const IDLE_LEARNING = 'En la tabla: toca su puerto. Si no: «A todos».';
 
 interface SwitchOutcome {
   index: number;
@@ -252,7 +358,7 @@ function MacTable({ ports, entries, fresh }: MacTableProps) {
           const entry = entries[position];
           if (!entry) return <View key={`vacia-${position}`} style={[styles.macSlot, styles.macSlotEmpty]} />;
           return (
-            <Animated.View key={entry.mac} entering={motion ? ZoomIn.duration(220) : undefined} style={[styles.macSlot, fresh.has(entry.mac) && styles.macSlotNew]}>
+            <Animated.View key={entry.mac} entering={motion ? ZoomIn.springify().damping(10) : undefined} style={[styles.macSlot, fresh.has(entry.mac) && styles.macSlotNew]}>
               <TelText variant="small" color="cream" maxFontSizeMultiplier={1.1} style={styles.mono}>
                 {entry.mac}
               </TelText>
@@ -269,6 +375,11 @@ function MacTable({ ports, entries, fresh }: MacTableProps) {
   );
 }
 
+interface Bounce {
+  token: number | null;
+  delay: number;
+}
+
 interface PortTileProps {
   device: SwitchDevice;
   rect: Rect;
@@ -276,16 +387,17 @@ interface PortTileProps {
   showMac: boolean;
   disabled: boolean;
   shake: number | null;
+  bounce: Bounce;
   onPress: () => void;
 }
 
 // Un puerto del switch con el equipo conectado: dibujo, nombre y, desde el nivel 1, su MAC.
-function PortTile({ device, rect, visual, showMac, disabled, shake, onPress }: PortTileProps) {
+function PortTile({ device, rect, visual, showMac, disabled, shake, bounce, onPress }: PortTileProps) {
   const narrow = rect.width < 112;
   const art = Math.max(20, Math.min(narrow ? 22 : 38, Math.round(rect.height * 0.5)));
   const palette = visualPalette[visual];
   return (
-    <Shaky token={shake} style={place(rect)}>
+    <Shaky token={shake} pop={bounce.token} popDelay={bounce.delay} style={place(rect)}>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel={`Puerto ${device.port}: ${device.name}${showMac ? `, MAC ${device.mac}` : ''}`}
@@ -321,14 +433,15 @@ interface FloodButtonProps {
   visual: Visual;
   disabled: boolean;
   shake: number | null;
+  bounce: Bounce;
   onPress: () => void;
 }
 
 // «A todos»: el switch no sabe dónde está el destino y lo manda por todos los puertos.
-function FloodButton({ visual, disabled, shake, onPress }: FloodButtonProps) {
+function FloodButton({ visual, disabled, shake, bounce, onPress }: FloodButtonProps) {
   const palette = floodPalette[visual];
   return (
-    <Shaky token={shake} style={styles.floodWrap}>
+    <Shaky token={shake} pop={bounce.token} popDelay={bounce.delay} style={styles.floodWrap}>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel="A todos, enviar por todos los puertos"
@@ -362,9 +475,26 @@ function SwitchBoard({ size, data, frame, outcome, motion, onChoose }: BoardProp
   const layout = switchBoardLayout(size.width, size.height, data.ports, data.learning);
   const disabled = outcome !== null;
   const center: Point = { x: layout.bar.x + layout.bar.width / 2, y: layout.bar.y + layout.bar.height / 2 };
-  const shake = outcome && !outcome.ok && motion ? outcome.index + 1 : null;
+  const tileCenter = (port: number): Point => {
+    const rect = layout.tiles[port - 1];
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  };
+  const token = outcome && motion ? outcome.index + 1 : null;
+  const shake = outcome && !outcome.ok ? token : null;
+  const flooded = frame.answer === FLOOD;
   // El adorno muestra lo que hace el switch de verdad: un puerto, o todos menos el de quien envía.
-  const targets = outcome ? (frame.answer === FLOOD ? data.devices.map((device) => device.port).filter((port) => port !== frame.from) : [frame.answer]) : [];
+  const receivers = data.devices.map((device) => device.port).filter((port) => port !== frame.from);
+  const targets = outcome ? (flooded ? receivers : [frame.answer]) : [];
+
+  // Quién rebota: la casilla tocada si acertó; si no, la correcta (un momento después); con «A todos», todas en cadena.
+  function bounceOf(port: number): Bounce {
+    const none: Bounce = { token: null, delay: 0 };
+    if (token === null || !outcome) return none;
+    if (flooded) return receivers.includes(port) ? { token, delay: receivers.indexOf(port) * 45 } : none;
+    if (outcome.choice === port && outcome.ok) return { token, delay: 0 };
+    return frame.answer === port && !outcome.ok ? { token, delay: 280 } : none;
+  }
+  const floodBounce: Bounce = token !== null && outcome && ((outcome.choice === FLOOD && outcome.ok) || (flooded && !outcome.ok)) ? { token, delay: outcome.ok ? 0 : 280 } : { token: null, delay: 0 };
 
   return (
     <>
@@ -394,7 +524,9 @@ function SwitchBoard({ size, data, frame, outcome, motion, onChoose }: BoardProp
             Switch
           </TelText>
         )}
-        {data.learning && <FloodButton visual={floodVisual(frame, outcome)} disabled={disabled} shake={outcome?.choice === FLOOD ? shake : null} onPress={() => onChoose(FLOOD)} />}
+        {data.learning && (
+          <FloodButton visual={floodVisual(frame, outcome)} disabled={disabled} shake={outcome?.choice === FLOOD ? shake : null} bounce={floodBounce} onPress={() => onChoose(FLOOD)} />
+        )}
       </View>
       {layout.tiles.map((rect, position) => (
         <PortTile
@@ -405,15 +537,14 @@ function SwitchBoard({ size, data, frame, outcome, motion, onChoose }: BoardProp
           showMac={data.learning}
           disabled={disabled}
           shake={outcome?.choice === position + 1 ? shake : null}
+          bounce={bounceOf(position + 1)}
           onPress={() => onChoose(position + 1)}
         />
       ))}
       {motion &&
         outcome &&
-        targets.map((port, order) => {
-          const rect = layout.tiles[port - 1];
-          return <Flyer key={`${outcome.index}-${port}`} from={center} to={{ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }} delay={order * 40} />;
-        })}
+        targets.map((port, order) => <Flyer key={`${outcome.index}-${port}`} from={center} to={tileCenter(port)} delay={order * 40} />)}
+      {motion && outcome?.ok && <Burst key={`burst-${outcome.index}`} at={outcome.choice === FLOOD ? center : tileCenter(outcome.choice)} label="+1" />}
     </>
   );
 }
@@ -433,7 +564,9 @@ export function SwitchRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
 
   function choose(choice: number) {
     if (outcome) return;
-    const result = switchFeedback(data, flow.index, choice);
+    const ok = checkSwitchAnswer(frame, choice);
+    // Aciertos seguidos contando este (solo para el elogio: el puntaje no depende de la racha).
+    const result = switchFeedback(data, flow.index, choice, ok ? streakOf(flow.marks) + 1 : 0);
     if (!flow.resolve(result.ok)) return;
     setLast({ index: flow.index, choice, ok: result.ok, text: result.text });
     void (result.ok ? feedbackSuccess() : feedbackWarning());
@@ -449,7 +582,14 @@ export function SwitchRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
 
   return (
     <View style={styles.root}>
-      <FrameCard index={flow.index} total={ROUND_ITEMS} icon="mail" label={`Mensaje ${flow.index + 1} de ${ROUND_ITEMS}. De ${sender.name}. Para ${to}.`}>
+      <FrameCard
+        index={flow.index}
+        total={ROUND_ITEMS}
+        icon="mail"
+        label={`Mensaje ${flow.index + 1} de ${ROUND_ITEMS}. De ${sender.name}. Para ${to}.`}
+        marks={flow.marks}
+        state={outcome ? (outcome.ok ? 'ok' : 'bad') : 'idle'}
+      >
         <TelText variant="caption" color="secondary" numberOfLines={2} maxFontSizeMultiplier={1.3}>
           De: {sender.name}
           {data.learning ? ` · MAC ${sender.mac}` : ''}
@@ -459,7 +599,7 @@ export function SwitchRound({ seed, level, pace, timeUp, onDone }: RoundProps) {
         </TelText>
       </FrameCard>
       {data.learning && <MacTable ports={data.ports} entries={entries} fresh={fresh} />}
-      <FitBox style={styles.board}>{(size) => <SwitchBoard size={size} data={data} frame={frame} outcome={outcome} motion={motion} onChoose={choose} />}</FitBox>
+      <FitBox style={styles.board}>{(boardSize) => <SwitchBoard size={boardSize} data={data} frame={frame} outcome={outcome} motion={motion} onChoose={choose} />}</FitBox>
       <MessageSlot message={message} idle={data.learning ? IDLE_LEARNING : IDLE_SIMPLE} />
     </View>
   );
@@ -482,30 +622,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 7,
+    paddingTop: 7,
+    paddingBottom: 14,
     paddingHorizontal: 10,
     borderRadius: radius.md,
-    backgroundColor: colors.cream,
+    borderWidth: 2,
   },
   cardIcon: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardText: {
     flex: 1,
   },
-  cardCount: {
-    minWidth: 30,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(11, 45, 69, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  steps: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 4,
+    height: 4,
+    flexDirection: 'row',
+    gap: 3,
+  },
+  step: {
+    flex: 1,
+    borderRadius: 2,
   },
   messageSlot: {
     justifyContent: 'center',
@@ -524,6 +668,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
+  },
+  particle: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    zIndex: 6,
+  },
+  plus: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 36,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#6BC59A',
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 7,
   },
   resultChip: {
     position: 'absolute',

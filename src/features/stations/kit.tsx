@@ -520,6 +520,47 @@ export function StationSummary({ title, message, rows, total, learned, accent = 
   );
 }
 
+export interface PopMessage {
+  id: number;
+  text: string;
+  tone: 'good' | 'bad';
+}
+
+// Mensaje corto que salta y se borra solo ("+25", "¡Racha x3!"): `show` lo muestra y el temporizador
+// se cancela al desmontar.
+export function usePop(ms = 900): [PopMessage | null, (text: string, tone?: 'good' | 'bad') => void] {
+  const [pop, setPop] = useFlash<PopMessage>(ms);
+  const counter = useRef(0);
+  const show = useCallback(
+    (text: string, tone: 'good' | 'bad' = 'good') => {
+      counter.current += 1;
+      setPop({ id: counter.current, text, tone });
+    },
+    [setPop],
+  );
+  return [pop, show];
+}
+
+// Cartelito que sale con un rebote y se desvanece: refuerza cada acierto sin tapar el juego. Se ubica
+// arriba y al centro del contenedor donde se ponga (que debe ser relativo, como cualquier vista).
+export function ScorePop({ pop }: { pop: PopMessage | null }) {
+  const motion = useMotionEnabled();
+  if (!pop) return null;
+  return (
+    <Animated.View
+      key={pop.id}
+      pointerEvents="none"
+      entering={motion ? ZoomIn.springify().damping(9) : undefined}
+      exiting={motion ? FadeOut.duration(220) : undefined}
+      style={[styles.pop, pop.tone === 'bad' ? styles.popBad : styles.popGood]}
+    >
+      <TelText variant="subtitle" color="white">
+        {pop.text}
+      </TelText>
+    </Animated.View>
+  );
+}
+
 // Superficie del tablero. No impone alto: quien la usa decide (flex: 1 o un FitBox adentro).
 export function GameBoard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   return <View style={[styles.board, style]}>{children}</View>;
@@ -777,6 +818,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(167, 212, 237, 0.2)',
     overflow: 'hidden',
+  },
+  pop: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 48,
+    zIndex: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  popGood: {
+    backgroundColor: '#1F8A5B',
+  },
+  popBad: {
+    backgroundColor: '#B23A3A',
   },
   hintSlot: {
     justifyContent: 'center',
