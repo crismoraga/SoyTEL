@@ -15,7 +15,7 @@ const LOOK_MS = 1500;
 
 // Desafío "Parejas TEL": une cada concepto con lo que hace. Sin reloj: gana quien recuerda mejor.
 export function MemoryGame({ level, seed, onSolved, say }: PuzzleGameProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [deck] = useState(() => createMemoryDeck(level, mulberry32(seed)));
   const [open, setOpen] = useState<number[]>([]);
   const [matched, setMatched] = useState<string[]>([]);
@@ -23,6 +23,9 @@ export function MemoryGame({ level, seed, onSolved, say }: PuzzleGameProps) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pairs = memoryPairsForLevel(level);
   const cardWidth = Math.floor((Math.min(width - spacing.md * 2, 460) - spacing.xs * (COLUMNS - 1)) / COLUMNS);
+  // Con muchas parejas las cartas se achatan para que el tablero entero quepa en la pantalla (nunca bajo 64 px).
+  const rows = Math.ceil((pairs * 2) / COLUMNS);
+  const cardHeight = Math.max(64, Math.min(Math.round(cardWidth * 1.18), Math.floor((height - 120 - spacing.xs * (rows - 1)) / rows)));
 
   useEffect(
     () => () => {
@@ -92,7 +95,7 @@ export function MemoryGame({ level, seed, onSolved, say }: PuzzleGameProps) {
               disabled={done}
               onPress={() => flip(index)}
               scaleTo={0.94}
-              style={[styles.card, { width: cardWidth, height: Math.round(cardWidth * 1.18) }, shown && styles.cardOpen, done && styles.cardDone]}
+              style={[styles.card, { width: cardWidth, height: cardHeight }, shown && styles.cardOpen, done && styles.cardDone]}
             >
               {!shown || !concept ? (
                 <TelIcon name="sparkle" size={Math.round(cardWidth * 0.34)} color={colors.accent} />

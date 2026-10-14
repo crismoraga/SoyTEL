@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
@@ -10,7 +10,7 @@ import { Illustration } from '@/components/graphics/Illustration';
 import { Medallion } from '@/components/graphics/Medallion';
 import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
-import { Screen } from '@/components/Screen';
+import { Screen, ScreenFooter } from '@/components/Screen';
 import { AccountGate } from '@/features/account/AccountGate';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
@@ -21,6 +21,7 @@ import { CoachBubble, useCoachEnabled } from '@/features/coach/CoachBubble';
 import { PauseSheet, useAutoPause, useBackToPause } from '@/features/coach/PauseSheet';
 import { DAILY_BONUS, DAILY_ROUNDS, dailyBonusId, dailyKey, dailySeed, isDailyComplete, isDailyDone } from '@/features/burst/daily';
 import { getMicroGameGuide } from '@/features/burst/guides';
+import { GameSpaceProvider, type GameSpace } from '@/features/burst/parts';
 import { getMicroGame, pickBurstGames, roundDuration } from '@/features/burst/registry';
 import type { MicroGameDefinition } from '@/features/burst/types';
 import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
@@ -132,6 +133,15 @@ export default function BurstScreen() {
   // Milisegundos que le quedan a la ronda (se conserva al pausar).
   const remainingRef = useRef(0);
   const [paused, setPaused] = useState(false);
+  // Lo que la pantalla le deja al microjuego: con eso las piezas se achican en teléfonos bajos y crecen en los altos.
+  const screenSize = useWindowDimensions();
+  const short = screenSize.height < 640;
+  const [measured, setMeasured] = useState<GameSpace | null>(null);
+  const space = useMemo<GameSpace>(() => measured ?? { width: screenSize.width - 32, height: screenSize.height - 160 }, [measured, screenSize.height, screenSize.width]);
+  const onAreaLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setMeasured((current) => (current && Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1 ? current : { width, height }));
+  }, []);
   const startedAt = useRef(0);
   const [runId, setRunId] = useState(0);
   const recorded = useRef(false);
@@ -289,9 +299,18 @@ export default function BurstScreen() {
 
   if (state.phase === 'intro') {
     return (
-      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent onBack={() => router.back()} compact right={focusGame ? undefined : <HelpButton onPress={tutorial.open} />} />}>
+      <Screen
+        tone="dark"
+        backdrop="signal"
+        header={<AppHeader transparent onBack={() => router.back()} compact right={focusGame ? undefined : <HelpButton onPress={tutorial.open} />} />}
+        footer={
+          <ScreenFooter tone="dark">
+            <TelButton label="¡Empezar!" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
+          </ScreenFooter>
+        }
+      >
         <Animated.View entering={entering.pop()} style={styles.introArt}>
-          <Illustration name="burst" width={250} tone="dark" />
+          <Illustration name="burst" width={Math.min(250, Math.max(150, Math.round(screenSize.height * 0.28)))} tone="dark" />
         </Animated.View>
         <View style={styles.introText}>
           <TelText variant="overline" color="accent" align="center">
@@ -325,7 +344,6 @@ export default function BurstScreen() {
             {introLines[pace]}
           </CoachBubble>
         )}
-        <TelButton label="¡Empezar!" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
         <AccountGate />
         <TutorialSheet tutorial={tutorials.burst} visible={tutorial.visible} onClose={tutorial.close} />
       </Screen>
@@ -337,7 +355,17 @@ export default function BurstScreen() {
     const newRecord = !focusGame && state.score > best && best > 0;
     const unlocked = outcome?.newAchievements.map((id) => getAchievement(id)) ?? [];
     return (
-      <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
+      <Screen
+        tone="dark"
+        backdrop="orbits"
+        header={<AppHeader transparent compact />}
+        footer={
+          <ScreenFooter tone="dark">
+            <TelButton label="Jugar otra vez" variant="cream" icon="refresh" onPress={start} />
+            <TelButton label="Volver" variant="ghostLight" size="sm" onPress={() => router.back()} />
+          </ScreenFooter>
+        }
+      >
         <Celebration burstKey={correct >= Math.ceil(state.games.length / 2) ? runId : null} count={correct === state.games.length ? 44 : 28} />
         <View style={styles.finishHero}>
           <Rutix
@@ -416,10 +444,6 @@ export default function BurstScreen() {
             El bono del día se entrega al jugar las {DAILY_ROUNDS} rondas. ¡Inténtalo de nuevo!
           </TelText>
         )}
-        <View style={styles.actions}>
-          <TelButton label="Jugar otra vez" variant="cream" icon="refresh" onPress={start} />
-          <TelButton label="Volver" variant="outlineLight" onPress={() => router.back()} />
-        </View>
       </Screen>
     );
   }
@@ -432,50 +456,53 @@ export default function BurstScreen() {
   if (state.phase === 'ready') {
     const faster = !focusGame && acceleration > 0 && state.round >= 2;
     return (
-      <Screen tone="dark" backdrop="signal" scroll={false} contentStyle={styles.readyContent}>
+      <Screen tone="dark" backdrop="signal" scroll={false} tight contentStyle={styles.readyContent}>
         <View style={styles.topBar}>
           <Lives lives={state.lives} />
-          <IconButton icon="pause" tone="dark" size={40} accessibilityLabel="Pausar" onPress={pause} />
+          <IconButton icon="pause" tone="dark" size={44} accessibilityLabel="Pausar" onPress={pause} />
         </View>
-        <PressableScale accessibilityRole="button" accessibilityLabel={`${current.title}. ${current.instruction}. Toca para jugar`} onPress={play} scaleTo={0.98} style={styles.readyTap}>
-        <Animated.View key={`ready-${state.round}`} entering={motionEnabled ? ZoomIn.springify().damping(12) : undefined} style={styles.ready}>
-          <TelText variant="overline" color="accent" align="center">
-            Ronda {state.round + 1} de {state.games.length}
-          </TelText>
-          <View style={styles.readyIcon}>
-            <TelIcon name={current.icon} size={44} color={colors.primary} />
-          </View>
-          <TelText variant="hero" color="cream" align="center">
-            {current.title}
-          </TelText>
-          <TelText variant="subtitle" color="accentSoft" align="center">
-            {current.instruction}
-          </TelText>
-          <View style={styles.steps} accessible accessibilityLabel={`Cómo se juega. ${guide.steps.map((step, index) => `Paso ${index + 1}: ${step}`).join(' ')}`}>
-            <TelText variant="small" color="accent" style={styles.stepsKicker}>
-              CÓMO SE JUEGA
-            </TelText>
-            {guide.steps.map((step, index) => (
-              <View key={step} style={styles.step}>
-                <View style={styles.stepNumber}>
-                  <TelText variant="small" color="primary">
-                    {index + 1}
-                  </TelText>
-                </View>
-                <TelText variant="caption" color="cream" style={styles.flex}>
-                  {step}
-                </TelText>
+        {/* La presentación se desplaza si no cabe (teléfono muy bajo o letra grande); el botón de abajo queda fijo. */}
+        <ScrollView style={styles.readyScroll} contentContainerStyle={styles.readyBody} showsVerticalScrollIndicator={false}>
+          <PressableScale accessibilityRole="button" accessibilityLabel={`${current.title}. ${current.instruction}. Toca para jugar`} onPress={play} scaleTo={0.98} style={styles.readyTap}>
+            <Animated.View key={`ready-${state.round}`} entering={motionEnabled ? ZoomIn.springify().damping(12) : undefined} style={styles.ready}>
+              <TelText variant="overline" color="accent" align="center">
+                Ronda {state.round + 1} de {state.games.length}
+              </TelText>
+              <View style={[styles.readyIcon, short && styles.readyIconShort]}>
+                <TelIcon name={current.icon} size={short ? 32 : 44} color={colors.primary} />
               </View>
-            ))}
-          </View>
-          {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
-        </Animated.View>
-        {coach && (
-          <CoachBubble mood="tip" title="Pista de Rutix" size={64} style={styles.readyCoach}>
-            {current.tip}
-          </CoachBubble>
-        )}
-        </PressableScale>
+              <TelText variant={short ? 'title' : 'hero'} color="cream" align="center">
+                {current.title}
+              </TelText>
+              <TelText variant="subtitle" color="accentSoft" align="center">
+                {current.instruction}
+              </TelText>
+              <View style={styles.steps} accessible accessibilityLabel={`Cómo se juega. ${guide.steps.map((step, index) => `Paso ${index + 1}: ${step}`).join(' ')}`}>
+                <TelText variant="small" color="accent" style={styles.stepsKicker}>
+                  CÓMO SE JUEGA
+                </TelText>
+                {guide.steps.map((step, index) => (
+                  <View key={step} style={styles.step}>
+                    <View style={styles.stepNumber}>
+                      <TelText variant="small" color="primary">
+                        {index + 1}
+                      </TelText>
+                    </View>
+                    <TelText variant="caption" color="cream" style={styles.flex}>
+                      {step}
+                    </TelText>
+                  </View>
+                ))}
+              </View>
+              {faster && <Tag tone="cream" icon="bolt" label="¡Más rápido!" style={styles.fasterTag} />}
+            </Animated.View>
+            {coach && (
+              <CoachBubble mood="tip" title={short ? undefined : 'Pista de Rutix'} size={short ? 44 : 64} style={styles.readyCoach}>
+                {current.tip}
+              </CoachBubble>
+            )}
+          </PressableScale>
+        </ScrollView>
         <PressableScale accessibilityRole="button" accessibilityLabel="Jugar" haptic onPress={play} style={styles.readyCta}>
           <TelIcon name="tap" size={20} color={colors.primary} />
           <TelText variant="label" color="primary">
@@ -488,8 +515,10 @@ export default function BurstScreen() {
   }
 
   const Game = current.Component;
+  // El personaje del veredicto crece con el espacio, pero nunca tanto como para empujar el botón fuera de la pantalla.
+  const verdictSize = Math.max(64, Math.min(120, Math.round(space.height * 0.24)));
   return (
-    <Screen tone="dark" backdrop="none" scroll={false} contentStyle={styles.playContent}>
+    <Screen tone="dark" backdrop="none" scroll={false} tight contentStyle={styles.playContent}>
       <View style={styles.topBar}>
         <Lives lives={state.lives} />
         <TelText variant="label" color="accentSoft">
@@ -499,14 +528,14 @@ export default function BurstScreen() {
           <TelText variant="label" color="cream" tabular>
             {formatNumber(state.score)} pts
           </TelText>
-          <IconButton icon="pause" tone="dark" size={40} accessibilityLabel="Pausar" onPress={pause} />
+          <IconButton icon="pause" tone="dark" size={44} accessibilityLabel="Pausar" onPress={pause} />
         </View>
       </View>
       <View style={styles.timerRow}>
         {coach && (
           // Rutix mira el reloj contigo: se alarma cuando queda poco.
           <Rutix
-            size={40}
+            size={32}
             expression={state.phase === 'playing' && secondsLeft <= HURRY_SECONDS ? 'alert' : 'focus'}
             reactKey={state.phase === 'playing' && secondsLeft <= HURRY_SECONDS ? `apuro-${state.round}` : `ronda-${state.round}`}
             animated={false}
@@ -522,18 +551,20 @@ export default function BurstScreen() {
           </TelText>
         </View>
       </View>
-      <TelText variant="bodyStrong" color="accentSoft" align="center">
+      <TelText variant={short ? 'label' : 'bodyStrong'} color="accentSoft" align="center">
         {current.instruction}
       </TelText>
-      <View style={styles.gameArea}>
-        <Game
-          key={`${state.round}-${current.id}`}
-          durationSeconds={duration}
-          level={focusGame ? 0 : state.round}
-          pace={factor}
-          active={state.phase === 'playing' && !paused}
-          onAnswer={onAnswer}
-        />
+      <View style={styles.gameArea} onLayout={onAreaLayout}>
+        <GameSpaceProvider value={space}>
+          <Game
+            key={`${state.round}-${current.id}`}
+            durationSeconds={duration}
+            level={focusGame ? 0 : state.round}
+            pace={factor}
+            active={state.phase === 'playing' && !paused}
+            onAnswer={onAnswer}
+          />
+        </GameSpaceProvider>
         {paused && state.phase === 'playing' && (
           // En pausa el tablero se tapa: el reloj detenido no regala tiempo para pensar.
           <View style={styles.pauseCover}>
@@ -545,40 +576,47 @@ export default function BurstScreen() {
         )}
         {state.phase === 'feedback' && (
           <View style={styles.overlay} pointerEvents="box-none">
-            <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} scaleTo={0.99} style={styles.overlayInner}>
-              {coach ? (
-                <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined}>
-                  <Rutix
-                    size={150}
-                    expression={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'happy') : 'worried'}
-                    pose={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'thumbsUp') : 'shrug'}
-                    signal={state.lastPoints > 0 ? 4 : 1}
-                  />
-                </Animated.View>
-              ) : (
-                <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined} style={[styles.verdict, { backgroundColor: state.lastPoints > 0 ? '#6BC59A' : colors.danger }]}>
-                  <TelIcon name={state.lastPoints > 0 ? 'check' : 'close'} size={64} color={colors.white} strokeWidth={3.4} />
-                </Animated.View>
-              )}
-              <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="assertive">
-                {state.lastPoints > 0 ? '¡Conexión establecida!' : secondsLeft === 0 ? '¡Se acabó el tiempo!' : '¡Paquete perdido!'}
-              </TelText>
-              <TelText variant="subtitle" color={state.lastPoints > 0 ? 'accent' : 'dangerSoft'} align="center">
-                {state.lastPoints > 0 ? `+${state.lastPoints} pts` : '−1 vida'}
-              </TelText>
-              {coach && (
-                <TelText variant="label" color="accentSoft" align="center">
-                  {coachLine(state.lastPoints > 0 ? 'good' : 'bad', state.round + state.score)}
-                </TelText>
-              )}
-              <View style={styles.overlayNote}>
-                <TelText variant="small" color="accent" align="center" style={styles.stepsKicker}>
-                  {state.lastPoints > 0 ? 'LO QUE APRENDISTE' : 'PARA LA PRÓXIMA'}
-                </TelText>
-                <TelText variant="body" color="cream" align="center">
-                  {state.lastNote ?? guide.learn}
-                </TelText>
-              </View>
+            <PressableScale accessibilityRole="button" accessibilityLabel="Continuar" onPress={() => dispatch({ type: 'advance' })} scaleTo={0.995} style={styles.overlayInner}>
+              {/* El veredicto y la explicación se desplazan si no caben; "Continuar" queda siempre visible abajo. */}
+              <ScrollView style={styles.overlayScroll} contentContainerStyle={styles.overlayBody} showsVerticalScrollIndicator={false}>
+                <View style={styles.verdictRow}>
+                  {coach ? (
+                    <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined}>
+                      <Rutix
+                        size={verdictSize}
+                        expression={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'happy') : 'worried'}
+                        pose={state.lastPoints > 0 ? (state.lastPoints >= 200 ? 'celebrate' : 'thumbsUp') : 'shrug'}
+                        signal={state.lastPoints > 0 ? 4 : 1}
+                      />
+                    </Animated.View>
+                  ) : (
+                    <Animated.View entering={motionEnabled ? ZoomIn.springify().damping(10) : undefined} style={[styles.verdict, { backgroundColor: state.lastPoints > 0 ? '#6BC59A' : colors.danger }]}>
+                      <TelIcon name={state.lastPoints > 0 ? 'check' : 'close'} size={40} color={colors.white} strokeWidth={3.4} />
+                    </Animated.View>
+                  )}
+                  <View style={styles.verdictText}>
+                    <TelText variant="heading" color="cream" accessibilityLiveRegion="assertive">
+                      {state.lastPoints > 0 ? '¡Conexión establecida!' : secondsLeft === 0 ? '¡Se acabó el tiempo!' : '¡Paquete perdido!'}
+                    </TelText>
+                    <TelText variant="subtitle" color={state.lastPoints > 0 ? 'accent' : 'dangerSoft'}>
+                      {state.lastPoints > 0 ? `+${state.lastPoints} pts` : '−1 vida'}
+                    </TelText>
+                    {coach && (
+                      <TelText variant="caption" color="accentSoft">
+                        {coachLine(state.lastPoints > 0 ? 'good' : 'bad', state.round + state.score)}
+                      </TelText>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.overlayNote}>
+                  <TelText variant="small" color="accent" style={styles.stepsKicker}>
+                    {state.lastPoints > 0 ? 'LO QUE APRENDISTE' : 'PARA LA PRÓXIMA'}
+                  </TelText>
+                  <TelText variant="body" color="cream">
+                    {state.lastNote ?? guide.learn}
+                  </TelText>
+                </View>
+              </ScrollView>
               {pace !== 'fast' && (
                 <View style={styles.overlayCta}>
                   <TelText variant="button" color="primary">
@@ -658,11 +696,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   readyContent: {
-    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  readyScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  readyBody: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   ready: {
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   steps: {
     alignSelf: 'stretch',
@@ -688,29 +734,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   readyIcon: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: colors.cream,
-    borderWidth: 6,
+    borderWidth: 5,
     borderColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  readyIconShort: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 4,
   },
   fasterTag: {
     alignSelf: 'center',
   },
   readyTap: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   readyCoach: {
     alignSelf: 'stretch',
   },
   overlayNote: {
     minHeight: 48,
-    maxWidth: 330,
     gap: 4,
     justifyContent: 'center',
     padding: spacing.sm,
@@ -720,9 +769,10 @@ const styles = StyleSheet.create({
   overlayCta: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
     minHeight: 52,
-    paddingHorizontal: spacing.xl,
+    alignSelf: 'stretch',
     borderRadius: radius.md,
     backgroundColor: colors.cream,
   },
@@ -738,7 +788,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
   },
   playContent: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   topBar: {
     flexDirection: 'row',
@@ -794,8 +844,10 @@ const styles = StyleSheet.create({
   secondsDanger: {
     backgroundColor: colors.danger,
   },
+  // Ocupa todo lo que queda bajo el reloj y la instrucción: el microjuego se ajusta a ese espacio.
   gameArea: {
     flex: 1,
+    minHeight: 0,
     justifyContent: 'center',
   },
   overlay: {
@@ -806,14 +858,30 @@ const styles = StyleSheet.create({
   },
   overlayInner: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  overlayScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  overlayBody: {
+    gap: spacing.sm,
+  },
+  verdictRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  verdictText: {
+    flex: 1,
+    gap: 2,
   },
   verdict: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -853,9 +921,5 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.primarySoft,
-  },
-  actions: {
-    gap: spacing.sm,
-    marginTop: 'auto',
   },
 });

@@ -1,6 +1,6 @@
 import { checkinCopy, pillarIds, pillars, routeStops } from '@/route/content';
 import { mulberry32 } from '@/route/random';
-import { acceptanceAngle, decodeBits, fiberLevels, toBits, traceRay } from '@/features/stations/logic/fiber';
+import { acceptanceAngle, decodeBits, FIBER_KINDS, isGuided, toBits, traceRay } from '@/features/stations/logic/fiber';
 import { codeScore, pickScenarios, requiredWires, simulate, wireScore } from '@/features/stations/logic/maker';
 import { interference, initialChannels, makePacket, packetTtlMs, routeFor, slotNeeds, wifiScore } from '@/features/stations/logic/network';
 import { maxScore, pickCards, securityCards, segmentCard } from '@/features/stations/logic/security';
@@ -97,19 +97,22 @@ describe('B213 software · security logic', () => {
 });
 
 describe('B213 teleco · fiber logic', () => {
-  const geometry = { laserX: 30, laserY: 112, entryX: 140, exitX: 330, coreTop: 95, coreBottom: 129 };
+  const [plastic, multimode, singleMode] = FIBER_KINDS;
+  const optics = { ...multimode, length: 170 };
 
   it('computes the acceptance angle from the refractive indexes', () => {
-    expect(acceptanceAngle(fiberLevels[0].cladding)).toBeCloseTo(14.03, 1);
-    expect(acceptanceAngle(fiberLevels[2].cladding)).toBeLessThan(acceptanceAngle(fiberLevels[0].cladding));
+    expect(acceptanceAngle(multimode.nCore, multimode.nClad)).toBeCloseTo(14.03, 1);
+    expect(acceptanceAngle(singleMode.nCore, singleMode.nClad)).toBeLessThan(acceptanceAngle(multimode.nCore, multimode.nClad));
+    expect(acceptanceAngle(multimode.nCore, multimode.nClad)).toBeLessThan(acceptanceAngle(plastic.nCore, plastic.nClad));
   });
 
-  it('delivers small angles, leaks steep ones and misses the core', () => {
-    expect(traceRay(geometry, 8, 1.46).outcome).toBe('delivered');
-    expect(traceRay(geometry, 8, 1.46).bounces).toBeGreaterThan(0);
-    expect(traceRay({ ...geometry, laserY: 100 }, 5, 1.475).outcome).not.toBe('missed');
-    expect(traceRay(geometry, 30, 1.46).outcome).toBe('missed');
-    expect(traceRay({ ...geometry, entryX: 60 }, 25, 1.46).outcome).toBe('leaked');
+  it('guides small angles and lets steep ones escape through the cladding', () => {
+    expect(traceRay(optics, 8).outcome).toBe('guided');
+    expect(traceRay(optics, 8).bounces).toBeGreaterThan(0);
+    expect(isGuided(optics, 14)).toBe(true);
+    expect(isGuided(optics, 15)).toBe(false);
+    expect(traceRay(optics, 25).outcome).toBe('leaked');
+    expect(traceRay(optics, 25).escape.length).toBeGreaterThan(1);
   });
 
   it('encodes words as ASCII bits', () => {

@@ -114,12 +114,12 @@ export function CipherGame({ level, seed, onSolved, say }: PuzzleGameProps) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   card: {
     alignItems: 'center',
     gap: 4,
-    padding: spacing.md,
+    padding: spacing.sm,
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,
     borderWidth: 1,
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   shift: {
     alignItems: 'center',

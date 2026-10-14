@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { colors, monoFamily, radius, spacing } from '@/theme';
+import { colors, monoFamily, radius } from '@/theme';
 import { pick, pingLines, type PingScenario } from '../logic';
-import { ChoiceTile, TileGrid, type TileState } from '../parts';
+import { ChoiceTile, GameFrame, TileGrid, type TileState } from '../parts';
 import type { MicroGameProps } from '../types';
 
 // Microjuego 3: una terminal ejecuta ping; decide si hay conectividad.
@@ -31,7 +31,7 @@ export function PingCheckGame({ active, onAnswer }: MicroGameProps) {
   const tileState = (value: 'yes' | 'no'): TileState => (!chosen ? 'idle' : value === answer ? 'correct' : value === chosen ? 'wrong' : 'dimmed');
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <View style={styles.terminal} accessibilityLabel={lines.slice(0, visible).join('. ')}>
         <View style={styles.terminalBar}>
           <View style={[styles.light, { backgroundColor: '#E58A8A' }]} />
@@ -39,33 +39,30 @@ export function PingCheckGame({ active, onAnswer }: MicroGameProps) {
           <View style={[styles.light, { backgroundColor: '#6BC59A' }]} />
           <TelIcon name="terminal" size={14} color={colors.slate} style={styles.terminalIcon} />
         </View>
-        {lines.slice(0, visible).map((line, index) => (
-          <TelText key={`${line}-${index}`} style={[styles.line, { color: index === 0 ? colors.accent : colors.onDark }]}>
+        {/* Todas las líneas ocupan su lugar desde el inicio (las que faltan, invisibles): la terminal no crece al escribir. */}
+        {lines.map((line, index) => (
+          <TelText key={`${line}-${index}`} style={[styles.line, { color: index === 0 ? colors.accent : colors.onDark, opacity: index < visible ? 1 : 0 }]}>
             {line}
           </TelText>
         ))}
-        {visible < lines.length && <TelText style={[styles.line, { color: colors.accent }]}>▌</TelText>}
+        <TelText style={[styles.line, { color: colors.accent, opacity: visible < lines.length ? 1 : 0 }]}>▌</TelText>
       </View>
       <TileGrid>
         <ChoiceTile label="Hay conexión" icon="wifi" state={tileState('yes')} disabled={!active || Boolean(chosen)} onPress={() => choose('yes')} />
         <ChoiceTile label="Sin conexión" icon="wifiOff" state={tileState('no')} disabled={!active || Boolean(chosen)} onPress={() => choose('no')} />
       </TileGrid>
-    </View>
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
   terminal: {
-    minHeight: 150,
     borderRadius: radius.md,
     backgroundColor: '#051524',
     borderWidth: 1,
     borderColor: 'rgba(167, 212, 237, 0.2)',
-    padding: spacing.sm,
-    gap: 4,
+    padding: 10,
+    gap: 2,
   },
   terminalBar: {
     flexDirection: 'row',
@@ -84,6 +81,6 @@ const styles = StyleSheet.create({
   line: {
     fontFamily: monoFamily,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 16,
   },
 });

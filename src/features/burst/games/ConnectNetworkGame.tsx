@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius } from '@/theme';
 import { pick, shuffle } from '../logic';
-import { ChoiceTile, TileGrid, type TileState } from '../parts';
+import { ChoiceTile, GameFrame, TileGrid, useGameDensity, type GameDensity, type TileState } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface Device {
@@ -62,12 +62,21 @@ const scenarios: Scenario[] = [
   },
 ];
 
+// Tamaño de los círculos del diagrama según el espacio.
+const SIZES: Record<GameDensity, { node: number; slot: number; glyph: number }> = {
+  compact: { node: 46, slot: 54, glyph: 24 },
+  regular: { node: 58, slot: 66, glyph: 28 },
+  roomy: { node: 64, slot: 72, glyph: 30 },
+};
+
 // Microjuego 1: diagrama con un equipo faltante; toca el que completa la red.
 export function ConnectNetworkGame({ active, onAnswer }: MicroGameProps) {
+  const density = useGameDensity();
   const scenario = useMemo(() => pick(scenarios), []);
   const options = useMemo(() => shuffle([scenario.answer, ...scenario.distractors]), [scenario]);
   const [chosen, setChosen] = useState<string | null>(null);
   const solved = chosen === scenario.answer.id;
+  const sizes = SIZES[density];
 
   function choose(device: Device) {
     if (!active || chosen) return;
@@ -78,19 +87,19 @@ export function ConnectNetworkGame({ active, onAnswer }: MicroGameProps) {
   const slot = chosen ? options.find((item) => item.id === chosen) : null;
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <TelText variant="subtitle" color="cream" align="center">
         {scenario.question}
       </TelText>
       <View style={styles.diagram}>
         <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-          <Line x1="18%" y1="50%" x2="82%" y2="50%" stroke={solved ? colors.accent : colors.slate} strokeWidth={3} strokeDasharray={solved ? undefined : '6 8'} strokeLinecap="round" />
+          <Line x1="18%" y1="40%" x2="82%" y2="40%" stroke={solved ? colors.accent : colors.slate} strokeWidth={3} strokeDasharray={solved ? undefined : '6 8'} strokeLinecap="round" />
         </Svg>
-        <Node device={scenario.left} />
-        <View style={[styles.slot, slot && (solved ? styles.slotRight : styles.slotWrong)]}>
-          {slot ? <TelIcon name={slot.icon} size={30} color={colors.primary} /> : <TelText variant="title" color="accent">?</TelText>}
+        <Node device={scenario.left} size={sizes.node} glyph={sizes.glyph} />
+        <View style={[styles.slot, { width: sizes.slot, height: sizes.slot, borderRadius: sizes.slot / 2 }, slot && (solved ? styles.slotRight : styles.slotWrong)]}>
+          {slot ? <TelIcon name={slot.icon} size={sizes.glyph + 2} color={colors.primary} /> : <TelText variant="title" color="accent">?</TelText>}
         </View>
-        <Node device={scenario.right} />
+        <Node device={scenario.right} size={sizes.node} glyph={sizes.glyph} />
       </View>
       <TileGrid>
         {options.map((device) => {
@@ -99,15 +108,15 @@ export function ConnectNetworkGame({ active, onAnswer }: MicroGameProps) {
           return <ChoiceTile key={device.id} label={device.label} icon={device.icon} state={state} disabled={!active || Boolean(chosen)} onPress={() => choose(device)} />;
         })}
       </TileGrid>
-    </View>
+    </GameFrame>
   );
 }
 
-function Node({ device }: { device: Device }) {
+function Node({ device, size, glyph }: { device: Device; size: number; glyph: number }) {
   return (
     <View style={styles.node}>
-      <View style={styles.nodeIcon}>
-        <TelIcon name={device.icon} size={28} color={colors.cream} />
+      <View style={[styles.nodeIcon, { width: size, height: size }]}>
+        <TelIcon name={device.icon} size={glyph} color={colors.cream} />
       </View>
       <TelText variant="small" color="accentSoft" align="center">
         {device.label}
@@ -117,11 +126,10 @@ function Node({ device }: { device: Device }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
   diagram: {
-    height: 110,
+    flex: 1,
+    minHeight: 76,
+    maxHeight: 128,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -132,17 +140,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   nodeIcon: {
-    width: 58,
-    height: 58,
     borderRadius: radius.md,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   slot: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
     borderWidth: 2.5,
     borderStyle: 'dashed',
     borderColor: colors.accent,

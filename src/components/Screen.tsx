@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing } from '@/theme';
 import { BrandBackdrop, type BackdropVariant } from './graphics/BrandBackdrop';
+import { IconButton } from './IconButton';
+import { TelText } from './TelText';
 
 interface ScreenProps {
   tone?: 'light' | 'dark';
@@ -24,6 +26,8 @@ interface ScreenProps {
   footer?: ReactNode;
   backdrop?: BackdropVariant;
   padded?: boolean;
+  // Relleno vertical corto para pantallas de juego que no se desplazan: el tablero gana ese espacio.
+  tight?: boolean;
   keyboard?: boolean;
   // Dentro de las pestañas la barra inferior ya respeta el área segura.
   inTabs?: boolean;
@@ -40,6 +44,7 @@ export function Screen({
   footer,
   backdrop,
   padded = true,
+  tight = false,
   keyboard = true,
   inTabs = false,
   contentStyle,
@@ -68,7 +73,7 @@ export function Screen({
       style={[
         styles.content,
         padded && styles.padded,
-        { paddingTop: (padded ? spacing.gutter : 0) + topInset, paddingBottom: (padded ? spacing.xl : 0) + bottomInset },
+        { paddingTop: (padded ? (tight ? spacing.xs : spacing.gutter) : 0) + topInset, paddingBottom: (padded ? (tight ? spacing.sm : spacing.xl) : 0) + bottomInset },
         contentStyle,
       ]}
     >
@@ -146,9 +151,49 @@ export function ScreenFooter({ children, tone = 'light' }: PropsWithChildren<{ t
   );
 }
 
+interface ScreenBarProps {
+  onBack?: () => void;
+  kicker?: string;
+  title: string;
+  right?: ReactNode;
+}
+
+// Franja superior de una línea para pantallas de juego: el AppHeader ocupa unos 110 px y en un teléfono
+// bajo se los quita al tablero.
+export function ScreenBar({ onBack, kicker, title, right }: ScreenBarProps) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.bar, { paddingTop: insets.top + spacing.xs }]}>
+      {onBack ? <IconButton icon="chevronLeft" tone="dark" onPress={onBack} accessibilityLabel="Volver" /> : null}
+      <View style={styles.barTitle}>
+        {kicker ? (
+          <TelText variant="overline" color="accent" numberOfLines={1}>
+            {kicker}
+          </TelText>
+        ) : null}
+        <TelText variant="heading" color="cream" numberOfLines={1} accessibilityRole="header">
+          {title}
+        </TelText>
+      </View>
+      {right}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+  },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  barTitle: {
+    flex: 1,
+    minWidth: 0,
   },
   light: {
     backgroundColor: colors.paper,

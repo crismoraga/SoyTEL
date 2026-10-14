@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
+import { FitBox } from '@/components/FitBox';
 import { PressableScale } from '@/components/PressableScale';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
-import { colors, spacing } from '@/theme';
+import { colors } from '@/theme';
+import { GameFrame } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface NodeInfo {
@@ -17,8 +19,8 @@ interface NodeInfo {
   color: string;
 }
 
+// Medida de referencia del dibujo de las líneas (se escala con el tablero).
 const AREA = 280;
-const NODE = 76;
 
 const nodes: NodeInfo[] = [
   { id: 'router', label: 'Router', icon: 'router', x: 0.5, y: 0.14, color: colors.accent },
@@ -78,58 +80,58 @@ export function SequenceMemoryGame({ active, level, pace, onAnswer }: MicroGameP
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <TelText variant="subtitle" color="cream" align="center">
         {showing ? 'Observa la ruta…' : `Repite la ruta (${input}/${sequence.length})`}
       </TelText>
-      <View style={styles.area}>
-        <Svg width={AREA} height={AREA} style={StyleSheet.absoluteFill}>
-          {nodes.map((from, index) =>
-            nodes.slice(index + 1).map((to) => (
-              <Line key={`${from.id}-${to.id}`} x1={from.x * AREA} y1={from.y * AREA} x2={to.x * AREA} y2={to.y * AREA} stroke={colors.secondary} strokeWidth={2} strokeDasharray="5 7" />
-            )),
-          )}
-        </Svg>
-        {nodes.map((node) => {
-          const on = lit === node.id;
+      <FitBox aspectRatio={1} maxWidth={340}>
+        {({ width }) => {
+          // Los nodos se achican con el tablero, sin bajar de un tamaño cómodo para el dedo.
+          const node = Math.max(54, Math.min(76, Math.round(width * 0.27)));
           return (
-            <PressableScale
-              key={node.id}
-              accessibilityRole="button"
-              accessibilityLabel={node.label}
-              disabled={!active || showing}
-              onPress={() => tap(node.id)}
-              scaleTo={0.9}
-              style={[
-                styles.node,
-                { left: node.x * AREA - NODE / 2, top: node.y * AREA - NODE / 2, borderColor: node.color },
-                on && { backgroundColor: node.color, transform: [{ scale: 1.08 }] },
-                showing && !on && styles.nodeIdle,
-              ]}
-            >
-              <TelIcon name={node.icon} size={30} color={on ? colors.primary : colors.cream} />
-            </PressableScale>
+            <View style={styles.area}>
+              <Svg width={width} height={width} viewBox={`0 0 ${AREA} ${AREA}`} style={StyleSheet.absoluteFill}>
+                {nodes.map((from, index) =>
+                  nodes.slice(index + 1).map((to) => (
+                    <Line key={`${from.id}-${to.id}`} x1={from.x * AREA} y1={from.y * AREA} x2={to.x * AREA} y2={to.y * AREA} stroke={colors.secondary} strokeWidth={2} strokeDasharray="5 7" />
+                  )),
+                )}
+              </Svg>
+              {nodes.map((item) => {
+                const on = lit === item.id;
+                return (
+                  <PressableScale
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.label}
+                    disabled={!active || showing}
+                    onPress={() => tap(item.id)}
+                    scaleTo={0.9}
+                    style={[
+                      styles.node,
+                      { width: node, height: node, borderRadius: node / 2, left: item.x * width - node / 2, top: item.y * width - node / 2, borderColor: item.color },
+                      on && { backgroundColor: item.color, transform: [{ scale: 1.08 }] },
+                      showing && !on && styles.nodeIdle,
+                    ]}
+                  >
+                    <TelIcon name={item.icon} size={Math.round(node * 0.4)} color={on ? colors.primary : colors.cream} />
+                  </PressableScale>
+                );
+              })}
+            </View>
           );
-        })}
-      </View>
-    </View>
+        }}
+      </FitBox>
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    gap: spacing.md,
-  },
   area: {
-    width: AREA,
-    height: AREA,
+    flex: 1,
   },
   node: {
     position: 'absolute',
-    width: NODE,
-    height: NODE,
-    borderRadius: NODE / 2,
     borderWidth: 3,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',

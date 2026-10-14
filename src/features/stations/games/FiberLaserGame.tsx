@@ -1,74 +1,107 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
-import Svg, { Circle, Line, Polygon, Polyline, Rect } from 'react-native-svg';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Platform, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Svg, { Circle, G, Line, Path, Polygon, Polyline, Rect } from 'react-native-svg';
+import { FitBox, type FitSize } from '@/components/FitBox';
 import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
 import { TelIcon, type IconName } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
+import { useMotionEnabled } from '@/lib/motion';
 import { usePanHandlers } from '@/lib/usePanHandlers';
-import { mulberry32 } from '@/route/random';
-import { colors, font, radius, spacing } from '@/theme';
-import { GameBoard, Hint, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useDeadline, useGamePaused, useGameTimeout, useNow, usePace, useSubmitOnce, type StationGameProps } from '../kit';
+import { colors, radius, spacing } from '@/theme';
+import { Hint, StageBanner, StationHud, StationSummary, clamp, gameNow, useAskContinue, useDeadline, useGameTimeout, useNow, useSubmitOnce, type StationGameProps } from '../kit';
 import {
-  acceptanceAngle,
   ANGLE_MAX,
-  ANGLES_MAX,
-  BIT_MS,
+  ANGLE_STEP,
+  buildPlan,
+  charBits,
+  couplingBand,
   decodeBits,
-  fiberLevels,
-  levelScore,
-  pickWord,
-  PULSES_MAX,
-  toBits,
+  DEG,
+  elevationFromPoint,
+  emptyProgress,
+  fiberTotals,
+  fitScene,
+  groupBits,
+  HOLD_MS,
+  isGuided,
+  laserPoint,
+  LIGHT_COUNT,
+  LIGHT_MAX,
+  MESSAGE_MAX,
+  OFFSET_MAX,
+  OFFSET_STEP,
+  SCENE_W,
+  sceneLayout,
+  SPLICE_COUNT,
+  SPLICE_LOCK,
+  SPLICE_MAX,
+  spliceCoupling,
+  TILT_MAX,
+  TILT_STEP,
   traceRay,
-  type RayTrace,
+  type FiberPlan,
+  type FiberProgress,
+  type LightTarget,
+  type RayPoint,
+  type SpliceTarget,
 } from '../logic/fiber';
 
-type StageKey = 'angles' | 'pulses';
+type StageKey = 'light' | 'splice' | 'message';
+type Tone = 'info' | 'good' | 'bad';
 
-const STAGES: { key: StageKey; title: string; body: string; icon: IconName; seconds: number }[] = [
+const STAGES: { key: StageKey; title: string; body: string; icon: IconName }[] = [
   {
-    key: 'angles',
-    title: 'Atrapa la luz',
-    body: 'Apunta el láser dentro del cono de aceptación: si el ángulo es pequeño, la luz rebota adentro de la fibra (reflexión total interna).',
-    icon: 'laser',
-    seconds: 45,
+    key: 'light',
+    title: 'Mete la luz en la fibra',
+    body: 'Lleva la luz hasta el receptor.\nLa fibra guía la luz rebotando por dentro; si entra muy inclinada, se escapa.',
+    icon: 'angle',
   },
   {
-    key: 'pulses',
-    title: 'Transmite con pulsos',
-    body: 'Envía el mensaje en binario: toca PULSO cuando un 1 pase por el láser y no toques en los 0.',
+    key: 'splice',
+    title: 'Empalma la fibra',
+    body: 'Alinea los dos extremos de la fibra.\nSi los núcleos no coinciden, se pierde luz. Muévelos hasta que pase el 90 %.',
     icon: 'fiber',
-    seconds: 30,
+  },
+  {
+    key: 'message',
+    title: 'Envía un mensaje con luz',
+    body: 'Envía la letra bit por bit.\nLuz encendida es 1 y apagada es 0: así viajan los datos por la fibra.',
+    icon: 'modulation',
   },
 ];
 
 const ACCENT = '#6FB3D9';
-const LASER_RED = '#FF5A5A';
+const LASER = '#FF5A5A';
+const CLAD = '#1D4B6B';
+const CLAD_EDGE = '#4F8DB5';
+const CORE = '#7FC4EC';
+const LIT = '#7CF0B0';
+const PULSE_MS = 420;
 
-// B213 · Telecomunicaciones: fibra óptica, reflexión total interna y modulación on-off.
+// El tablero se arrastra con el dedo: en la web hay que impedir que el navegador desplace o haga zoom.
+const NO_TOUCH = (Platform.OS === 'web' ? { touchAction: 'none', userSelect: 'none' } : {}) as unknown as ViewStyle;
+
+const fmt1 = (value: number) => value.toFixed(1).replace('.', ',');
+const signed = (value: number) => (value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : '0');
+
+// B213 · Telecomunicaciones: la luz en la fibra (reflexión total interna), empalmes y mensajes en bits.
+// Por turnos y sin ritmo: todo lo que se anota sale de `logic/fiber`, las animaciones solo decoran.
 export function FiberLaserGame({ seed, deadline, onComplete }: StationGameProps) {
-  const pace = usePace();
-  const [word] = useState(() => pickWord(mulberry32(seed ^ 0xf1be)));
+  const [plan] = useState(() => buildPlan(seed));
   const [stageIndex, setStageIndex] = useState(0);
   const [banner, setBanner] = useState(true);
-  const [endsAt, setEndsAt] = useState<number | null>(null);
-  const [anglePoints, setAnglePoints] = useState(0);
-  const [angleShots, setAngleShots] = useState({ ok: 0, total: 0 });
-  const [pulse, setPulse] = useState({ points: 0, correct: 0, total: 0 });
   const [finished, setFinished] = useState(false);
-  const now = useNow(endsAt !== null, 250);
+  const [progress, setProgress] = useState(() => emptyProgress(plan.word.length * 8));
+  const totals = fiberTotals(progress);
   const stage = STAGES[stageIndex];
+  const submit = useSubmitOnce(onComplete);
+  useDeadline(deadline, () => submit({ score: totals.total, accuracy: totals.accuracy }));
 
-  const startStage = useCallback(() => {
-    setBanner(false);
-    setEndsAt(gameNow() + STAGES[stageIndex].seconds * pace * 1000);
-  }, [pace, stageIndex]);
-
-  const nextStage = useCallback(() => {
-    setEndsAt(null);
+  const patch = useCallback((change: Partial<FiberProgress>) => setProgress((current) => ({ ...current, ...change })), []);
+  const advance = useCallback(() => {
     if (stageIndex < STAGES.length - 1) {
       setStageIndex(stageIndex + 1);
       setBanner(true);
@@ -77,463 +110,822 @@ export function FiberLaserGame({ seed, deadline, onComplete }: StationGameProps)
     }
   }, [stageIndex]);
 
-  const total = anglePoints + pulse.points;
-  const accuracy = ((angleShots.total ? angleShots.ok / angleShots.total : 0) + (pulse.total ? pulse.correct / pulse.total : 0)) / 2;
-  const submit = useSubmitOnce(onComplete);
-  useDeadline(deadline, () => submit({ score: total, accuracy }));
-
   if (finished) {
+    const errors = progress.messageErrors;
     return (
-      <StationSummary
-        title="Viaje de la luz"
-        total={total}
-        message={pulse.total ? `Tasa de error de bits: ${Math.round((1 - pulse.correct / pulse.total) * 100)}%` : '¡La luz llegó a destino!'}
-        accent={ACCENT}
-        rows={[
-          { label: 'Luz atrapada en la fibra', value: anglePoints, max: ANGLES_MAX, icon: 'laser' },
-          { label: 'Bits transmitidos', value: pulse.points, max: PULSES_MAX, icon: 'fiber' },
-        ]}
-        learned="La fibra guía la luz porque su núcleo tiene mayor índice de refracción que el revestimiento: si el ángulo es pequeño, la luz rebota adentro. Los datos viajan como pulsos: luz = 1, sin luz = 0."
-        onSubmit={() => submit({ score: total, accuracy })}
-      />
+      <ScrollView style={styles.flex} contentContainerStyle={styles.summaryScroll} showsVerticalScrollIndicator={false}>
+        <StationSummary
+          title="Viaje de la luz"
+          total={totals.total}
+          message={progress.messageBits >= progress.messageTotal ? `Mensaje recibido: ${plan.word} · ${errors} ${errors === 1 ? 'error' : 'errores'} de bits` : '¡La luz llegó a destino!'}
+          accent={ACCENT}
+          rows={[
+            { label: 'Luz en la fibra', value: totals.light, max: LIGHT_MAX, icon: 'angle' },
+            { label: 'Empalmes', value: totals.splice, max: SPLICE_MAX, icon: 'fiber' },
+            { label: 'Mensaje con luz', value: totals.message, max: MESSAGE_MAX, icon: 'modulation' },
+          ]}
+          learned="La fibra guía la luz por reflexión total interna, un empalme exige alinear bien los núcleos y los datos viajan como luz (1) y apagado (0)."
+          onSubmit={() => submit({ score: totals.total, accuracy: totals.accuracy })}
+        />
+      </ScrollView>
     );
   }
 
-  const secondsLeft = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
-
   return (
-    <View style={styles.container}>
-      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={total} secondsLeft={secondsLeft} totalSeconds={Math.round(stage.seconds * pace)} accent={ACCENT} />
-      {endsAt && stage.key === 'angles' && (
-        <AnglesStage
-          endsAt={endsAt}
-          onLevel={(points, ok) => {
-            setAnglePoints((value) => value + points);
-            setAngleShots((value) => ({ ok: value.ok + (ok ? 1 : 0), total: value.total + 1 }));
-          }}
-          onFinish={nextStage}
-        />
-      )}
-      {endsAt && stage.key === 'pulses' && <PulsesStage word={word} endsAt={endsAt} onProgress={setPulse} onFinish={nextStage} />}
-      {banner && <StageBanner key={stage.key} index={stageIndex + 1} title={stage.title} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={startStage} />}
-      {banner && <View style={styles.bannerSpace} />}
+    <View style={styles.root}>
+      <StationHud stage={stageIndex + 1} stages={STAGES.length} title={stage.title} score={totals.total} secondsLeft={null} accent={ACCENT} />
+      {!banner && stage.key === 'light' && <LightStage plan={plan} onProgress={patch} onFinish={advance} />}
+      {!banner && stage.key === 'splice' && <SpliceStage plan={plan} onProgress={patch} onFinish={advance} />}
+      {!banner && stage.key === 'message' && <MessageStage plan={plan} onProgress={patch} onFinish={advance} />}
+      {banner && <StageBanner key={stage.key} index={stageIndex + 1} title={stage.title} body={stage.body} icon={stage.icon} accent={ACCENT} onDone={() => setBanner(false)} />}
     </View>
   );
 }
 
-// ——— Etapa 1: ángulos ———
+interface StageProps {
+  plan: FiberPlan;
+  onProgress: (change: Partial<FiberProgress>) => void;
+  onFinish: () => void;
+}
 
-const BOARD_H = 210;
-const CENTER_Y = 112;
-const CORE_HALF = 17;
+// ——— Piezas compartidas ———
 
-function AnglesStage({ endsAt, onLevel, onFinish }: { endsAt: number; onLevel: (points: number, ok: boolean) => void; onFinish: () => void }) {
-  const [level, setLevel] = useState(0);
-  const [angle, setAngle] = useState(24);
-  const [width, setWidth] = useState(0);
-  const [failed, setFailed] = useState(0);
-  const [shot, setShot] = useState<RayTrace | null>(null);
-  const [visible, setVisible] = useState(0);
-  const [startedAt, setStartedAt] = useState(() => gameNow());
-  const done = useRef(false);
-  const dragStart = useRef(0);
-  const config = fiberLevels[level];
-  const acceptance = acceptanceAngle(config.cladding);
+function HintBox({ tone, children }: { tone: Tone; children: string }) {
+  return (
+    <View style={styles.hintBox}>
+      <Hint tone={tone}>{children}</Hint>
+    </View>
+  );
+}
 
-  const geometry = {
-    laserX: 30,
-    laserY: CENTER_Y + config.laserOffset,
-    entryX: width * 0.32,
-    exitX: width - 34,
-    coreTop: CENTER_Y - CORE_HALF,
-    coreBottom: CENTER_Y + CORE_HALF,
-  };
+function StepButton({ icon, label, caption, disabled, flip, wide, onPress }: { icon: IconName; label: string; caption?: string; disabled?: boolean; flip?: boolean; wide?: boolean; onPress: () => void }) {
+  return (
+    <PressableScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: Boolean(disabled) }} disabled={disabled} haptic onPress={onPress} scaleTo={0.92} style={[wide ? styles.stepWide : styles.step, disabled && styles.stepOff]}>
+      <TelIcon name={icon} size={24} color={colors.primary} strokeWidth={2.4} style={flip ? styles.flip : undefined} />
+      {caption ? (
+        <TelText variant="label" color="primary" maxFontSizeMultiplier={1.3}>
+          {caption}
+        </TelText>
+      ) : null}
+    </PressableScale>
+  );
+}
 
+// Insignia de acierto (verde) o error (rojo) dibujada sobre el tablero.
+function Badge({ x, y, ok }: { x: number; y: number; ok: boolean }) {
+  return (
+    <G>
+      <Circle cx={x} cy={y} r={9} fill={ok ? colors.success : colors.danger} stroke={colors.cream} strokeWidth={1.5} />
+      {ok ? (
+        <Polyline points={`${x - 4},${y} ${x - 1},${y + 3.5} ${x + 4.5},${y - 3}`} fill="none" stroke={colors.white} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <Path d={`M ${x - 3.5} ${y - 3.5} L ${x + 3.5} ${y + 3.5} M ${x + 3.5} ${y - 3.5} L ${x - 3.5} ${y + 3.5}`} stroke={colors.white} strokeWidth={2} strokeLinecap="round" />
+      )}
+    </G>
+  );
+}
+
+// ——— Etapa 1: meter la luz en la fibra ———
+
+function LightStage({ plan, onProgress, onFinish }: StageProps) {
+  const [index, setIndex] = useState(0);
+  const target = plan.light[index];
+  const [angle, setAngle] = useState(target.startAngle);
+  const [wrong, setWrong] = useState(0);
+  const [solved, setSolved] = useState(false);
+  const [moved, setMoved] = useState(false);
+  const [verdict, setVerdict] = useState<'ok' | 'bad' | null>(null);
+  const [holdAt, setHoldAt] = useState<number | null>(null);
+  const [done, setDone] = useState<number[]>([]);
+  const settled = useRef(false);
   const askContinue = useAskContinue();
-  useGameTimeout(endsAt, () => {
-    if (done.current) return;
-    done.current = true;
-    askContinue(onFinish);
-  });
+  const last = index + 1 >= plan.light.length;
+  const guided = isGuided(target, angle);
 
-  // Dibuja el rayo por tramos para que se vea viajar.
-  useEffect(() => {
-    if (!shot) return;
-    if (visible >= shot.points.length) return;
-    const timer = setTimeout(() => setVisible((value) => value + 1), 70);
-    return () => clearTimeout(timer);
-  }, [shot, visible]);
+  // La luz se confirma sola si el ángulo bueno se mantiene un momento; el reloj es el del juego (con pausa).
+  const now = useNow(holdAt !== null && !solved, 60);
+  const hold = holdAt === null ? 0 : clamp((now - holdAt) / HOLD_MS, 0, 1);
 
-  const handlers = usePanHandlers({
-    canStart: () => !shot,
-    onGrant: () => {
-      dragStart.current = angle;
-    },
-    onMove: (_, gesture) => setAngle(clamp(Math.round((dragStart.current + gesture.dy * 0.12) * 2) / 2, -ANGLE_MAX, ANGLE_MAX)),
-  });
-
-  function fire() {
-    if (shot || done.current || !width) return;
-    const trace = traceRay(geometry, angle, config.cladding);
-    setShot(trace);
-    setVisible(1);
-    const ok = trace.outcome === 'delivered';
-    if (ok) {
-      void feedbackSuccess();
-      const ratio = (endsAt - gameNow()) / (endsAt - startedAt);
-      onLevel(levelScore(failed, ratio), true);
-      if (level + 1 >= fiberLevels.length) {
-        done.current = true;
-        askContinue(onFinish);
-        return;
-      }
-      setTimeout(() => {
-        if (done.current) return;
-        setLevel(level + 1);
-        setFailed(0);
-        setShot(null);
-        setAngle(level % 2 === 0 ? -26 : 22);
-        setStartedAt(gameNow());
-      }, 1500);
-    } else {
-      void feedbackWarning();
-      setFailed(failed + 1);
-      setTimeout(() => setShot(null), 1300);
-    }
+  function moveTo(next: number) {
+    const value = clamp(next, -ANGLE_MAX, ANGLE_MAX);
+    if (solved || value === angle) return;
+    const entering = isGuided(target, value);
+    const at = gameNow();
+    setAngle(value);
+    setMoved(true);
+    setVerdict(null);
+    setHoldAt((current) => (entering ? (current ?? at) : null));
   }
 
-  const rad = (value: number) => (value * Math.PI) / 180;
-  const coneLength = Math.max(40, geometry.entryX - geometry.laserX - 10);
-  const coneSpread = Math.tan(rad(acceptance)) * coneLength;
-  const aimEnd = { x: geometry.entryX, y: geometry.laserY + Math.tan(rad(angle)) * (geometry.entryX - geometry.laserX) };
-  const path = shot ? shot.points.slice(0, visible) : [];
-  const delivered = shot?.outcome === 'delivered' && visible >= (shot?.points.length ?? 0);
+  function confirm() {
+    if (settled.current) return;
+    if (isGuided(target, angle)) {
+      settled.current = true;
+      const next = [...done, wrong];
+      setDone(next);
+      setSolved(true);
+      setHoldAt(null);
+      setVerdict('ok');
+      onProgress({ lightWrong: next });
+      void feedbackSuccess();
+      if (last) askContinue(onFinish);
+    } else {
+      setWrong(wrong + 1);
+      setVerdict('bad');
+      void feedbackWarning();
+    }
+  }
+  useGameTimeout(holdAt !== null && !solved ? holdAt + HOLD_MS : null, confirm, holdAt);
+
+  function nextTarget() {
+    const upcoming = plan.light[index + 1];
+    settled.current = false;
+    setIndex(index + 1);
+    setAngle(upcoming.startAngle);
+    setWrong(0);
+    setSolved(false);
+    setMoved(false);
+    setVerdict(null);
+    setHoldAt(null);
+  }
+
+  let hint: { tone: Tone; text: string };
+  if (solved) hint = { tone: 'good', text: '¡La luz rebota dentro del núcleo y llega al receptor!' };
+  else if (verdict === 'bad') hint = { tone: 'bad', text: `Se escapó: pasa de ±${fmt1(target.cone)}°. Entra por el cono verde.` };
+  else if (guided) hint = { tone: 'good', text: '¡Entra! Mantén el ángulo o toca "Enviar luz".' };
+  else if (!moved) hint = { tone: 'info', text: index === 0 ? 'Mueve el láser con − y + o arrastrándolo hasta el cono verde.' : 'Esta fibra acepta un cono más estrecho: busca el ángulo.' };
+  else hint = { tone: 'info', text: 'Muy inclinado: la luz se escapa por el revestimiento.' };
 
   return (
-    <View style={styles.stageGap}>
-      <TelText variant="label" color="accentSoft" align="center">
-        Nivel {level + 1} de {fiberLevels.length} · cono de aceptación ±{acceptance.toFixed(1)}°
-      </TelText>
-      <GameBoard>
-        <View style={{ height: BOARD_H }} onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)} {...handlers}>
-          {width > 0 && (
-            <Svg width={width} height={BOARD_H}>
-              <Rect x={geometry.entryX} y={CENTER_Y - CORE_HALF - 12} width={geometry.exitX - geometry.entryX} height={(CORE_HALF + 12) * 2} rx={8} fill="#2B5E80" />
-              <Rect x={geometry.entryX} y={geometry.coreTop} width={geometry.exitX - geometry.entryX} height={CORE_HALF * 2} fill="#9FD2EE" fillOpacity={0.35} />
-              <Polygon
-                points={`${geometry.entryX},${CENTER_Y} ${geometry.entryX - coneLength},${CENTER_Y - coneSpread} ${geometry.entryX - coneLength},${CENTER_Y + coneSpread}`}
-                fill={colors.success}
-                fillOpacity={0.16}
-                stroke={colors.success}
-                strokeOpacity={0.5}
-                strokeDasharray="4 5"
-              />
-              {!shot && <Line x1={geometry.laserX} y1={geometry.laserY} x2={aimEnd.x} y2={aimEnd.y} stroke={LASER_RED} strokeWidth={2} strokeDasharray="5 6" />}
-              {path.length > 1 && (
-                <Polyline points={path.map((point) => `${point.x},${point.y}`).join(' ')} fill="none" stroke={LASER_RED} strokeWidth={3.5} strokeLinejoin="round" strokeLinecap="round" />
-              )}
-              <Circle cx={geometry.exitX + 14} cy={CENTER_Y} r={13} fill={delivered ? colors.success : colors.primary} stroke={colors.cream} strokeWidth={2} />
-              <Rect x={geometry.laserX - 22} y={geometry.laserY - 11} width={30} height={22} rx={5} fill={colors.cream} />
-              <Circle cx={geometry.laserX + 8} cy={geometry.laserY} r={4} fill={LASER_RED} />
-            </Svg>
+    <View style={styles.stage}>
+      <FitBox>{(size) => <OpticsBoard size={size} target={target} index={index} angle={angle} solved={solved} verdict={verdict} hold={hold} onAngle={moveTo} />}</FitBox>
+      {!(solved && last) && (
+        <View style={styles.controlRow}>
+          <StepButton icon="minus" label="Bajar el ángulo del láser" disabled={solved} onPress={() => moveTo(angle - ANGLE_STEP)} />
+          {solved ? (
+            <TelButton label="Siguiente fibra" variant="cream" iconRight="arrowRight" fullWidth={false} style={styles.flex} onPress={nextTarget} />
+          ) : (
+            <TelButton label="Enviar luz" variant="cream" icon="laser" fullWidth={false} style={styles.flex} onPress={confirm} />
           )}
-          <View pointerEvents="none" style={styles.fiberLabels}>
-            <TelText variant="small" color="accentSoft">
-              Láser
-            </TelText>
-            <TelText variant="small" color="accentSoft">
-              Receptor
-            </TelText>
-          </View>
+          <StepButton icon="plus" label="Subir el ángulo del láser" disabled={solved} onPress={() => moveTo(angle + ANGLE_STEP)} />
         </View>
-      </GameBoard>
-      <View style={styles.angleRow}>
-        <PressableScale accessibilityRole="button" accessibilityLabel="Subir el láser" disabled={Boolean(shot)} onPress={() => setAngle((value) => clamp(value - 1, -ANGLE_MAX, ANGLE_MAX))} style={styles.stepper}>
-          <TelIcon name="chevronUp" size={22} color={colors.primary} />
-        </PressableScale>
-        <View style={styles.angleValue} accessibilityLabel={`Ángulo ${angle} grados`}>
-          <TelText variant="small" color="accentSoft">
-            ÁNGULO
-          </TelText>
-          <TelText variant="title" color="cream" tabular>
-            {angle > 0 ? '+' : ''}
-            {angle.toFixed(1)}°
-          </TelText>
-        </View>
-        <PressableScale accessibilityRole="button" accessibilityLabel="Bajar el láser" disabled={Boolean(shot)} onPress={() => setAngle((value) => clamp(value + 1, -ANGLE_MAX, ANGLE_MAX))} style={styles.stepper}>
-          <TelIcon name="chevronDown" size={22} color={colors.primary} />
-        </PressableScale>
-      </View>
-      <TelButton label="Encender láser" variant="cream" icon="bolt" disabled={Boolean(shot)} onPress={fire} />
-      <Hint tone={shot ? (shot.outcome === 'delivered' ? 'good' : 'bad') : 'info'}>
-        {shot
-          ? shot.outcome === 'delivered'
-            ? `¡La luz llegó con ${shot.bounces} ${shot.bounces === 1 ? 'rebote' : 'rebotes'} dentro del núcleo!`
-            : shot.outcome === 'missed'
-              ? 'El haz no entró al núcleo de la fibra: ajusta la puntería.'
-              : 'Ángulo demasiado inclinado: la luz atravesó el revestimiento y se perdió.'
-          : 'Arrastra sobre la fibra o usa las flechas para apuntar. El haz debe entrar por el cono verde.'}
-      </Hint>
+      )}
+      <HintBox tone={hint.tone}>{hint.text}</HintBox>
     </View>
   );
 }
 
-// ——— Etapa 2: pulsos ———
+interface OpticsBoardProps {
+  size: FitSize;
+  target: LightTarget;
+  index: number;
+  angle: number;
+  solved: boolean;
+  verdict: 'ok' | 'bad' | null;
+  hold: number;
+  onAngle: (angle: number) => void;
+}
 
-const CELL = 38;
-const HIT_X = 60;
-const TRACK_H = 70;
-const LEAD_MS = 2200;
+function OpticsBoard({ size, target, index, angle, solved, verdict, hold, onAngle }: OpticsBoardProps) {
+  const scene = fitScene(size, 150, 230);
+  const layout = sceneLayout(target, scene.H);
+  const { faceX: fx, axisY: ay, orbit, length, receiverX } = layout;
+  const h = target.coreHalf;
+  const t = target.cladding;
+  const trace = traceRay({ nCore: target.nCore, nClad: target.nClad, coreHalf: h, cladding: t, length }, angle);
+  const guided = trace.outcome === 'guided';
+  const laser = laserPoint(layout, angle);
+  const grab = useRef<RayPoint>({ x: 0, y: 0 });
 
-function PulsesStage({
-  word,
-  endsAt,
-  onProgress,
-  onFinish,
-}: {
-  word: string;
-  endsAt: number;
-  onProgress: (value: { points: number; correct: number; total: number }) => void;
-  onFinish: () => void;
-}) {
-  const [bits] = useState(() => toBits(word));
-  const pace = usePace();
-  // Cada pulso dura más con un ritmo tranquilo: hay más margen para tocar a tiempo.
-  const bitMs = BIT_MS * pace;
-  const [startAt] = useState(() => gameNow() + LEAD_MS);
-  const [sent, setSent] = useState<boolean[]>(() => bits.map(() => false));
-  const [flash, setFlash] = useState(0);
-  const done = useRef(false);
-  const now = useNow(true, 90);
-  const progress = useSharedValue(0);
-  const elapsed = now - startAt;
-  const current = Math.floor(elapsed / bitMs);
-  const evaluated = clamp(current, 0, bits.length);
-  const correct = bits.slice(0, evaluated).filter((bit, index) => bit === (sent[index] ? 1 : 0)).length;
-  const received = bits.slice(0, evaluated).map((_, index) => (sent[index] ? 1 : 0));
+  // Arrastrar mueve el láser siguiendo al dedo; se proyecta sobre su arco alrededor de la fibra.
+  const handlers = usePanHandlers({
+    canStart: () => !solved,
+    onGrant: () => {
+      grab.current = laserPoint(layout, angle);
+    },
+    onMove: (_, gesture) => onAngle(elevationFromPoint(layout, grab.current.x + gesture.dx / scene.scale, grab.current.y + gesture.dy / scene.scale)),
+  });
 
-  // La cinta de pulsos sigue al reloj del juego: en pausa se detiene y al volver retoma donde iba.
-  const paused = useGamePaused();
-  useEffect(() => {
-    if (paused) {
-      cancelAnimation(progress);
+  const arcTop = laserPoint(layout, ANGLE_MAX);
+  const arcBottom = laserPoint(layout, -ANGLE_MAX);
+  const coneR = orbit * 0.94;
+  const coneX = fx - coneR * Math.cos(target.cone * DEG);
+  const coneDy = coneR * Math.sin(target.cone * DEG);
+  const toPoint = (p: RayPoint) => `${fx + p.x},${ay + p.y}`;
+  const beam = { stroke: LASER, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  const leak = trace.escape[0];
+
+  return (
+    <View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`${target.name}. Láser a ${signed(angle)} grados: ${guided ? 'la luz llega al receptor' : 'la luz se escapa'}.`}
+      style={[styles.board, { width: scene.width, height: scene.height }, NO_TOUCH]}
+      {...handlers}
+    >
+      <Svg width={scene.width} height={scene.height} viewBox={`0 0 ${SCENE_W} ${scene.H}`} pointerEvents="none">
+        <Path d={`M ${arcTop.x} ${arcTop.y} A ${orbit} ${orbit} 0 0 0 ${arcBottom.x} ${arcBottom.y}`} fill="none" stroke={colors.accentSoft} strokeOpacity={0.35} strokeWidth={2} strokeDasharray="2 6" strokeLinecap="round" />
+        <Path
+          d={`M ${fx} ${ay} L ${coneX} ${ay - coneDy} A ${coneR} ${coneR} 0 0 0 ${coneX} ${ay + coneDy} Z`}
+          fill={LIT}
+          fillOpacity={0.16}
+          stroke={LIT}
+          strokeOpacity={0.7}
+          strokeWidth={1.2}
+          strokeDasharray="4 4"
+        />
+        <Rect x={fx} y={ay - h - t} width={length} height={2 * (h + t)} rx={3} fill={CLAD} stroke={CLAD_EDGE} strokeWidth={1} />
+        <Rect x={fx} y={ay - h} width={length} height={2 * h} fill={CORE} fillOpacity={guided ? 0.5 : 0.28} />
+        <Line x1={fx} y1={ay - h - t} x2={fx} y2={ay + h + t} stroke={colors.accentSoft} strokeWidth={2} />
+        <Rect x={receiverX + 3} y={ay - 18} width={24} height={36} rx={7} fill={colors.primaryDeep} stroke={guided ? LIT : CLAD_EDGE} strokeWidth={1.5} />
+        {guided && <Circle cx={receiverX + 15} cy={ay} r={15} fill={LIT} fillOpacity={0.22} />}
+        <Circle cx={receiverX + 15} cy={ay} r={guided ? 9 : 6} fill={guided ? LIT : '#27465E'} />
+        <Rect x={receiverX + 3} y={ay + 22} width={24} height={3} rx={1.5} fill={colors.primarySoft} />
+        {hold > 0 && <Rect x={receiverX + 3} y={ay + 22} width={24 * hold} height={3} rx={1.5} fill={LIT} />}
+        <Line x1={laser.x} y1={laser.y} x2={fx} y2={ay} {...beam} strokeOpacity={0.28} strokeWidth={6} />
+        <Line x1={laser.x} y1={laser.y} x2={fx} y2={ay} {...beam} strokeWidth={2.2} />
+        <Polyline points={trace.points.map(toPoint).join(' ')} fill="none" {...beam} strokeOpacity={0.28} strokeWidth={6} />
+        <Polyline points={trace.points.map(toPoint).join(' ')} fill="none" {...beam} strokeWidth={2.2} />
+        {trace.escape.length > 2 && (
+          <>
+            <Polyline points={trace.escape.slice(0, 2).map(toPoint).join(' ')} fill="none" {...beam} strokeWidth={2.2} />
+            <Polyline points={trace.escape.slice(1).map(toPoint).join(' ')} fill="none" {...beam} strokeOpacity={0.5} strokeWidth={2} strokeDasharray="3 4" />
+          </>
+        )}
+        {trace.points.slice(1, 1 + trace.bounces).map((point, bounce) => (
+          <Circle key={bounce} cx={fx + point.x} cy={ay + point.y} r={2.8} fill={colors.cream} />
+        ))}
+        <G transform={`translate(${laser.x} ${laser.y}) rotate(${angle})`}>
+          {!solved && <Circle r={17} fill={colors.accent} fillOpacity={0.16} stroke={colors.accentSoft} strokeOpacity={0.7} strokeDasharray="3 3" />}
+          <Rect x={-17} y={-7} width={22} height={14} rx={4} fill={colors.cream} />
+          <Rect x={-17} y={-7} width={7} height={14} rx={3} fill={colors.secondary} />
+          <Circle cx={5} cy={0} r={3.2} fill={LASER} />
+        </G>
+        {verdict === 'ok' && <Badge x={receiverX + 15} y={ay - 30} ok />}
+        {verdict === 'bad' && leak && <Badge x={leak.x + fx + 6} y={ay + leak.y + Math.sign(leak.y) * 14} ok={false} />}
+      </Svg>
+      <View pointerEvents="none" style={styles.overlayTop}>
+        <TelText variant="small" color="accentSoft" align="right" maxFontSizeMultiplier={1.2}>
+          {target.name} · {index + 1} de {LIGHT_COUNT}
+        </TelText>
+        <TelText variant="label" align="right" maxFontSizeMultiplier={1.2} style={{ color: LIT }}>
+          Cono ±{fmt1(target.cone)}°
+        </TelText>
+      </View>
+      <View pointerEvents="none" style={styles.overlayBottom}>
+        <TelText variant="heading" color="cream" align="right" tabular maxFontSizeMultiplier={1.2}>
+          Ángulo {signed(angle)}°
+        </TelText>
+        <TelText variant="small" color="accentSoft" align="right" maxFontSizeMultiplier={1.2}>
+          {guided ? (trace.bounces === 1 ? '1 rebote' : `${trace.bounces} rebotes`) : 'la luz se escapa'}
+        </TelText>
+      </View>
+    </View>
+  );
+}
+
+// ——— Etapa 2: empalmar la fibra ———
+
+function SpliceStage({ plan, onProgress, onFinish }: StageProps) {
+  const [index, setIndex] = useState(0);
+  const target = plan.splices[index];
+  const [offset, setOffset] = useState(target.startOffset);
+  const [tilt, setTilt] = useState(target.startTilt);
+  const [locked, setLocked] = useState(false);
+  const [moved, setMoved] = useState(false);
+  const [done, setDone] = useState<number[]>([]);
+  const askContinue = useAskContinue();
+  const last = index + 1 >= plan.splices.length;
+  const coupling = spliceCoupling(offset, tilt, target);
+  const band = couplingBand(coupling);
+
+  function move(nextOffset: number, nextTilt: number) {
+    if (locked) return;
+    setOffset(clamp(Math.round(nextOffset), -OFFSET_MAX, OFFSET_MAX));
+    setTilt(clamp(nextTilt, -TILT_MAX, TILT_MAX));
+    setMoved(true);
+  }
+
+  function lockIn() {
+    if (locked || coupling < SPLICE_LOCK) return;
+    const next = [...done, coupling];
+    setDone(next);
+    setLocked(true);
+    onProgress({ spliceCouplings: next });
+    void feedbackSuccess();
+    if (last) askContinue(onFinish);
+  }
+
+  function nextSplice() {
+    const upcoming = plan.splices[index + 1];
+    setIndex(index + 1);
+    setOffset(upcoming.startOffset);
+    setTilt(upcoming.startTilt);
+    setLocked(false);
+    setMoved(false);
+  }
+
+  const pct = Math.round(coupling * 100);
+  let hint: { tone: Tone; text: string };
+  if (locked) hint = { tone: 'good', text: `¡Empalme fijado! Pasa el ${pct} % de la luz.` };
+  else if (band === 'ok') hint = { tone: 'good', text: '¡Ya pasa más del 90 %! Fíjalo o afina para ganar más puntos.' };
+  else if (band === 'mid') hint = { tone: 'info', text: 'Casi: sigue afinando hasta pasar el 90 %.' };
+  else if (!moved) hint = { tone: 'info', text: target.tilts ? 'Ahora también está girado: corrige la altura y el giro.' : 'Sube o baja el extremo hasta que los núcleos coincidan.' };
+  else hint = { tone: 'info', text: 'Se pierde mucha luz: los núcleos casi no se tocan.' };
+
+  return (
+    <View style={styles.stage}>
+      <FitBox>{(size) => <SpliceBoard size={size} target={target} index={index} offset={offset} tilt={tilt} locked={locked} coupling={coupling} onMove={move} />}</FitBox>
+      {!(locked && last) && (
+        <>
+          <View style={styles.controlRow}>
+            <StepButton icon="chevronUp" label="Subir el extremo" caption={target.tilts ? undefined : 'Subir'} wide disabled={locked} onPress={() => move(offset - OFFSET_STEP, tilt)} />
+            <StepButton icon="chevronDown" label="Bajar el extremo" caption={target.tilts ? undefined : 'Bajar'} wide disabled={locked} onPress={() => move(offset + OFFSET_STEP, tilt)} />
+            {target.tilts && <StepButton icon="refresh" flip label="Girar a la izquierda" wide disabled={locked} onPress={() => move(offset, tilt - TILT_STEP)} />}
+            {target.tilts && <StepButton icon="refresh" label="Girar a la derecha" wide disabled={locked} onPress={() => move(offset, tilt + TILT_STEP)} />}
+          </View>
+          {locked ? (
+            <TelButton label="Siguiente empalme" variant="cream" iconRight="arrowRight" onPress={nextSplice} />
+          ) : (
+            <TelButton label="Fijar empalme" variant={band === 'ok' ? 'success' : 'cream'} icon="check" disabled={band !== 'ok'} onPress={lockIn} />
+          )}
+        </>
+      )}
+      <HintBox tone={hint.tone}>{hint.text}</HintBox>
+    </View>
+  );
+}
+
+// Los dos núcleos vistos de frente: la luz solo pasa por la zona en que se superponen.
+function EndView({ ratio }: { ratio: number }) {
+  const r = 8;
+  const d = clamp(ratio, 0, 1) * 2 * r;
+  const half = Math.sqrt(Math.max(0, r * r - (d / 2) * (d / 2)));
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      {d < 0.05 ? (
+        <Circle cx={12} cy={12} r={r} fill={LASER} fillOpacity={0.85} />
+      ) : d < 2 * r ? (
+        <Path d={`M ${12 - half} 12 A ${r} ${r} 0 0 1 ${12 + half} 12 A ${r} ${r} 0 0 1 ${12 - half} 12 Z`} fill={LASER} fillOpacity={0.85} />
+      ) : null}
+      <Circle cx={12} cy={12 - d / 2} r={r} fill="none" stroke={colors.accentSoft} strokeWidth={1.5} />
+      <Circle cx={12} cy={12 + d / 2} r={r} fill="none" stroke={CORE} strokeWidth={1.5} />
+    </Svg>
+  );
+}
+
+interface SpliceBoardProps {
+  size: FitSize;
+  target: SpliceTarget;
+  index: number;
+  offset: number;
+  tilt: number;
+  locked: boolean;
+  coupling: number;
+  onMove: (offset: number, tilt: number) => void;
+}
+
+function SpliceBoard({ size, target, index, offset, tilt, locked, coupling, onMove }: SpliceBoardProps) {
+  const scene = fitScene(size, 150, 230);
+  const yc = scene.H / 2 + 6;
+  const r = target.coreDiameter / 2;
+  const c = target.cladding;
+  const leftEnd = 148;
+  const gap = locked ? 0 : 24;
+  const rightStart = leftEnd + gap;
+  const reach = SCENE_W - rightStart + 60;
+  const grab = useRef(0);
+
+  // Arrastrar hacia arriba o abajo mueve el extremo derecho 1:1 (el giro se ajusta con los botones).
+  const handlers = usePanHandlers({
+    canStart: () => !locked,
+    onGrant: () => {
+      grab.current = offset;
+    },
+    onMove: (_, gesture) => onMove(grab.current + gesture.dy / scene.scale, tilt),
+  });
+
+  const top = Math.max(yc - r, yc + offset - r);
+  const bottom = Math.min(yc + r, yc + offset + r);
+  const spillFrom = offset >= 0 ? yc - r : Math.max(yc + offset + r, yc - r);
+  const spillTo = offset >= 0 ? Math.min(yc + offset - r, yc + r) : yc + r;
+  const pct = Math.round(coupling * 100);
+  const meterColor = coupling >= SPLICE_LOCK ? LIT : coupling >= 0.6 ? colors.warning : colors.danger;
+
+  return (
+    <View
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`Empalme ${index + 1} de ${SPLICE_COUNT}. Pasa el ${pct} % de la luz.`}
+      style={[styles.board, { width: scene.width, height: scene.height }, NO_TOUCH]}
+      {...handlers}
+    >
+      <Svg width={scene.width} height={scene.height} viewBox={`0 0 ${SCENE_W} ${scene.H}`} pointerEvents="none">
+        <Line x1={leftEnd} y1={yc - r} x2={SCENE_W} y2={yc - r} stroke={colors.accentSoft} strokeOpacity={0.35} strokeDasharray="4 4" />
+        <Line x1={leftEnd} y1={yc + r} x2={SCENE_W} y2={yc + r} stroke={colors.accentSoft} strokeOpacity={0.35} strokeDasharray="4 4" />
+        <Rect x={-6} y={yc - r - c} width={leftEnd + 6} height={2 * (r + c)} rx={3} fill={CLAD} stroke={CLAD_EDGE} strokeWidth={1} />
+        <Rect x={-6} y={yc - r} width={leftEnd + 6} height={2 * r} fill={LASER} fillOpacity={0.5} />
+        <Line x1={-6} y1={yc} x2={leftEnd} y2={yc} stroke={LASER} strokeWidth={2.2} strokeOpacity={0.9} />
+        {gap > 0 && bottom > top && <Rect x={leftEnd} y={top} width={gap} height={bottom - top} fill={LASER} fillOpacity={0.6} />}
+        {gap > 0 && spillTo > spillFrom && <Rect x={leftEnd} y={spillFrom} width={gap * 0.6} height={spillTo - spillFrom} fill="#FFB04D" fillOpacity={0.6 * (1 - coupling)} />}
+        <G transform={`translate(${rightStart} ${yc + offset}) rotate(${tilt})`}>
+          <Rect x={0} y={-(r + c)} width={reach} height={2 * (r + c)} rx={3} fill={CLAD} stroke={CLAD_EDGE} strokeWidth={1} />
+          <Rect x={0} y={-r} width={reach} height={2 * r} fill={LASER} fillOpacity={0.12 + 0.45 * coupling} />
+          <Line x1={0} y1={0} x2={reach} y2={0} stroke={LASER} strokeWidth={2.2} strokeOpacity={coupling} />
+          {!locked && (
+            <>
+              <Polygon points="104,-16 112,-6 96,-6" fill={colors.cream} fillOpacity={0.85} />
+              <Polygon points="104,16 112,6 96,6" fill={colors.cream} fillOpacity={0.85} />
+            </>
+          )}
+        </G>
+        {locked && (
+          <>
+            <Circle cx={leftEnd} cy={yc} r={13} fill={colors.cream} fillOpacity={0.3} />
+            <Circle cx={leftEnd} cy={yc} r={5} fill={colors.cream} />
+            <Badge x={leftEnd} y={yc - r - c - 14} ok />
+          </>
+        )}
+      </Svg>
+      <View pointerEvents="none" style={styles.meter}>
+        <TelText variant="small" color="accentSoft" maxFontSizeMultiplier={1.2}>
+          Empalme {index + 1} de {SPLICE_COUNT}
+        </TelText>
+        <View style={styles.meterRow}>
+          <EndView ratio={Math.abs(offset) / target.coreDiameter} />
+          <TelText variant="heading" color="cream" tabular maxFontSizeMultiplier={1.2}>
+            Pasa {pct} %
+          </TelText>
+        </View>
+        <View style={styles.meterTrack}>
+          <View style={[styles.meterFill, { width: `${pct}%`, backgroundColor: meterColor }]} />
+          <View style={styles.meterMark} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ——— Etapa 3: enviar un mensaje con luz ———
+
+interface PulseInfo {
+  id: number;
+  bit: number;
+  ok: boolean;
+}
+
+function MessageStage({ plan, onProgress, onFinish }: StageProps) {
+  const letters = plan.word.split('');
+  const [level, setLevel] = useState(0);
+  const [received, setReceived] = useState<number[]>([]);
+  const [decoded, setDecoded] = useState('');
+  const [bitsOk, setBitsOk] = useState(0);
+  const [errors, setErrors] = useState(0);
+  const [last, setLast] = useState<{ bit: number; ok: boolean } | null>(null);
+  const [taps, setTaps] = useState(0);
+  const [pulses, setPulses] = useState<PulseInfo[]>([]);
+  const [finished, setFinished] = useState(false);
+  const [hint, setHint] = useState<{ tone: Tone; text: string }>({ tone: 'info', text: 'Mira los bits de la letra y envíalos uno por uno.' });
+  const askContinue = useAskContinue();
+  const letter = letters[level];
+  const bits = charBits(letter);
+  const cursor = received.length;
+  const failed = last !== null && !last.ok;
+
+  function send(bit: 0 | 1) {
+    if (finished) return;
+    const expected = bits[cursor];
+    const id = taps + 1;
+    setTaps(id);
+    setPulses((list) => [...list.slice(-4), { id, bit, ok: bit === expected }]);
+    if (bit !== expected) {
+      // Un bit equivocado cuenta como error y no avanza: el receptor lo descarta y hay que reenviarlo.
+      const next = errors + 1;
+      setErrors(next);
+      setLast({ bit, ok: false });
+      setHint({ tone: 'bad', text: `Ahí iba un ${expected}: ${expected === 1 ? 'luz encendida' : 'apagado'}.` });
+      onProgress({ messageErrors: next });
+      void feedbackWarning();
       return;
     }
-    const total = (bits.length + 1) * bitMs;
-    const run = () => {
-      const done = clamp(gameNow() - startAt, 0, total);
-      progress.set(done / bitMs);
-      progress.set(withTiming(bits.length + 1, { duration: total - done, easing: Easing.linear }));
-    };
-    const timer = setTimeout(run, Math.max(0, startAt - gameNow()));
-    return () => clearTimeout(timer);
-  }, [bitMs, bits.length, paused, progress, startAt]);
-
-  useEffect(() => {
-    onProgress({ points: Math.round((correct / bits.length) * PULSES_MAX), correct, total: evaluated });
-  }, [bits.length, correct, evaluated, onProgress]);
-
-  const askContinue = useAskContinue();
-  useGameTimeout(Math.min(endsAt, startAt + (bits.length + 1) * bitMs + 900), () => {
-    if (done.current) return;
-    done.current = true;
-    askContinue(onFinish, 'Ver resultado');
-  });
-
-  const trackStyle = useAnimatedStyle(() => ({ transform: [{ translateX: HIT_X - progress.value * CELL }] }));
-
-  function tap() {
-    const index = Math.floor((gameNow() - startAt) / bitMs);
-    setFlash((value) => value + 1);
-    void feedbackTap();
-    if (index < 0 || index >= bits.length || sent[index]) return;
-    setSent((current) => current.map((value, position) => (position === index ? true : value)));
+    const nextReceived = [...received, bit];
+    const nextOk = bitsOk + 1;
+    setBitsOk(nextOk);
+    setLast({ bit, ok: true });
+    onProgress({ messageBits: nextOk });
+    if (nextReceived.length < bits.length) {
+      const left = bits.length - nextReceived.length;
+      setReceived(nextReceived);
+      setHint({ tone: 'good', text: `Llegó un ${bit}. ${left === 1 ? 'Falta 1 bit.' : `Faltan ${left} bits.`}` });
+      void feedbackTap();
+      return;
+    }
+    const nextDecoded = decoded + decodeBits(nextReceived);
+    setDecoded(nextDecoded);
+    void feedbackSuccess();
+    if (level + 1 < letters.length) {
+      setLevel(level + 1);
+      setReceived([]);
+      setHint({ tone: 'good', text: `¡Llegó la ${letter}! Ahora envía la ${letters[level + 1]}.` });
+    } else {
+      setReceived(nextReceived);
+      setFinished(true);
+      setHint({ tone: 'good', text: `¡Mensaje recibido: ${nextDecoded}!` });
+      askContinue(onFinish, 'Ver resultado');
+    }
   }
 
-  const countdown = elapsed < 0 ? Math.ceil(-elapsed / 1000) : null;
-
   return (
-    <View style={styles.stageGap}>
-      <View style={styles.wordRow}>
-        {word.split('').map((character, index) => (
-          <View key={index} style={styles.letter}>
-            <TelText variant="heading" color="cream">
-              {character}
-            </TelText>
-            <TelText variant="small" color="accentSoft" style={font('bodyBold')}>
-              {character.charCodeAt(0).toString(2).padStart(8, '0')}
-            </TelText>
-          </View>
-        ))}
-      </View>
-      <GameBoard style={styles.track}>
-        <Animated.View style={[styles.cells, { width: bits.length * CELL }, trackStyle]}>
-          {bits.map((bit, index) => {
-            const past = index < evaluated;
-            const ok = past && bit === (sent[index] ? 1 : 0);
+    <View style={styles.stage}>
+      <View style={styles.scriptRow} accessible accessibilityLabel={`Letra ${letter}, bits ${bits.join(' ')}. Vas en el bit ${Math.min(cursor + 1, bits.length)} de ${bits.length}.`}>
+        <View style={styles.letterBox}>
+          <TelText variant="heading" color="primary" maxFontSizeMultiplier={1.2}>
+            {letter}
+          </TelText>
+          <TelText variant="small" color="primary" maxFontSizeMultiplier={1.2}>
+            {level + 1}/{letters.length}
+          </TelText>
+        </View>
+        <View style={styles.cells}>
+          {bits.map((bit, position) => {
+            const sent = position < cursor || finished;
+            const current = position === cursor && !finished;
             return (
-              <View key={index} style={[styles.cell, bit ? styles.cellOne : styles.cellZero, past && (ok ? styles.cellOk : styles.cellBad)]}>
-                <TelText variant="heading" color={bit ? 'primary' : 'slate'}>
+              <View key={position} style={[styles.cell, sent && styles.cellDone, current && (failed ? styles.cellBad : styles.cellNow)]}>
+                <TelText variant="heading" color={sent ? 'cream' : 'primary'} maxFontSizeMultiplier={1.1}>
                   {bit}
                 </TelText>
               </View>
             );
           })}
-        </Animated.View>
-        <View pointerEvents="none" style={styles.hitZone}>
-          <Animated.View key={flash} entering={FadeIn.duration(60)} style={[styles.beam, flash > 0 && styles.beamOn]} />
         </View>
-        {countdown !== null && (
-          <View pointerEvents="none" style={styles.countdown}>
-            <Animated.View key={countdown} entering={ZoomIn.duration(200)}>
-              <TelText variant="display" color="cream">
-                {countdown}
-              </TelText>
-            </Animated.View>
-          </View>
-        )}
-      </GameBoard>
-      <View style={styles.receiver}>
-        <TelText variant="small" color="accentSoft">
-          RECEPTOR
-        </TelText>
-        <TelText variant="label" color="cream" style={font('bodyBold')} numberOfLines={2}>
-          {received.join('') || '—'}
-        </TelText>
-        <TelText variant="heading" color="cream">
-          {decodeBits(received) || '…'}
-        </TelText>
       </View>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Enviar pulso de luz" onPressIn={tap} scaleTo={0.9} style={styles.pulseButton}>
-        <TelIcon name="bolt" size={30} color={colors.primary} />
-        <TelText variant="title" color="primary">
-          PULSO
-        </TelText>
-      </PressableScale>
+      <FitBox>{(size) => <MessageBoard size={size} received={received} letters={letters} decoded={decoded} last={last} pulses={pulses} />}</FitBox>
+      <View style={styles.controlRow}>
+        <PressableScale accessibilityRole="button" accessibilityLabel="Enviar luz: bit 1" accessibilityState={{ disabled: finished }} disabled={finished} haptic={false} onPress={() => send(1)} scaleTo={0.94} style={[styles.bitButton, styles.bitOn, finished && styles.stepOff]}>
+          <TelIcon name="bolt" size={22} color={colors.primary} strokeWidth={2.4} />
+          <TelText variant="button" color="primary" maxFontSizeMultiplier={1.3}>
+            Luz · 1
+          </TelText>
+        </PressableScale>
+        <PressableScale accessibilityRole="button" accessibilityLabel="Apagado: bit 0" accessibilityState={{ disabled: finished }} disabled={finished} haptic={false} onPress={() => send(0)} scaleTo={0.94} style={[styles.bitButton, styles.bitOff, finished && styles.stepOff]}>
+          <TelIcon name="moon" size={22} color={colors.cream} strokeWidth={2.4} />
+          <TelText variant="button" color="cream" maxFontSizeMultiplier={1.3}>
+            Apagado · 0
+          </TelText>
+        </PressableScale>
+      </View>
+      <HintBox tone={hint.tone}>{hint.text}</HintBox>
     </View>
   );
 }
 
+const PULSE_FROM = 44;
+const PULSE_TO = 218;
+
+interface MessageBoardProps {
+  size: FitSize;
+  received: number[];
+  letters: string[];
+  decoded: string;
+  last: { bit: number; ok: boolean } | null;
+  pulses: PulseInfo[];
+}
+
+// Láser a la izquierda, fibra en el medio y receptor a la derecha, que imprime los bits que le llegan.
+function MessageBoard({ size, received, letters, decoded, last, pulses }: MessageBoardProps) {
+  const motion = useMotionEnabled();
+  const scene = fitScene(size, 100, 180);
+  const ay = scene.H / 2;
+  const s = scene.scale;
+  const lit = last !== null && last.ok && last.bit === 1;
+  const failed = last !== null && !last.ok;
+  const slots = letters.map((_, position) => decoded[position] ?? '_').join(' ');
+
+  return (
+    <View
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`Receptor: bits ${received.join(' ') || 'ninguno'}. Mensaje: ${slots}.`}
+      style={[styles.board, { width: scene.width, height: scene.height }]}
+    >
+      <Svg width={scene.width} height={scene.height} viewBox={`0 0 ${SCENE_W} ${scene.H}`} pointerEvents="none">
+        <Rect x={6} y={ay - 11} width={36} height={22} rx={5} fill={colors.cream} />
+        <Rect x={6} y={ay - 11} width={10} height={22} rx={4} fill={colors.secondary} />
+        <Circle cx={42} cy={ay} r={4} fill={LASER} />
+        <Rect x={PULSE_FROM} y={ay - 14} width={PULSE_TO - PULSE_FROM + 4} height={28} rx={4} fill={CLAD} stroke={CLAD_EDGE} strokeWidth={1} />
+        <Rect x={PULSE_FROM} y={ay - 8} width={PULSE_TO - PULSE_FROM + 4} height={16} fill={CORE} fillOpacity={lit ? 0.5 : 0.25} />
+        {lit && <Line x1={PULSE_FROM} y1={ay} x2={PULSE_TO + 4} y2={ay} stroke={LASER} strokeWidth={2.2} strokeOpacity={0.9} />}
+        <Rect x={PULSE_TO + 4} y={8} width={SCENE_W - PULSE_TO - 10} height={scene.H - 16} rx={8} fill={colors.primaryDeep} stroke={failed ? colors.danger : lit ? LIT : CLAD_EDGE} strokeWidth={1.5} />
+        <Circle cx={PULSE_TO + 15} cy={20} r={5} fill={failed ? colors.danger : lit ? LIT : '#27465E'} />
+      </Svg>
+      <View pointerEvents="none" style={[styles.receiver, { left: (PULSE_TO + 8) * s, top: 8 * s, width: (SCENE_W - PULSE_TO - 18) * s, height: (scene.H - 16) * s }]}>
+        <TelText variant="small" align="center" maxFontSizeMultiplier={1.1} style={{ color: failed ? colors.dangerLight : colors.accentSoft }}>
+          {failed && last ? `ERROR: llegó un ${last.bit}` : 'RECIBIDO'}
+        </TelText>
+        <TelText variant="caption" color="cream" align="center" tabular numberOfLines={1} maxFontSizeMultiplier={1.1}>
+          {received.length ? groupBits(received) : '—'}
+        </TelText>
+        <TelText variant="heading" color="cream" align="center" numberOfLines={1} maxFontSizeMultiplier={1.1}>
+          {slots}
+        </TelText>
+      </View>
+      {motion && (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          {pulses.map((pulse) => (
+            <Pulse key={pulse.id} bit={pulse.bit} ok={pulse.ok} from={PULSE_FROM * s} to={PULSE_TO * s} y={ay * s} r={7 * s} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Pulso decorativo que viaja por la fibra: brillante para un 1, un anillo tenue para un 0.
+function Pulse({ bit, ok, from, to, y, r }: { bit: number; ok: boolean; from: number; to: number; y: number; r: number }): ReactNode {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.set(withTiming(1, { duration: PULSE_MS, easing: Easing.out(Easing.quad) }));
+  }, [progress]);
+  const animated = useAnimatedStyle(() => ({
+    opacity: progress.value < 0.8 ? 1 : (1 - progress.value) * 5,
+    transform: [{ translateX: progress.value * (to - from) }],
+  }));
+  return <Animated.View style={[styles.pulse, bit === 1 ? styles.pulseOn : styles.pulseOff, !ok && styles.pulseBad, { left: from - r, top: y - r, width: 2 * r, height: 2 * r, borderRadius: r }, animated]} />;
+}
+
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-    minHeight: 480,
+  flex: {
+    flex: 1,
   },
-  bannerSpace: {
-    height: 420,
-  },
-  stageGap: {
+  root: {
+    flex: 1,
     gap: spacing.sm,
   },
-  fiberLabels: {
-    position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  stage: {
+    flex: 1,
+    minHeight: 0,
+    gap: spacing.sm,
   },
-  angleRow: {
+  summaryScroll: {
+    flexGrow: 1,
+    paddingBottom: spacing.sm,
+  },
+  board: {
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(18, 61, 92, 0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 212, 237, 0.2)',
+    overflow: 'hidden',
+  },
+  overlayTop: {
+    position: 'absolute',
+    right: 8,
+    top: 6,
+    alignItems: 'flex-end',
+  },
+  overlayBottom: {
+    position: 'absolute',
+    right: 8,
+    bottom: 6,
+    alignItems: 'flex-end',
+  },
+  controlRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
+    gap: spacing.xs,
   },
-  stepper: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+  step: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.md,
     backgroundColor: colors.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  angleValue: {
-    minWidth: 110,
-    alignItems: 'center',
-  },
-  wordRow: {
+  stepWide: {
+    flex: 1,
+    height: 48,
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: 6,
+    borderRadius: radius.md,
+    backgroundColor: colors.cream,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  letter: {
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
+  stepOff: {
+    opacity: 0.4,
   },
-  track: {
-    height: TRACK_H,
+  flip: {
+    transform: [{ scaleX: -1 }],
+  },
+  hintBox: {
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  meter: {
+    position: 'absolute',
+    left: 8,
+    top: 6,
+    width: '46%',
+    gap: 2,
+  },
+  meterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  meterTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.primarySoft,
+    overflow: 'hidden',
+  },
+  meterFill: {
+    height: 5,
+  },
+  meterMark: {
+    position: 'absolute',
+    left: '90%',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: colors.cream,
+  },
+  scriptRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 6,
+    padding: 6,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(7, 31, 49, 0.6)',
+  },
+  letterBox: {
+    width: 40,
+    borderRadius: 10,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   cells: {
+    flex: 1,
     flexDirection: 'row',
-    position: 'absolute',
-    left: 0,
-    top: (TRACK_H - 50) / 2,
+    gap: 4,
   },
   cell: {
-    width: CELL - 4,
-    height: 50,
-    marginRight: 4,
+    flex: 1,
+    height: 44,
     borderRadius: 10,
+    backgroundColor: colors.cream,
+    borderWidth: 3,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellOne: {
-    backgroundColor: colors.cream,
+  cellDone: {
+    backgroundColor: '#1F5E43',
   },
-  cellZero: {
-    backgroundColor: colors.primary,
-    borderWidth: 1,
-    borderColor: 'rgba(167,212,237,0.25)',
-  },
-  cellOk: {
-    opacity: 0.45,
+  cellNow: {
+    borderColor: ACCENT,
   },
   cellBad: {
-    backgroundColor: colors.danger,
-  },
-  hitZone: {
-    position: 'absolute',
-    left: HIT_X - 3,
-    top: 4,
-    bottom: 4,
-    width: CELL + 2,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: LASER_RED,
-    overflow: 'hidden',
-  },
-  beam: {
-    flex: 1,
-  },
-  beamOn: {
-    backgroundColor: 'rgba(255, 90, 90, 0.35)',
-  },
-  countdown: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(7,31,49,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.danger,
+    backgroundColor: '#FBE2E2',
   },
   receiver: {
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(7,31,49,0.6)',
-    gap: 2,
-    alignItems: 'center',
-  },
-  pulseButton: {
-    height: 88,
-    borderRadius: radius.xl,
-    backgroundColor: LASER_RED,
-    flexDirection: 'row',
+    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    boxShadow: '0px 0px 24px rgba(255, 90, 90, 0.55)',
+    gap: 2,
+  },
+  bitButton: {
+    flex: 1,
+    height: 60,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  bitOn: {
+    backgroundColor: LASER,
+  },
+  bitOff: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: 'rgba(167, 212, 237, 0.55)',
+  },
+  pulse: {
+    position: 'absolute',
+  },
+  pulseOn: {
+    backgroundColor: LASER,
+    boxShadow: '0px 0px 10px rgba(255, 90, 90, 0.9)',
+  },
+  pulseOff: {
+    borderWidth: 2,
+    borderColor: 'rgba(167, 212, 237, 0.7)',
+  },
+  pulseBad: {
+    borderColor: colors.danger,
   },
 });
-

@@ -6,6 +6,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
 import { colors, monoFamily, radius, spacing } from '@/theme';
 import { passwordLevelLabels, passwordStrength, shuffle } from '../logic';
+import { GameFrame, useGameDensity } from '../parts';
 import type { MicroGameProps } from '../types';
 
 type ChipKind = 'word' | 'number' | 'symbol' | 'bad';
@@ -24,10 +25,12 @@ const meterColors = [colors.danger, colors.warning, colors.accent, '#6BC59A'];
 
 // Microjuego 12: arma una contraseña con palabras al azar hasta llegar a «Muy fuerte».
 export function PasswordStrongGame({ active, onAnswer }: MicroGameProps) {
+  const compact = useGameDensity() === 'compact';
+  // Nueve piezas (cuatro palabras bastan para llegar a «Muy fuerte»): caben en tres filas sin salirse de la pantalla.
   const chips = useMemo<Chip[]>(() => {
-    const words = shuffle(WORDS).slice(0, 5).map((text) => ({ id: `w-${text}`, text, kind: 'word' as const }));
+    const words = shuffle(WORDS).slice(0, 4).map((text) => ({ id: `w-${text}`, text, kind: 'word' as const }));
     const numbers = shuffle(NUMBERS).slice(0, 2).map((text) => ({ id: `n-${text}`, text, kind: 'number' as const }));
-    const symbols = shuffle(SYMBOLS).slice(0, 2).map((text) => ({ id: `s-${text}`, text, kind: 'symbol' as const }));
+    const symbols = shuffle(SYMBOLS).slice(0, 1).map((text) => ({ id: `s-${text}`, text, kind: 'symbol' as const }));
     const bad = shuffle(BAD).slice(0, 2).map((text) => ({ id: `b-${text}`, text, kind: 'bad' as const }));
     return shuffle([...words, ...numbers, ...symbols, ...bad]);
   }, []);
@@ -62,14 +65,14 @@ export function PasswordStrongGame({ active, onAnswer }: MicroGameProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <View style={styles.field} accessibilityLabel={`Contraseña: ${password || 'vacía'}`}>
         <TelIcon name="key" size={20} color={colors.accent} />
         <TelText style={[styles.password, !password && styles.placeholder]} numberOfLines={2}>
           {password || 'toca las piezas…'}
         </TelText>
-        <PressableScale accessibilityRole="button" accessibilityLabel="Borrar última pieza" onPress={undo} disabled={used.length === 0} hitSlop={8}>
-          <TelIcon name="arrowLeft" size={20} color={used.length ? colors.cream : colors.slate} />
+        <PressableScale accessibilityRole="button" accessibilityLabel="Borrar última pieza" onPress={undo} disabled={used.length === 0} hitSlop={8} style={styles.undo}>
+          <TelIcon name="arrowLeft" size={22} color={used.length ? colors.cream : colors.slate} />
         </PressableScale>
       </View>
       <View style={styles.meter} accessibilityLabel={`Seguridad: ${passwordLevelLabels[level]}`}>
@@ -100,23 +103,24 @@ export function PasswordStrongGame({ active, onAnswer }: MicroGameProps) {
           );
         })}
       </View>
-      <TelText variant="caption" color={blocked ? 'dangerSoft' : 'accentSoft'} align="center">
-        {blocked ? `«${blocked}» está en todas las listas de ataque.` : 'Largo y al azar le gana a corto y con símbolos.'}
-      </TelText>
-    </View>
+      {!compact && (
+        <TelText variant="caption" color={blocked ? 'dangerSoft' : 'accentSoft'} align="center">
+          {blocked ? `«${blocked}» está en todas las listas de ataque.` : 'Largo y al azar le gana a corto y con símbolos.'}
+        </TelText>
+      )}
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.sm,
-  },
+  // Alto fijo (dos líneas de texto): al crecer la contraseña el resto no se mueve.
   field: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 60,
-    paddingHorizontal: spacing.md,
+    height: 60,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs,
     borderRadius: radius.md,
     backgroundColor: '#051524',
     borderWidth: 1.5,
@@ -125,12 +129,19 @@ const styles = StyleSheet.create({
   password: {
     flex: 1,
     fontFamily: monoFamily,
-    fontSize: 17,
+    fontSize: 16,
+    lineHeight: 20,
     color: colors.cream,
   },
   placeholder: {
     color: colors.slate,
     fontStyle: 'italic',
+  },
+  undo: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   meter: {
     flexDirection: 'row',
@@ -154,7 +165,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chip: {
-    minHeight: 46,
+    minHeight: 44,
     minWidth: 64,
     paddingHorizontal: 14,
     borderRadius: radius.pill,

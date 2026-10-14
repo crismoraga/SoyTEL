@@ -5,10 +5,14 @@ import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
 import { colors, font, radius, spacing } from '@/theme';
 import { binaryRound, bitsValue } from '../logic';
+import { GameFrame, useGameDensity } from '../parts';
 import type { MicroGameProps } from '../types';
+
+const BIT_HEIGHT = { compact: 72, regular: 88, roomy: 104 } as const;
 
 // Microjuego 13: enciende los bits que suman el número pedido (8 + 4 + 2 + 1).
 export function BinaryBitsGame({ active, level, onAnswer }: MicroGameProps) {
+  const density = useGameDensity();
   const [round] = useState(() => binaryRound(Math.random, level >= 3 ? 5 : 4));
   const [flags, setFlags] = useState<boolean[]>(() => Array.from({ length: round.bits }, () => false));
   const [taps, setTaps] = useState(0);
@@ -31,7 +35,7 @@ export function BinaryBitsGame({ active, level, onAnswer }: MicroGameProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame style={styles.container}>
       <View style={styles.target} accessibilityLabel={`Forma el número ${round.target}`}>
         <TelText variant="small" color="accentSoft">
           FORMA EL NÚMERO
@@ -51,7 +55,7 @@ export function BinaryBitsGame({ active, level, onAnswer }: MicroGameProps) {
               accessibilityLabel={`Bit de valor ${weight}`}
               onPress={() => toggle(index)}
               scaleTo={0.9}
-              style={[styles.bit, on && styles.bitOn]}
+              style={[styles.bit, { height: BIT_HEIGHT[density] }, on && styles.bitOn]}
             >
               <TelText variant="title" style={[font('display'), { color: on ? colors.primary : colors.slate }]}>
                 {on ? '1' : '0'}
@@ -71,13 +75,12 @@ export function BinaryBitsGame({ active, level, onAnswer }: MicroGameProps) {
       <TelText variant="caption" color="accentSoft" align="center">
         Cada bit encendido suma su valor: {Array.from({ length: round.bits }, (_, index) => 2 ** (round.bits - 1 - index)).join(' + ')}.
       </TelText>
-    </View>
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.md,
     alignItems: 'center',
   },
   target: {
@@ -90,7 +93,6 @@ const styles = StyleSheet.create({
   },
   bit: {
     flex: 1,
-    minHeight: 92,
     borderRadius: radius.lg,
     borderWidth: 2,
     borderColor: 'rgba(167, 212, 237, 0.3)',

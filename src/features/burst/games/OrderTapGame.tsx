@@ -5,6 +5,7 @@ import { TelText } from '@/components/TelText';
 import { feedbackTap } from '@/lib/feedback';
 import { colors, radius, spacing } from '@/theme';
 import { dataUnits, orderRound, tcpIpStack, type OrderItem } from '../logic';
+import { GameFrame, useGameDensity } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface OrderConfig {
@@ -15,8 +16,11 @@ interface OrderConfig {
   to: string;
 }
 
+const TILE_HEIGHT = { compact: 60, regular: 72, roomy: 88 } as const;
+
 // Microjuegos de ordenar: se tocan las piezas de menor a mayor (o de abajo hacia arriba).
 function OrderTapGame({ config, active, level, onAnswer }: MicroGameProps & { config: OrderConfig }) {
+  const density = useGameDensity();
   const [round] = useState(() => orderRound(config.items, config.count(level)));
   const [placed, setPlaced] = useState<string[]>([]);
   const [wrong, setWrong] = useState<string | null>(null);
@@ -41,7 +45,7 @@ function OrderTapGame({ config, active, level, onAnswer }: MicroGameProps & { co
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <TelText variant="subtitle" color="cream" align="center">
         {config.prompt}
       </TelText>
@@ -62,7 +66,7 @@ function OrderTapGame({ config, active, level, onAnswer }: MicroGameProps & { co
           {config.to}
         </TelText>
       </View>
-      <View style={styles.grid}>
+      <View style={[styles.grid, density === 'compact' && styles.gridCompact]}>
         {round.shuffled.map((item) => {
           const order = placed.indexOf(item.id);
           const isPlaced = order >= 0;
@@ -75,7 +79,7 @@ function OrderTapGame({ config, active, level, onAnswer }: MicroGameProps & { co
               disabled={!active || isPlaced}
               onPress={() => tap(item)}
               scaleTo={0.94}
-              style={[styles.tile, isPlaced && styles.tileDone, isWrong && styles.tileWrong]}
+              style={[styles.tile, { minHeight: TILE_HEIGHT[density] }, isPlaced && styles.tileDone, isWrong && styles.tileWrong]}
             >
               {isPlaced && (
                 <View style={styles.badge}>
@@ -94,7 +98,7 @@ function OrderTapGame({ config, active, level, onAnswer }: MicroGameProps & { co
           );
         })}
       </View>
-    </View>
+    </GameFrame>
   );
 }
 
@@ -125,9 +129,6 @@ export function UnitOrderGame(props: MicroGameProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
   scale: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -159,10 +160,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  gridCompact: {
+    gap: spacing.xs,
+  },
   tile: {
     flexBasis: '47%',
     flexGrow: 1,
-    minHeight: 84,
     borderRadius: radius.lg,
     borderWidth: 1.5,
     borderColor: 'rgba(167, 212, 237, 0.3)',
@@ -170,7 +173,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    padding: spacing.sm,
+    padding: spacing.xs,
   },
   tileDone: {
     borderColor: 'rgba(167, 212, 237, 0.12)',
@@ -182,8 +185,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
+    top: 6,
+    left: 6,
     width: 24,
     height: 24,
     borderRadius: 12,

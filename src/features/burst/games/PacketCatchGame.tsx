@@ -1,11 +1,13 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming, ZoomOut } from 'react-native-reanimated';
+import { FitBox } from '@/components/FitBox';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess } from '@/lib/feedback';
 import { colors, radius, spacing } from '@/theme';
 import { createPacketBag, PACKETS_NEEDED } from '../packets';
+import { GameFrame } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface Falling {
@@ -15,14 +17,12 @@ interface Falling {
   duration: number;
 }
 
-const HEIGHT = 320;
 const SIZE = 56;
 const LANES = 4;
 const NEED = PACKETS_NEEDED;
 
 // Microjuego 10: caen paquetes; atrapa los sanos y no toques los infectados.
 export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProps) {
-  const [width, setWidth] = useState(300);
   const [packets, setPackets] = useState<Falling[]>([]);
   const [caught, setCaught] = useState(0);
   const done = useRef(false);
@@ -73,14 +73,8 @@ export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProp
     }
   }
 
-  function onLayout(event: LayoutChangeEvent) {
-    setWidth(event.nativeEvent.layout.width);
-  }
-
-  const laneWidth = width / LANES;
-
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <View style={styles.counter} accessibilityLabel={`${caught} de ${NEED} paquetes atrapados`}>
         {Array.from({ length: NEED }, (_, index) => (
           <View key={index} style={[styles.slot, index < caught && styles.slotOn]}>
@@ -88,14 +82,21 @@ export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProp
           </View>
         ))}
       </View>
-      <View style={styles.field} onLayout={onLayout}>
-        {Array.from({ length: LANES - 1 }, (_, index) => (
-          <View key={index} style={[styles.laneLine, { left: laneWidth * (index + 1) }]} />
-        ))}
-        {packets.map((packet) => (
-          <FallingPacket key={packet.id} packet={packet} left={packet.lane * laneWidth + (laneWidth - SIZE) / 2} onPress={() => catchPacket(packet)} />
-        ))}
-      </View>
+      <FitBox maxWidth={440} maxHeight={440}>
+        {({ width, height }) => {
+          const laneWidth = width / LANES;
+          return (
+            <View style={styles.field}>
+              {Array.from({ length: LANES - 1 }, (_, index) => (
+                <View key={index} style={[styles.laneLine, { left: laneWidth * (index + 1) }]} />
+              ))}
+              {packets.map((packet) => (
+                <FallingPacket key={packet.id} packet={packet} height={height} left={packet.lane * laneWidth + (laneWidth - SIZE) / 2} onPress={() => catchPacket(packet)} />
+              ))}
+            </View>
+          );
+        }}
+      </FitBox>
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.mini, styles.good]}>
@@ -114,15 +115,16 @@ export function PacketCatchGame({ active, level, pace, onAnswer }: MicroGameProp
           </TelText>
         </View>
       </View>
-    </View>
+    </GameFrame>
   );
 }
 
-const FallingPacket = memo(function FallingPacket({ packet, left, onPress }: { packet: Falling; left: number; onPress: () => void }) {
+// El paquete cae hasta el fondo del campo, sea cual sea su alto en este teléfono.
+const FallingPacket = memo(function FallingPacket({ packet, height, left, onPress }: { packet: Falling; height: number; left: number; onPress: () => void }) {
   const drop = useSharedValue(-SIZE);
   useEffect(() => {
-    drop.value = withTiming(HEIGHT, { duration: packet.duration, easing: Easing.linear });
-  }, [drop, packet.duration]);
+    drop.value = withTiming(height, { duration: packet.duration, easing: Easing.linear });
+  }, [drop, height, packet.duration]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: drop.value }] }));
   return (
     <Animated.View exiting={ZoomOut.duration(160)} style={[styles.packetWrap, { left }, style]}>
@@ -140,9 +142,6 @@ const FallingPacket = memo(function FallingPacket({ packet, left, onPress }: { p
 });
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.sm,
-  },
   counter: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -160,7 +159,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   field: {
-    height: HEIGHT,
+    flex: 1,
     borderRadius: radius.lg,
     backgroundColor: 'rgba(5, 21, 36, 0.55)',
     borderWidth: 1,

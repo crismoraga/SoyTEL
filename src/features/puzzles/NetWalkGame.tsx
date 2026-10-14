@@ -73,7 +73,7 @@ const NetTile = memo(function NetTile({ mask, turns, powered, kind, size, left, 
 
 // Desafío "Conecta la red": gira las piezas hasta que la señal del servidor llegue a todos los equipos.
 export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [puzzle] = useState(() => createNetPuzzle(level, mulberry32(seed)));
   const [turns, setTurns] = useState(puzzle.turns);
   const [moves, setMoves] = useState(0);
@@ -84,7 +84,8 @@ export function NetWalkGame({ level, seed, onSolved, say }: PuzzleGameProps) {
   const done = useRef(false);
   const optimal = minimalMoves(puzzle);
   // Celdas de tamaño entero y posición absoluta: sin saltos de línea por redondeo.
-  const cell = Math.floor((Math.min(width - spacing.md * 2, 440) - 2) / puzzle.size);
+  // El tablero nunca es más alto que la ventana (menos las cifras y los botones): así se ve entero en un teléfono apaisado.
+  const cell = Math.floor((Math.min(width - spacing.md * 2, 440, Math.max(puzzle.size * 44, height - 150)) - 2) / puzzle.size);
   const board = cell * puzzle.size + 2;
   const masks = currentMasks(puzzle, turns);
   const powered = poweredCells(puzzle.size, puzzle.server, masks);

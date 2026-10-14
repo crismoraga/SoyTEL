@@ -95,7 +95,7 @@ export default function RunnerScreen() {
 
   if (phase === 'playing') {
     return (
-      <Screen tone="dark" backdrop="stars" scroll={false} contentStyle={styles.playContent}>
+      <Screen tone="dark" backdrop="stars" scroll={false} tight contentStyle={styles.playContent}>
         <RunnerGame key={run.key} character={selected} pace={pace} seed={run.seed} coach={coach} onFinish={onFinish} onLeave={leave} />
       </Screen>
     );
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   playContent: {
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
   },
   kicker: {
     letterSpacing: 1.2,

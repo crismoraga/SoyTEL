@@ -59,6 +59,17 @@ export const puzzles: PuzzleInfo[] = [
     maxLevel: 6,
     levelName: (level) => (level <= 2 ? 'Palabras' : 'Frases'),
   },
+  {
+    id: 'paquete',
+    title: 'Ruta del paquete',
+    subtitle: 'Lleva el paquete del 1 al último punto pasando por todas las casillas.',
+    how: 'Arrastra el dedo desde el paquete hacia las casillas de al lado. Pasa por los números en orden y sin repetir casillas.',
+    learned: 'Un paquete llega a su destino saltando por varios routers, uno tras otro: cada router mira la dirección de destino y elige el siguiente salto.',
+    icon: 'route',
+    color: '#6FB3D9',
+    maxLevel: 6,
+    levelName: (level) => (level <= 1 ? '4×4' : level === 2 ? '5×5' : level === 3 ? '6×6' : '7×7'),
+  },
 ];
 
 export function getPuzzle(id: string): PuzzleInfo | undefined {

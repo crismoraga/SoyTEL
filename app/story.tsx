@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
@@ -11,7 +11,7 @@ import { Medallion } from '@/components/graphics/Medallion';
 import { Rutix } from '@/components/graphics/Rutix';
 import { PressableScale } from '@/components/PressableScale';
 import { FeedbackPanel, OptionButton, type OptionState } from '@/components/Quiz';
-import { Screen, ScreenFooter } from '@/components/Screen';
+import { Screen, ScreenBar, ScreenFooter } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
@@ -341,24 +341,35 @@ function DialogueView({ chapter, line, onNext, onBack }: { chapter: StoryChapter
   const current = chapter.dialogue[line];
   const { shown, done, finish } = useTypewriter(current.text);
   const last = line + 1 >= chapter.dialogue.length;
+  // Rutix ocupa lo que sobra entre la cabecera y el globo de diálogo (nunca empuja el botón fuera de la pantalla).
+  const [stage, setStage] = useState(0);
+  const rutixSize = stage > 0 ? Math.max(80, Math.min(220, stage - 8)) : 140;
+
+  function onStageLayout(event: LayoutChangeEvent) {
+    const next = Math.round(event.nativeEvent.layout.height);
+    setStage((previous) => (Math.abs(previous - next) < 2 ? previous : next));
+  }
 
   return (
     <Screen
       tone="dark"
       backdrop="stars"
       scroll={false}
-      header={<AppHeader transparent onBack={onBack} kicker={`Capítulo ${chapter.number} · ${chapter.location}`} title={chapter.title} compact />}
+      tight
+      header={<ScreenBar onBack={onBack} kicker={`Capítulo ${chapter.number} · ${chapter.location}`} title={chapter.title} />}
       contentStyle={styles.dialogue}
     >
-      <View style={styles.dialogueStage}>
-        <Rutix size={220} expression={current.mood} pose={current.mood === 'happy' ? 'wave' : current.mood === 'think' ? 'think' : 'idle'} />
+      <View style={styles.dialogueStage} onLayout={onStageLayout}>
+        <Rutix size={rutixSize} expression={current.mood} pose={current.mood === 'happy' ? 'wave' : current.mood === 'think' ? 'think' : 'idle'} />
       </View>
       <Animated.View key={line} entering={entering.fadeUp()} style={styles.speech}>
         <TelText variant="small" color="secondary" style={styles.kicker}>
           RUTIX
         </TelText>
-        <TelText variant="bodyStrong" color="primary" style={styles.speechText} accessibilityLiveRegion="polite">
+        {/* El texto completo ya ocupa su lugar (lo que falta por escribir es transparente): el globo no crece mientras se escribe. */}
+        <TelText variant="bodyStrong" color="primary" style={styles.speechText} accessibilityLiveRegion="polite" accessibilityLabel={current.text}>
           {shown}
+          <Text style={styles.speechPending}>{current.text.slice(shown.length)}</Text>
         </TelText>
       </Animated.View>
       <View style={styles.dots}>
@@ -464,6 +475,7 @@ const styles = StyleSheet.create({
   },
   dialogueStage: {
     flex: 1,
+    minHeight: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -472,11 +484,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     gap: 4,
-    minHeight: 110,
   },
   speechText: {
     fontSize: 17,
     lineHeight: 25,
+  },
+  speechPending: {
+    color: 'transparent',
   },
   dots: {
     flexDirection: 'row',

@@ -85,8 +85,9 @@ const head = `
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <style id="soytel-web">
       html, body { background: #0B2D45; overscroll-behavior: none; }
+      @supports (height: 100dvh) { html, body { height: 100dvh; } }
       body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
-      #root { min-height: 100dvh; }
+      #root { height: 100%; min-height: 0; }
     </style>
 `;
 

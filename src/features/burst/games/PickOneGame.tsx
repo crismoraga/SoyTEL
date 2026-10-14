@@ -6,6 +6,7 @@ import { TelText } from '@/components/TelText';
 import { colors, monoFamily, radius, spacing } from '@/theme';
 import { acronymRound, deviceRound, portRound, wifiRound, type ConceptRound } from '../concepts';
 import { fastRouteRound, ipRound, urlRound } from '../logic';
+import { GameFrame, useGameDensity } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface PickOption {
@@ -24,8 +25,11 @@ interface PickRound {
   footer?: string;
 }
 
+const ROW_HEIGHT = { compact: 50, regular: 56, roomy: 64 } as const;
+
 // Microjuegos de "elige la correcta" con opciones en lista (textos largos como direcciones o URL).
 function PickOneGame({ build, active, level, onAnswer }: MicroGameProps & { build: (level: number) => PickRound }) {
+  const density = useGameDensity();
   const [round] = useState(() => build(level));
   const [chosen, setChosen] = useState<string | null>(null);
 
@@ -37,11 +41,11 @@ function PickOneGame({ build, active, level, onAnswer }: MicroGameProps & { buil
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <TelText variant="subtitle" color="cream" align="center">
         {round.prompt}
       </TelText>
-      <View style={styles.list}>
+      <View style={[styles.list, density === 'compact' && styles.listCompact]}>
         {round.options.map((option) => {
           const revealed = Boolean(chosen);
           const right = revealed && option.correct;
@@ -55,7 +59,7 @@ function PickOneGame({ build, active, level, onAnswer }: MicroGameProps & { buil
               haptic
               onPress={() => choose(option)}
               scaleTo={0.97}
-              style={[styles.row, right && styles.rowRight, wrong && styles.rowWrong, revealed && !right && !wrong && styles.rowDim]}
+              style={[styles.row, { minHeight: ROW_HEIGHT[density] }, right && styles.rowRight, wrong && styles.rowWrong, revealed && !right && !wrong && styles.rowDim]}
             >
               <View style={styles.flex}>
                 <TelText variant="label" color="cream" style={round.mono ? styles.mono : undefined}>
@@ -78,12 +82,12 @@ function PickOneGame({ build, active, level, onAnswer }: MicroGameProps & { buil
           );
         })}
       </View>
-      {round.footer && (
+      {round.footer && density !== 'compact' && (
         <TelText variant="caption" color="accentSoft" align="center">
           {round.footer}
         </TelText>
       )}
-    </View>
+    </GameFrame>
   );
 }
 
@@ -154,11 +158,11 @@ export const WifiSafeGame = conceptGame(() => wifiRound());
 export const AcronymGame = conceptGame(() => acronymRound());
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
   list: {
     gap: spacing.xs,
+  },
+  listCompact: {
+    gap: 6,
   },
   flex: {
     flex: 1,
@@ -168,8 +172,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    minHeight: 58,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1.5,
