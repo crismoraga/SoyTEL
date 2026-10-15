@@ -250,7 +250,8 @@ describe('REL-02 / REL-08 · publicación', () => {
   it('una copia recién clonada comprueba los tipos igual que el equipo de desarrollo', () => {
     // `expo-env.d.ts` lo genera `expo start` y no viaja en el repositorio: los tipos globales de Expo
     // tienen que venir de un archivo que sí viaja (sin él, CI ve `process.env` como `any`).
-    expect(read('.gitignore')).toMatch(/^expo-env\.d\.ts\r?$/m);
+    // Vercel compila sin .gitignore (no se sube): ahí solo se comprueba el archivo de tipos.
+    if (fs.existsSync(path.join(root, '.gitignore'))) expect(read('.gitignore')).toMatch(/^expo-env\.d\.ts\r?$/m);
     expect(read('src/types/expo.d.ts')).toContain('/// <reference types="expo/types" />');
   });
 
