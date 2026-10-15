@@ -6,6 +6,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { formatNumber } from '@/lib/format';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { answerStyles } from '@/route/content';
 import type { PublicPlayer, PublicQuiz } from '@/route/types';
 import { colors, radius, spacing } from '@/theme';
@@ -37,6 +38,8 @@ interface QuestionProps {
 
 // Pregunta en vivo estilo Kahoot: mientras más rápido respondes, más puntos.
 export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount, onAnswer, note = null, large = false }: QuestionProps) {
+  const { isDesktop } = useDesktopLayout();
+  const desktopPlayer = isDesktop && Boolean(onAnswer);
   const waiting = hostNow < quiz.startsAt;
   const total = quiz.endsAt - quiz.startsAt;
   const left = Math.max(0, quiz.endsAt - hostNow);
@@ -55,7 +58,7 @@ export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount
         </View>
       </View>
       <ProgressBar progress={waiting ? 1 : left / total} color={seconds <= 5 ? colors.danger : colors.accent} trackColor={colors.primarySoft} height={6} />
-      <Animated.View key={quiz.question.id} entering={FadeInDown.duration(260)} style={styles.prompt}>
+      <Animated.View key={quiz.question.id} entering={FadeInDown.duration(260)} style={[styles.prompt, desktopPlayer && styles.desktopPrompt]}>
         <TelText variant={large ? 'title' : 'heading'} color="primary" align="center">
           {quiz.question.prompt}
         </TelText>
@@ -67,7 +70,7 @@ export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount
           </TelText>
         </Animated.View>
       ) : (
-        <View style={styles.options}>
+        <View style={[styles.options, desktopPlayer && styles.desktopOptions]}>
           {quiz.question.options.map((option, index) => {
             const style = answerStyles[index];
             const dim = chosen !== null && chosen !== index;
@@ -81,7 +84,7 @@ export function QuizQuestion({ quiz, hostNow, chosen, answeredCount, playerCount
                 onPress={() => onAnswer?.(index)}
                 scaleTo={0.94}
                 haptic
-                style={[styles.option, { backgroundColor: style.color }, dim && styles.optionDim, chosen === index && styles.optionChosen, large && styles.optionLarge]}
+                style={[styles.option, { backgroundColor: style.color }, dim && styles.optionDim, chosen === index && styles.optionChosen, large && styles.optionLarge, desktopPlayer && styles.desktopOption]}
               >
                 <AnswerShape index={index} size={large ? 30 : 22} />
                 <TelText variant={large ? 'heading' : 'label'} color="white" style={styles.flex}>
@@ -209,6 +212,21 @@ const styles = StyleSheet.create({
   },
   options: {
     gap: spacing.sm,
+  },
+  desktopPrompt: {
+    padding: spacing.lg,
+    minHeight: spacing.xxl * 3,
+  },
+  desktopOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  desktopOption: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: spacing.xxl * 2,
+    padding: spacing.lg,
   },
   option: {
     flexDirection: 'row',

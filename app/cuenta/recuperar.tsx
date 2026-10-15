@@ -56,7 +56,7 @@ export default function RecoverScreen() {
 
   if (player) {
     return (
-      <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
+      <Screen desktopWidth="form" tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
         <View style={styles.done}>
           <Rutix size={130} expression="happy" pose="wave" />
           <UserAvatar avatar={player.avatar} size={72} />
@@ -73,7 +73,7 @@ export default function RecoverScreen() {
   }
 
   return (
-    <Screen keyboard header={<AppHeader onBack={leave} kicker="Ya tengo cuenta" title="Entra con tu código" subtitle="El código de recuperación que te mostró la app al crear tu cuenta." />}>
+    <Screen desktopWidth="form" keyboard header={<AppHeader onBack={leave} kicker="Ya tengo cuenta" title="Entra con tu código" subtitle="El código de recuperación que te mostró la app al crear tu cuenta." />}>
       <TelCard style={styles.card}>
         <TelText variant="label" color="ink" nativeID="recovery-code">
           Código de recuperación

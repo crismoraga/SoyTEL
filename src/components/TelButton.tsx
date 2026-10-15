@@ -1,5 +1,7 @@
 import { StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { colors, radius, spacing, type ColorToken } from '@/theme';
+import { desktopLayout } from '@/theme/desktop';
 import { DotsLoader } from './feedback/Loaders';
 import { PressableScale } from './PressableScale';
 import { TelIcon, type IconName } from './TelIcon';
@@ -70,6 +72,7 @@ export function TelButton({
   accessibilityLabel,
   ...props
 }: TelButtonProps) {
+  const desktop = useDesktopLayout();
   const isDisabled = Boolean(disabled) || loading;
   const palette = variantColors[variant];
   const metrics = sizes[size];
@@ -95,6 +98,7 @@ export function TelButton({
           borderWidth: palette.border ? 1.5 : 0,
         },
         fullWidth && styles.fullWidth,
+        desktop.isDesktop && fullWidth && styles.desktopFullWidth,
         isDisabled && !filled && styles.disabledOutline,
         style,
       ]}
@@ -122,6 +126,11 @@ const styles = StyleSheet.create({
   },
   fullWidth: {
     alignSelf: 'stretch',
+  },
+  desktopFullWidth: {
+    width: '100%',
+    maxWidth: desktopLayout.buttonWidth,
+    alignSelf: 'center',
   },
   content: {
     flexDirection: 'row',

@@ -3,7 +3,9 @@ import { Animated, StyleSheet, View, type LayoutChangeEvent } from 'react-native
 import type { NavigationHelpers, ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUnreadCount } from '@/storage/inbox';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { colors, spacing } from '@/theme';
+import { desktopLayout, desktopTypography } from '@/theme/desktop';
 import { PressableScale } from './PressableScale';
 import { TelIcon, type IconName } from './TelIcon';
 import { TelText } from './TelText';
@@ -46,6 +48,7 @@ const INSET = 4;
 // y la marca sigue al dedo cuando se desliza entre secciones.
 export function TelTabBar({ state, navigation, descriptors, position }: TelTabBarProps) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktopLayout();
   const unread = useUnreadCount();
   const [width, setWidth] = useState(0);
   const routes = state.routes.filter((route) => isTab(route.name));
@@ -68,8 +71,8 @@ export function TelTabBar({ state, navigation, descriptors, position }: TelTabBa
   }
 
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.xs) + 2 }]}>
-      <View accessibilityRole="tablist" style={styles.row} onLayout={onLayout}>
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.xs) + 2 }, desktop.isDesktop && styles.desktopBar]}>
+      <View accessibilityRole="tablist" style={[styles.row, desktop.isDesktop && styles.desktopRow]} onLayout={onLayout}>
         {width > 0 && (
           <Animated.View pointerEvents="none" style={[styles.indicator, { width: cell - INSET * 2, transform: [{ translateX }] }]} />
         )}
@@ -102,13 +105,13 @@ export function TelTabBar({ state, navigation, descriptors, position }: TelTabBa
               onLongPress={onLongPress}
               haptic
               scaleTo={0.94}
-              style={styles.item}
+              style={[styles.item, desktop.isDesktop && styles.desktopItem]}
             >
               <View>
                 <TelIcon name={config.icon} size={22} color={focused ? colors.actionInk : colors.inkSoft} strokeWidth={focused ? 2.3 : 2} />
                 {showDot && <View style={[styles.dot, focused && styles.dotOnDark]} />}
               </View>
-              <TelText variant="small" color={focused ? 'actionInk' : 'inkSoft'} style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+              <TelText variant="small" color={focused ? 'actionInk' : 'inkSoft'} style={[styles.label, desktop.isDesktop && desktopTypography.tabLabel]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                 {label}
               </TelText>
             </PressableScale>
@@ -129,6 +132,20 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+  },
+  desktopBar: {
+    paddingTop: spacing.sm,
+    paddingHorizontal: desktopLayout.gutter,
+  },
+  desktopRow: {
+    width: '100%',
+    maxWidth: desktopLayout.tabBarWidth,
+    alignSelf: 'center',
+  },
+  desktopItem: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
   indicator: {
     position: 'absolute',

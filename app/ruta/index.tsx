@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { Tag } from '@/components/Chips';
-import { Screen } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
@@ -13,10 +12,12 @@ import { aliasProblem, cleanAlias } from '@/account/rules';
 import { useAccount } from '@/account/store';
 import { AccountGate } from '@/features/account/AccountGate';
 import { AvatarPicker } from '@/features/account/AvatarPicker';
+import { RouteColumns, RoutePanel, RouteScreen } from '@/features/route/RouteScreen';
 import { CodeBoxes, RouteProgress } from '@/features/route/parts';
 import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { tutorials } from '@/features/tutorial/tutorials';
 import { useEntering } from '@/lib/motion';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { currentPaceFactor } from '@/lib/pace';
 import { isValidJourneyCode } from '@/lib/progression';
 import { routeStops } from '@/route/content';
@@ -26,10 +27,12 @@ import { parseJoinLink } from '@/route/joinLink';
 import { routeMember } from '@/route/member';
 import { DEFAULT_ALIAS, loadProfile, updateIdentity } from '@/storage/profile';
 import { colors, font, radius, spacing } from '@/theme';
+import { desktopLayout } from '@/theme/desktop';
 
 // Punto de entrada de la Ruta Telemática: código del stand, alias y avatar.
 export default function RouteLandingScreen() {
   const entering = useEntering();
+  const { isDesktop } = useDesktopLayout();
   const params = useLocalSearchParams<{ codigo?: string | string[]; k?: string | string[] }>();
   // El enlace viene de fuera: se valida tal cual (un código mal formado no se "corrige").
   const link = parseJoinLink(params.codigo, params.k);
@@ -87,7 +90,7 @@ export default function RouteLandingScreen() {
   }
 
   return (
-    <Screen
+    <RouteScreen
       keyboard
       header={
         <AppHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))} right={<HelpButton onPress={() => setHelpOpen(true)} label="Cómo funciona la ruta" />} kicker="Ruta Telemática" title="Stand → B215 → B213 → Pasillo" subtitle="Juega en grupo y en vivo con el código del stand">
@@ -111,93 +114,102 @@ export default function RouteLandingScreen() {
         </Animated.View>
       ) : null}
 
-      <Animated.View entering={entering.fadeUp(1)}>
-        <TelCard style={styles.card}>
-          <Tag tone="sky" icon="qr" label="ÚNETE AL GRUPO" />
-          <TelText variant="heading" color="ink">
-            Código del stand
-          </TelText>
-          <TelText variant="caption" color="inkSoft">
-            Está en la pantalla del stand de Ingeniería Civil Telemática. También puedes escanear su QR con la cámara.
-          </TelText>
-          <CodeBoxes value={code} onChange={(value) => {
-            setCode(value);
-            setError(null);
-          }} autoFocus={!link.code && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
-          {link.problem === 'code' && (
-            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
-              El enlace que abriste no trae un código válido. Escribe el que muestra la pantalla del stand.
-            </TelText>
-          )}
-          {link.problem === 'key' && (
-            <TelText variant="caption" color="inkSoft" accessibilityLiveRegion="polite">
-              El enlace llegó incompleto. Puedes unirte igual: al entrar, compara el código de verificación de tu teléfono con el del stand.
-            </TelText>
-          )}
-
-          <TelText variant="label" color="ink" style={styles.fieldLabel}>
-            Tu alias para el ranking
-          </TelText>
-          <TextInput
-            value={alias}
-            onChangeText={(value) => {
-              setAlias(value.slice(0, 18));
-              setError(null);
-            }}
-            placeholder="Ej: Cami, Nico T., La Fibra"
-            placeholderTextColor={colors.slate}
-            maxLength={18}
-            autoCorrect={false}
-            autoFocus={Boolean(link.code) && !gateOpen}
-            returnKeyType="go"
-            onSubmitEditing={() => void join()}
-            accessibilityLabel="Tu alias"
-            style={[styles.input, font('bodyBold')]}
-          />
-
-          <TelText variant="label" color="ink" style={styles.fieldLabel}>
-            Elige tu avatar
-          </TelText>
-          <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} />
-
-          {error && (
-            <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
-              {error}
-            </TelText>
-          )}
-          <TelButton label="Unirme a la ruta" iconRight="arrowRight" loading={joining} disabled={code.length !== 6} onPress={() => void join()} />
-        </TelCard>
-      </Animated.View>
-
-      <Animated.View entering={entering.fadeUp(2)} style={styles.stops}>
-        {routeStops.slice(1).map((stop) => (
-          <View key={stop.id} style={styles.stop}>
-            <View style={styles.stopIcon}>
-              <TelIcon name={stop.icon} size={20} color={colors.inkAccent} />
-            </View>
-            <View style={styles.flex}>
-              <TelText variant="label" color="ink">
-                {stop.place} · {stop.title}
+      <RouteColumns>
+        <RoutePanel>
+          <Animated.View entering={entering.fadeUp(1)}>
+            <TelCard style={styles.card}>
+              <Tag tone="sky" icon="qr" label="ÚNETE AL GRUPO" />
+              <TelText variant="heading" color="ink">
+                Código del stand
               </TelText>
               <TelText variant="caption" color="inkSoft">
-                {stop.summary}
+                Está en la pantalla del stand de Ingeniería Civil Telemática. También puedes escanear su QR con la cámara.
               </TelText>
-            </View>
-          </View>
-        ))}
-      </Animated.View>
+              <CodeBoxes value={code} onChange={(value) => {
+                setCode(value);
+                setError(null);
+              }} autoFocus={!link.code && !gateOpen && account.status !== 'loading'} onSubmit={() => void join()} />
+              {link.problem === 'code' && (
+                <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
+                  El enlace que abriste no trae un código válido. Escribe el que muestra la pantalla del stand.
+                </TelText>
+              )}
+              {link.problem === 'key' && (
+                <TelText variant="caption" color="inkSoft" accessibilityLiveRegion="polite">
+                  El enlace llegó incompleto. Puedes unirte igual: al entrar, compara el código de verificación de tu teléfono con el del stand.
+                </TelText>
+              )}
 
-      <Animated.View entering={entering.fadeUp(3)} style={styles.extra}>
-        <TelButton label="Jugar la ruta sin grupo" variant="subtle" icon="user" onPress={playSolo} />
-        <TelButton label="Soy del equipo del stand" variant="ghost" icon="flag" size="sm" onPress={() => router.push('/ruta/stand')} />
-      </Animated.View>
+              <TelText variant="label" color="ink" style={styles.fieldLabel}>
+                Tu alias para el ranking
+              </TelText>
+              <TextInput
+                value={alias}
+                onChangeText={(value) => {
+                  setAlias(value.slice(0, 18));
+                  setError(null);
+                }}
+                placeholder="Ej: Cami, Nico T., La Fibra"
+                placeholderTextColor={colors.slate}
+                maxLength={18}
+                autoCorrect={false}
+                autoFocus={Boolean(link.code) && !gateOpen}
+                returnKeyType="go"
+                onSubmitEditing={() => void join()}
+                accessibilityLabel="Tu alias"
+                style={[styles.input, font('bodyBold')]}
+              />
+
+              <TelText variant="label" color="ink" style={styles.fieldLabel}>
+                Elige tu avatar
+              </TelText>
+              <AvatarPicker value={avatar} onChange={setAvatar} level={unlocks.level} achievements={unlocks.achievements} size={44} cellStyle={isDesktop && styles.desktopAvatarCell} />
+
+              {error && (
+                <TelText variant="caption" color="dangerText" accessibilityLiveRegion="polite">
+                  {error}
+                </TelText>
+              )}
+              <TelButton label="Unirme a la ruta" iconRight="arrowRight" loading={joining} disabled={code.length !== 6} onPress={() => void join()} />
+            </TelCard>
+          </Animated.View>
+
+        </RoutePanel>
+        <RoutePanel aside>
+          <Animated.View entering={entering.fadeUp(2)} style={styles.stops}>
+            {routeStops.slice(1).map((stop) => (
+              <View key={stop.id} style={styles.stop}>
+                <View style={styles.stopIcon}>
+                  <TelIcon name={stop.icon} size={20} color={colors.inkAccent} />
+                </View>
+                <View style={styles.flex}>
+                  <TelText variant="label" color="ink">
+                    {stop.place} · {stop.title}
+                  </TelText>
+                  <TelText variant="caption" color="inkSoft">
+                    {stop.summary}
+                  </TelText>
+                </View>
+              </View>
+            ))}
+          </Animated.View>
+
+          <Animated.View entering={entering.fadeUp(3)} style={styles.extra}>
+            <TelButton label="Jugar la ruta sin grupo" variant="subtle" icon="user" onPress={playSolo} />
+            <TelButton label="Soy del equipo del stand" variant="ghost" icon="flag" size="sm" onPress={() => router.push('/ruta/stand')} />
+          </Animated.View>
+        </RoutePanel>
+      </RouteColumns>
       {!active && <AccountGate />}
       <TutorialSheet tutorial={tutorials.ruta} visible={helpOpen} onClose={() => setHelpOpen(false)} doneLabel="Entendido" />
-    </Screen>
+    </RouteScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  desktopAvatarCell: {
+    width: `${100 / desktopLayout.routeAvatarColumns}%`,
+  },
   flex: {
     flex: 1,
     gap: 2,

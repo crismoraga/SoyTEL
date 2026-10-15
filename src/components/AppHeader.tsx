@@ -3,7 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { arcPath, star4Path } from '@/graphics/shapes';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { colors, radius, spacing } from '@/theme';
+import { desktopTypography } from '@/theme/desktop';
 import { IconButton } from './IconButton';
 import { TelText } from './TelText';
 
@@ -22,8 +24,9 @@ interface AppHeaderProps {
 
 // Ornamento superior derecho de las hojas de marca: arco punteado, estrella y puntos.
 export const HeaderDecor = memo(function HeaderDecor() {
+  const desktop = useDesktopLayout();
   return (
-    <Svg width={150} height={120} viewBox="0 0 150 120" style={styles.decor} pointerEvents="none">
+    <Svg width={150} height={120} viewBox="0 0 150 120" style={[styles.decor, desktop.isDesktop && { right: desktop.inset - spacing.gutter }]} pointerEvents="none">
       <Path d={arcPath(150, 20, 70, 110, 205)} stroke={colors.cream} strokeWidth={1.6} strokeDasharray="1 6" strokeLinecap="round" fill="none" opacity={0.55} />
       <Path d={star4Path(112, 30, 11)} fill={colors.cream} opacity={0.9} />
       <Circle cx={88} cy={62} r={3.2} fill={colors.cream} opacity={0.7} />
@@ -48,6 +51,7 @@ export function AppHeader({
   children,
 }: PropsWithChildren<AppHeaderProps>) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktopLayout();
   return (
     <View
       style={[
@@ -55,6 +59,12 @@ export function AppHeader({
         transparent && styles.transparent,
         rounded && styles.rounded,
         { paddingTop: insets.top + (compact ? spacing.xs : spacing.md), paddingBottom: (compact ? spacing.md : 22) + overlap },
+        desktop.isDesktop && {
+          paddingHorizontal: desktop.inset,
+          paddingTop: insets.top + (compact ? spacing.xs : spacing.lg),
+          paddingBottom: (compact ? spacing.md : spacing.lg) + overlap,
+          gap: spacing.lg,
+        },
       ]}
     >
       {!transparent && !right && !art && <HeaderDecor />}
@@ -73,12 +83,12 @@ export function AppHeader({
               </TelText>
             )}
             {title && (
-              <TelText variant="title" color="cream" accessibilityRole="header">
+              <TelText variant="title" color="cream" accessibilityRole="header" style={desktop.isDesktop && desktopTypography.headerTitle}>
                 {title}
               </TelText>
             )}
             {subtitle && (
-              <TelText variant="label" color="accentSoft" style={styles.subtitle}>
+              <TelText variant="label" color="accentSoft" style={[styles.subtitle, desktop.isDesktop && desktopTypography.headerSubtitle]}>
                 {subtitle}
               </TelText>
             )}

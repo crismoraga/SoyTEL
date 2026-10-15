@@ -2,6 +2,7 @@ import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { useMotionEnabled } from '@/lib/motion';
 import { colors, radius, spacing } from '@/theme';
 import { IconButton } from './IconButton';
@@ -23,6 +24,7 @@ const useNativeDriver = Platform.OS !== 'web';
 export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, children }: PropsWithChildren<SheetProps>) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const { isDesktop } = useDesktopLayout();
   const motionEnabled = useMotionEnabled();
   const [offset] = useState(() => new Animated.Value(0));
 
@@ -50,7 +52,7 @@ export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, ch
       statusBarTranslucent
       navigationBarTranslucent
     >
-      <GestureHandlerRootView style={styles.root}>
+      <GestureHandlerRootView style={[styles.root, isDesktop && styles.rootDesktop]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" style={styles.backdrop} onPress={onClose} />
         <Animated.View
           accessibilityViewIsModal
@@ -58,10 +60,11 @@ export function Sheet({ visible, onClose, tone = 'light', accessibilityLabel, ch
           style={[
             styles.sheet,
             toneStyle,
-            { paddingBottom: insets.bottom + spacing.lg, maxHeight: height - insets.top - spacing.lg, transform: [{ translateY }] },
+            isDesktop && styles.dialog,
+            { paddingBottom: insets.bottom + spacing.lg, maxHeight: isDesktop ? height - spacing.xxl * 2 : height - insets.top - spacing.lg, transform: [{ translateY }] },
           ]}
         >
-          <View style={[styles.handle, tone === 'dark' && styles.handleDark]} />
+          {!isDesktop && <View style={[styles.handle, tone === 'dark' && styles.handleDark]} />}
           <IconButton icon="close" tone={tone === 'dark' ? 'dark' : 'light'} size={36} accessibilityLabel="Cerrar hoja" onPress={onClose} style={styles.close} />
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled">
             {children}
@@ -76,6 +79,20 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  // Escritorio (web): diálogo centrado en lugar de hoja inferior; Modal de RN-web ya atrapa el foco y cierra con Esc.
+  rootDesktop: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: radius.xxl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    overflow: 'hidden',
   },
   backdrop: {
     ...StyleSheet.absoluteFill,

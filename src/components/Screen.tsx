@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { DesktopWidthContext, useDesktopLayout } from '@/lib/useDesktopLayout';
 import { colors, spacing } from '@/theme';
+import type { DesktopWidth } from '@/theme/desktop';
 import { BrandBackdrop, type BackdropVariant } from './graphics/BrandBackdrop';
 import { IconButton } from './IconButton';
 import { TelText } from './TelText';
@@ -31,6 +33,8 @@ interface ScreenProps {
   keyboard?: boolean;
   // Dentro de las pestañas la barra inferior ya respeta el área segura.
   inTabs?: boolean;
+  // Solo modifica el marco en web >= 1024 px.
+  desktopWidth?: DesktopWidth;
   contentStyle?: StyleProp<ViewStyle>;
   refreshControl?: ReactElement<RefreshControlProps>;
   scrollRef?: RefObject<ScrollView | null>;
@@ -47,12 +51,15 @@ export function Screen({
   tight = false,
   keyboard = true,
   inTabs = false,
+  desktopWidth,
   contentStyle,
   refreshControl,
   scrollRef,
   children,
 }: PropsWithChildren<ScreenProps>) {
   const insets = useSafeAreaInsets();
+  const frameWidth = desktopWidth ?? (scroll ? 'content' : 'full');
+  const desktop = useDesktopLayout(frameWidth);
   const isDark = (tone ?? (dark ? 'dark' : 'light')) === 'dark';
   const topInset = header ? 0 : insets.top;
   const bottomInset = footer || inTabs ? 0 : insets.bottom;
@@ -74,6 +81,8 @@ export function Screen({
         styles.content,
         padded && styles.padded,
         { paddingTop: (padded ? (tight ? spacing.xs : spacing.gutter) : 0) + topInset, paddingBottom: (padded ? (tight ? spacing.sm : spacing.xl) : 0) + bottomInset },
+        desktop.isDesktop && styles.desktopContent,
+        desktop.isDesktop && { maxWidth: desktop.maxWidth, paddingHorizontal: padded ? desktop.gutter : 0 },
         contentStyle,
       ]}
     >
@@ -116,12 +125,13 @@ export function Screen({
     </>
   );
   const scrim = scroll && scrolled ? <View pointerEvents="none" style={[styles.statusScrim, { height: insets.top }]} /> : null;
+  const framed = <DesktopWidthContext.Provider value={frameWidth}>{wrapped}</DesktopWidthContext.Provider>;
 
   if (isDark) {
     return (
       <LinearGradient colors={[colors.primary, colors.primarySoft]} style={styles.flex}>
         <BrandBackdrop variant={backdrop ?? 'stars'} />
-        {wrapped}
+        {framed}
         {scrim}
       </LinearGradient>
     );
@@ -129,7 +139,7 @@ export function Screen({
 
   return (
     <View style={[styles.flex, styles.light]}>
-      {wrapped}
+      {framed}
       {scrim}
     </View>
   );
@@ -138,12 +148,14 @@ export function Screen({
 // Barra inferior fija (acciones principales), como la de "Reto de estación".
 export function ScreenFooter({ children, tone = 'light' }: PropsWithChildren<{ tone?: 'light' | 'dark' }>) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktopLayout();
   return (
     <View
       style={[
         styles.footer,
         tone === 'dark' ? styles.footerDark : styles.footerLight,
         { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.xs },
+        desktop.isDesktop && { paddingHorizontal: desktop.inset, paddingTop: spacing.md },
       ]}
     >
       {children}
@@ -162,8 +174,9 @@ interface ScreenBarProps {
 // bajo se los quita al tablero.
 export function ScreenBar({ onBack, kicker, title, right }: ScreenBarProps) {
   const insets = useSafeAreaInsets();
+  const desktop = useDesktopLayout();
   return (
-    <View style={[styles.bar, { paddingTop: insets.top + spacing.xs }]}>
+    <View style={[styles.bar, { paddingTop: insets.top + spacing.xs }, desktop.isDesktop && { paddingHorizontal: desktop.inset }]}>
       {onBack ? <IconButton icon="chevronLeft" tone="dark" onPress={onBack} accessibilityLabel="Volver" /> : null}
       <View style={styles.barTitle}>
         {kicker ? (
@@ -214,6 +227,10 @@ const styles = StyleSheet.create({
   },
   padded: {
     paddingHorizontal: spacing.md,
+  },
+  desktopContent: {
+    width: '100%',
+    alignSelf: 'center',
   },
   footer: {
     paddingTop: 14,

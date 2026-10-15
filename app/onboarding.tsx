@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated from 'react-native-reanimated';
@@ -13,6 +13,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { TelButton } from '@/components/TelButton';
 import { TelText } from '@/components/TelText';
 import { useEntering } from '@/lib/motion';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { pushInbox } from '@/storage/inbox';
 import { updateAlias } from '@/storage/profile';
 import { markOnboarded } from '@/storage/story';
@@ -46,6 +47,9 @@ const slides: Slide[] = [
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const entering = useEntering();
+  const { isDesktop } = useDesktopLayout();
+  const { width } = useWindowDimensions();
+  const big = isDesktop && width >= 1440;
   const { next } = useLocalSearchParams<{ next?: string }>();
   const [step, setStep] = useState(0);
   const [alias, setAlias] = useState('');
@@ -76,8 +80,8 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior="padding">
-      <View style={styles.art}>
+    <KeyboardAvoidingView style={[styles.root, isDesktop && styles.rootDesktop]} behavior="padding">
+      <View style={[styles.art, isDesktop && styles.artDesktop]}>
         {step === 0 ? (
           <Image source={brandImages.onboardingHero} style={styles.heroImage} resizeMode="cover" accessibilityLabel="Laptop, libros y logo de Telemática USM sobre el campus" />
         ) : (
@@ -88,7 +92,7 @@ export default function OnboardingScreen() {
             </Animated.View>
           </View>
         )}
-        <LinearGradient colors={['rgba(11,45,69,0)', colors.primary]} style={styles.artFade} />
+        {!isDesktop && <LinearGradient colors={['rgba(11,45,69,0)', colors.primary]} style={styles.artFade} />}
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Saltar introducción"
@@ -103,7 +107,7 @@ export default function OnboardingScreen() {
 
       <ScrollView
         style={styles.panel}
-        contentContainerStyle={[styles.panelContent, { paddingBottom: insets.bottom + spacing.lg }]}
+        contentContainerStyle={[styles.panelContent, isDesktop && styles.panelContentDesktop, { paddingBottom: insets.bottom + spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         bounces={false}
       >
@@ -120,10 +124,10 @@ export default function OnboardingScreen() {
           <TelText variant="overline" color="accent">
             {slide.kicker}
           </TelText>
-          <TelText variant="title" color="cream" accessibilityRole="header">
+          <TelText variant="title" color="cream" accessibilityRole="header" style={big && styles.titleBig}>
             {slide.title}
           </TelText>
-          <TelText variant="body" color="onDark">
+          <TelText variant="body" color="onDark" style={big && styles.bodyBig}>
             {slide.body}
           </TelText>
         </Animated.View>
@@ -149,7 +153,7 @@ export default function OnboardingScreen() {
           </Animated.View>
         )}
 
-        <View style={styles.actions}>
+        <View style={[styles.actions, isDesktop && styles.actionsDesktop]}>
           {step > 0 && (
             <IconButton icon="chevronLeft" tone="dark" size={56} accessibilityLabel="Paso anterior" onPress={() => setStep((value) => value - 1)} style={styles.back} />
           )}
@@ -170,6 +174,23 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.primary,
+  },
+  rootDesktop: {
+    flexDirection: 'row',
+  },
+  // Escritorio (web): ilustración a la izquierda a alto completo; textos y acciones centrados a la derecha.
+  artDesktop: {
+    height: '100%',
+    width: '50%',
+    minHeight: 0,
+  },
+  panelContentDesktop: {
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.lg,
   },
   art: {
     height: '48%',
@@ -252,6 +273,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  titleBig: {
+    fontSize: 36,
+    lineHeight: 44,
+  },
+  bodyBig: {
+    fontSize: 18,
+    lineHeight: 28,
+  },
+  actionsDesktop: {
+    marginTop: spacing.md,
   },
   back: {
     borderRadius: radius.md,

@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { PressableScale } from '@/components/PressableScale';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
@@ -13,10 +13,11 @@ interface AvatarPickerProps {
   achievements: string[];
   size?: number;
   tone?: 'light' | 'dark';
+  cellStyle?: StyleProp<ViewStyle>;
 }
 
 // Grilla de avatares predefinidos; los bloqueados muestran cómo conseguirlos.
-export function AvatarPicker({ value, onChange, level, achievements, size = 52, tone = 'light' }: AvatarPickerProps) {
+export function AvatarPicker({ value, onChange, level, achievements, size = 52, tone = 'light', cellStyle }: AvatarPickerProps) {
   const dark = tone === 'dark';
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel="Elige tu avatar" style={styles.grid}>
@@ -32,7 +33,7 @@ export function AvatarPicker({ value, onChange, level, achievements, size = 52, 
             disabled={!unlocked}
             haptic
             onPress={() => onChange(avatar.id)}
-            style={[styles.cell, selected && (dark ? styles.selectedDark : styles.selected)]}
+            style={[styles.cell, cellStyle, selected && (dark ? styles.selectedDark : styles.selected)]}
           >
             <UserAvatar avatar={avatar.id} size={size} ring={selected} dimmed={!unlocked} />
             {!unlocked && (

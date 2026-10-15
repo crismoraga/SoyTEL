@@ -84,7 +84,7 @@ export default function AccountScreen() {
 
   if (createdCode && player) {
     return (
-      <Screen tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
+      <Screen desktopWidth="form" tone="dark" backdrop="orbits" header={<AppHeader transparent compact />}>
         <View style={styles.done}>
           <Rutix size={140} expression="celebrate" pose="celebrate" />
           <TelText variant="overline" color="accent" align="center">
@@ -104,12 +104,12 @@ export default function AccountScreen() {
   }
 
   if (account.status === 'loading' || !profile) {
-    return <Screen header={<AppHeader onBack={leave} kicker="Cuenta" title=" " />}>{profileError && <LoadError onRetry={reload} />}</Screen>;
+    return <Screen desktopWidth="form" header={<AppHeader onBack={leave} kicker="Cuenta" title=" " />}>{profileError && <LoadError onRetry={reload} />}</Screen>;
   }
 
   if (account.status === 'expired') {
     return (
-      <Screen header={<AppHeader onBack={leave} kicker="Cuenta" title="Sesión cerrada" />}>
+      <Screen desktopWidth="form" header={<AppHeader onBack={leave} kicker="Cuenta" title="Sesión cerrada" />}>
         <TelCard style={styles.gap}>
           <TelText variant="body" color="ink">
             Tu cuenta se abrió en otro teléfono con el código de recuperación, así que este dejó de estar conectado. Tu progreso local sigue aquí.
@@ -145,6 +145,7 @@ export default function AccountScreen() {
 
   return (
     <Screen
+      desktopWidth="form"
       keyboard
       header={
         <AppHeader
