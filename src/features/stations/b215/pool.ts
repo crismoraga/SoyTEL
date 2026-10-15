@@ -1,12 +1,13 @@
 import { rounds as equipos } from './parts/equipos';
 import { rounds as hardware } from './parts/hardware';
+import { rounds as rafagas } from './parts/rafagas';
 import { rounds as red } from './parts/red';
 import { rounds as ruta } from './parts/ruta';
 import { rounds as software } from './parts/software';
 import type { B215Round, B215Track } from './types';
 
 // Todas las rondas que puede tocar en la sala B215.
-export const b215Rounds: B215Round[] = [...ruta, ...equipos, ...red, ...hardware, ...software];
+export const b215Rounds: B215Round[] = [...ruta, ...equipos, ...red, ...rafagas, ...hardware, ...software];
 
 export function getB215Round(id: string): B215Round | undefined {
   return b215Rounds.find((round) => round.id === id);

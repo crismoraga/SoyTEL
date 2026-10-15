@@ -1,4 +1,58 @@
+import { armaApp, cazaBug, makeMicroRound, makeQuizRound, robotCodigo } from '../rounds/QuickRounds';
 import type { B215Round } from '../types';
 
-// Rondas del circuito B215 · Software: programa al robot, caza el bug, arma la app.
-export const rounds: B215Round[] = [];
+// Rondas del circuito B215 · Software.
+export const rounds: B215Round[] = [
+  {
+    id: 'robot-codigo',
+    track: 'software',
+    title: 'Programa al robot',
+    device: 'Programa',
+    icon: 'code',
+    art: 'pc',
+    goal: 'Elige el programa que lleva al robot hasta el Wi-Fi.',
+    explain: ['Un programa es una lista de instrucciones que se ejecutan en orden.', 'Elige la lista correcta y el robot la seguirá paso a paso.'],
+    learned: 'Programar es dar instrucciones exactas y en orden: así funcionan apps, routers y robots.',
+    seconds: 35,
+    Component: makeQuizRound([robotCodigo]),
+  },
+  {
+    id: 'caza-bug',
+    track: 'software',
+    title: 'Arregla el semáforo',
+    device: 'Programa',
+    icon: 'bug',
+    art: 'pc',
+    goal: 'Encuentra la línea que hace fallar al semáforo.',
+    explain: ['Un bug es un error en un programa: hace algo distinto de lo que queríamos.', 'Para arreglarlo hay que encontrar la instrucción equivocada.'],
+    learned: 'Depurar es buscar el error y corregirlo: es parte del día a día de quien programa.',
+    seconds: 35,
+    Component: makeQuizRound([cazaBug]),
+  },
+  {
+    id: 'arma-app',
+    track: 'software',
+    title: 'Arma la app',
+    device: 'App móvil',
+    icon: 'phone',
+    art: 'phone',
+    goal: 'Agrega la pieza que le falta a cada app.',
+    explain: ['Una app se arma con piezas: títulos, imágenes, botones y listas.', 'Quien diseña apps decide qué pieza va en cada pantalla.'],
+    learned: 'Las apps se construyen pieza a pieza: diseño, código y datos trabajando juntos.',
+    seconds: 30,
+    Component: makeQuizRound([armaApp]),
+  },
+  {
+    id: 'rafaga-software',
+    track: 'software',
+    title: 'Ráfaga de software',
+    device: 'Software y datos',
+    icon: 'code',
+    art: 'laptop',
+    goal: 'Gana tres microjuegos de datos, seguridad y programación.',
+    explain: ['El software maneja datos, protege cuentas y hace funcionar las apps.', 'Tres microjuegos rápidos para probar tu lado programador.'],
+    learned: 'Datos, seguridad y código: el software está detrás de todo lo que usas.',
+    seconds: 45,
+    Component: makeMicroRound(['binary-search', 'sql-filter', 'chart-read', 'compress-rle', 'phishing-mail', 'caesar-shift', 'redundancy', 'cpu-hog', 'http-status', 'bug-hunt', 'password-strong', 'safe-url']),
+  },
+];
