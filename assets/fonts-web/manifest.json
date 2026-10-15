@@ -1,7 +1,7 @@
 {
   "fonts": {
     "Montserrat_600SemiBold": {
-      "bytes": 31412,
+      "bytes": 31456,
       "characters": 355,
       "covered": [
         161,
@@ -50,15 +50,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "70d4a4e627d9b1883e51b48990ca4f8bb0498a2cfb6bac7612b5d6de6e6e4ee5",
+      "sha256": "7076cab937ca02159f66724f32580006e982cf1fc213268170ad33691729965a",
       "source": "@expo-google-fonts/montserrat/600SemiBold/Montserrat_600SemiBold.ttf",
       "sourceBytes": 333988,
       "sourceSha256": "9c4db3814875410e7d64fdc8e69676c3b84968bb15bf3ace8b3944c59fbc56b6"
     },
     "Montserrat_700Bold": {
-      "bytes": 31628,
+      "bytes": 31776,
       "characters": 355,
       "covered": [
         161,
@@ -107,15 +108,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "d050e44ba8457306eb9a190a60f8b702f109918ffd9e502d9db0414f78fdc080",
+      "sha256": "598ce2d5a563eb6be2fa2978d13f4323166e2889efb7d2fdd71e10372fbd4f5c",
       "source": "@expo-google-fonts/montserrat/700Bold/Montserrat_700Bold.ttf",
       "sourceBytes": 335788,
       "sourceSha256": "7fa93d7daa5c2f881a6727229c211782de6b76008fbd6346b3d7664e8fc83f43"
     },
     "Montserrat_800ExtraBold": {
-      "bytes": 32052,
+      "bytes": 32064,
       "characters": 355,
       "covered": [
         161,
@@ -164,15 +166,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "fe73a67791e390c1c7aee7d931ccd922c7d2da5e3fdf064228bd91dd14920a4b",
+      "sha256": "95438671bfadbaf42e6ee0e2f19761318b6437b7ad99f92087cf8ca5301058d1",
       "source": "@expo-google-fonts/montserrat/800ExtraBold/Montserrat_800ExtraBold.ttf",
       "sourceBytes": 344052,
       "sourceSha256": "5cf0a23133ccce35f9e115b8dbbf90434201827bc2465d12f9d91bbf02cf9466"
     },
     "NunitoSans_400Regular": {
-      "bytes": 16272,
+      "bytes": 16336,
       "characters": 350,
       "covered": [
         161,
@@ -221,15 +224,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "cdfa70826194fe0604b195e9b4abc0a8fb8bd544353a4087d1404941b2480182",
+      "sha256": "ef2351ca4db2d2e314b860a449b0c636f4e510dbc0fa2115386467a3d904f498",
       "source": "@expo-google-fonts/nunito-sans/400Regular/NunitoSans_400Regular.ttf",
       "sourceBytes": 113232,
       "sourceSha256": "5539bb068f72fd4575342e6b914b9cb037019c4583835f794283399ba1b94efc"
     },
     "NunitoSans_600SemiBold": {
-      "bytes": 16372,
+      "bytes": 16376,
       "characters": 350,
       "covered": [
         161,
@@ -278,15 +282,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "ad431d0e9c8cbe31aa3acd777534508d42d2c905e56c8e17874d4fe638b731f3",
+      "sha256": "42d120f1d0f3a0c780f74ca27a3b910c17c0354c1676ea87d70b7813e137f868",
       "source": "@expo-google-fonts/nunito-sans/600SemiBold/NunitoSans_600SemiBold.ttf",
       "sourceBytes": 113340,
       "sourceSha256": "97c3e5eb6bcd991e54c4daf143102e20781cc4b50d64211131f837845cba12aa"
     },
     "NunitoSans_700Bold": {
-      "bytes": 16248,
+      "bytes": 16220,
       "characters": 350,
       "covered": [
         161,
@@ -335,15 +340,16 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "e807cd87706ea7349ee0db057587773cdd8d80ee385bedf574acd5bd3cddfe70",
+      "sha256": "04d2b5524e25292026303f96e6e95b81f170436473bd023ce671f1dee1e4cca5",
       "source": "@expo-google-fonts/nunito-sans/700Bold/NunitoSans_700Bold.ttf",
       "sourceBytes": 113328,
       "sourceSha256": "484d8229d8aed92ff490771790563645426eac9a10de9904e3b0a5262421fa8a"
     },
     "NunitoSans_800ExtraBold": {
-      "bytes": 16284,
+      "bytes": 16268,
       "characters": 350,
       "covered": [
         161,
@@ -392,9 +398,10 @@
         9612,
         10003,
         10005,
-        10007
+        10007,
+        128246
       ],
-      "sha256": "1f00c9cca87af13285c15f9319a6db8db340728918fd3abc8be950c86664f299",
+      "sha256": "a8af4e2554a185ed20b119424a37515bf5c6ae4fbafcde15d443c206a8eec4e4",
       "source": "@expo-google-fonts/nunito-sans/800ExtraBold/NunitoSans_800ExtraBold.ttf",
       "sourceBytes": 113320,
       "sourceSha256": "0101d01f9a62daf606b1999fd9836a51a979b28fc32cf0e532f0e75d31e3a376"
@@ -402,5 +409,5 @@
   },
   "generator": "scripts/build-web-fonts.py",
   "sourceTotalBytes": 1467048,
-  "totalBytes": 160268
+  "totalBytes": 160496
 }
