@@ -79,19 +79,19 @@ export const pillars: PillarInfo[] = [
   {
     id: 'datos',
     pillar: 'Datos',
-    project: 'Procesamiento digital de imágenes',
-    game: 'Entrena la IA',
-    summary: 'Etiqueta imágenes, elige un filtro y entrena un modelo de machine learning que las clasifica.',
-    icon: 'neural',
+    project: 'Aqua Sense · monitor de pecera',
+    game: 'Aqua Sense',
+    summary: 'Lee los sensores de pH y temperatura de una pecera, arma el prototipo IoT y encuentra la alerta en el dashboard.',
+    icon: 'wave',
     color: '#9B8AE6',
     ink: '#3E2F86',
   },
   {
     id: 'software',
     pillar: 'Software',
-    project: 'Shielded · ciberseguridad',
-    game: 'Escudo digital',
-    summary: 'Como en la app Shielded: detecta phishing y amenazas antes de que lleguen a tu teléfono.',
+    project: 'Wi-Fi trampa · ciberseguridad',
+    game: 'Wi-Fi trampa',
+    summary: 'Un ESP32 crea un Wi-Fi gratis falso que pide tu clave: descubre la trampa y aprende a defenderte.',
     icon: 'shieldCheck',
     color: '#E58A5A',
     ink: '#7A3514',
@@ -119,9 +119,9 @@ export const pillars: PillarInfo[] = [
   {
     id: 'hardware',
     pillar: 'Hardware',
-    project: 'Arduino, ESP32 y Raspberry Pi',
-    game: 'Placas maker',
-    summary: 'Elige la placa correcta, conecta un LED y programa su parpadeo.',
+    project: 'Corrector de postura',
+    game: 'Postura alerta',
+    summary: 'Un sensor en la nuca mide tu inclinación y pita si te encorvas: decide cuándo suena y calíbralo.',
     icon: 'board',
     color: '#E0B84A',
     ink: '#6B5320',
@@ -136,11 +136,11 @@ export const pillarIds: PillarId[] = pillars.map((pillar) => pillar.id);
 
 export const stationTitles: Record<StationGameId, string> = {
   'red-b215': 'Operación Red B215',
-  datos: 'Entrena la IA',
-  software: 'Escudo digital',
+  datos: 'Aqua Sense',
+  software: 'Wi-Fi trampa',
   redes: 'Llamada IP',
   teleco: 'Viaje de la luz',
-  hardware: 'Placas maker',
+  hardware: 'Postura alerta',
 };
 
 // Colores y formas de las alternativas de la trivia (estilo Kahoot, distinguibles sin color).

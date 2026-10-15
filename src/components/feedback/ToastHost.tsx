@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeOutUp, ReduceMotion, SlideInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAchievement } from '@/data/achievements';
 import type { MedallionGlyph } from '@/graphics/medallions';
 import { onAppEvent, type AppEvent } from '@/lib/events';
 import { feedbackSuccess } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { levelTitle } from '@/lib/progression';
-import { colors, radius, shadows, spacing, tierColors, type Tier } from '@/theme';
+import { colors, radius, shadows, spacing, type Tier } from '@/theme';
 import { Medallion } from '../graphics/Medallion';
 import { TelText } from '../TelText';
 
@@ -25,18 +24,8 @@ let sequence = 0;
 
 function toToast(event: AppEvent): Toast | null {
   sequence += 1;
-  if (event.type === 'achievement') {
-    const achievement = getAchievement(event.id);
-    if (!achievement) return null;
-    return {
-      id: sequence,
-      kicker: `Logro ${tierColors[achievement.tier].label.toLowerCase()} desbloqueado`,
-      title: achievement.title,
-      body: achievement.description,
-      glyph: achievement.glyph,
-      tier: achievement.tier,
-    };
-  }
+  // Los logros tienen su propia celebración a pantalla completa (src/features/celebration).
+  if (event.type === 'achievement') return null;
   if (event.type === 'levelUp') {
     return { id: sequence, kicker: `Nivel ${event.level}`, title: '¡Subiste de nivel!', body: `Ahora eres ${levelTitle(event.level)}.`, glyph: 'rocket' };
   }

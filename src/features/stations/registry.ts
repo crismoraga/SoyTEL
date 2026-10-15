@@ -2,10 +2,8 @@ import type { ComponentType } from 'react';
 import type { IconName } from '@/graphics/icons';
 import { pillarInfo, stationTitles } from '@/route/content';
 import type { StationGameId } from '@/route/types';
+import { AquaSenseGame, PosturaGame, WifiTrampaGame } from './games/B213Projects';
 import { FiberLaserGame } from './games/FiberLaserGame';
-import { MakerBoardsGame } from './games/MakerBoardsGame';
-import { ShieldedGame } from './games/ShieldedGame';
-import { TrainAIGame } from './games/TrainAIGame';
 import { VoipCallGame } from './games/VoipCallGame';
 import { B215Circuit } from './b215/Circuit';
 import { withContinue, type StationGameProps } from './kit';
@@ -36,11 +34,11 @@ const b215: StationGameInfo = {
 
 // Cada juego avanza al ritmo del jugador: sus etapas piden "Continuar" (ver kit/withContinue).
 const components = {
-  datos: withContinue(TrainAIGame),
-  software: withContinue(ShieldedGame),
+  datos: withContinue(AquaSenseGame),
+  software: withContinue(WifiTrampaGame),
   redes: withContinue(VoipCallGame),
   teleco: withContinue(FiberLaserGame),
-  hardware: withContinue(MakerBoardsGame),
+  hardware: withContinue(PosturaGame),
 } satisfies Record<Exclude<StationGameId, 'red-b215'>, ComponentType<StationGameProps>>;
 
 function projectGame(id: keyof typeof components): StationGameInfo {

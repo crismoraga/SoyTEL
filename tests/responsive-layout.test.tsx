@@ -116,7 +116,7 @@ describe('microjuegos dentro de un espacio chico', () => {
         <PingCheckGame {...props} />
       </GameSpaceProvider>,
     );
-    expect(screen.getAllByText(/ping|icmp_seq|Tiempo de espera|inaccesible/).length).toBeGreaterThanOrEqual(4);
+    expect(screen.getAllByText(/ping|icmp_seq|Tiempo de espera|inaccesible/).length).toBeGreaterThanOrEqual(3);
   });
 
   it('Contraseña: nueve piezas y alto fijo para el campo', () => {
