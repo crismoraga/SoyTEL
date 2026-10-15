@@ -65,8 +65,8 @@ describe('concept micro games', () => {
     }
   });
 
-  it('registers 28 micro games with a component each', () => {
-    expect(microGameCatalog).toHaveLength(28);
+  it('registers 46 micro games with a component each', () => {
+    expect(microGameCatalog).toHaveLength(46);
     ['port-match', 'device-role', 'wifi-safe', 'acronym'].forEach((id) => {
       const game = microGameRegistry.find((item) => item.id === id);
       expect(game?.Component).toBeDefined();
