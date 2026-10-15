@@ -12,7 +12,8 @@ import { ProgressBar } from '@/components/feedback/Progress';
 import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
-import { Screen, ScreenBar } from '@/components/Screen';
+import { ScreenBar } from '@/components/Screen';
+import { RouteColumns, RoutePanel, RouteScreen } from '@/features/route/RouteScreen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
@@ -29,6 +30,7 @@ import { now as clockNow } from '@/lib/clock';
 import { feedbackHeavy } from '@/lib/feedback';
 import { formatNumber } from '@/lib/format';
 import { useEntering } from '@/lib/motion';
+import { useDesktopLayout } from '@/lib/useDesktopLayout';
 import { currentPaceFactor } from '@/lib/pace';
 import { webAppUrl } from '@/realtime/config';
 import { checkinCopy, pillarIds, pillars, stationTitles, stopInfo } from '@/route/content';
@@ -40,6 +42,7 @@ import type { CheckinStop, PillarId, PublicPlayer, RouteSnapshot, StationGameId 
 import { recordGameResult } from '@/storage/profile';
 import type { GameResult } from '@/types/game';
 import { colors, radius, spacing } from '@/theme';
+import { desktopLayout } from '@/theme/desktop';
 
 const PROBLEMS: MemberView['status'][] = ['not-found', 'rejected', 'kicked', 'conflict', 'unreachable', 'incompatible'];
 
@@ -63,11 +66,11 @@ export default function RouteGameScreen() {
   if (view.status === 'idle') {
     if (restored) return <Redirect href="/ruta" />;
     return (
-      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent compact />}>
+      <RouteScreen tone="dark" desktopWidth="form" backdrop="signal" header={<AppHeader transparent compact />}>
         <View style={styles.center}>
           <SignalSpinner size={96} />
         </View>
-      </Screen>
+      </RouteScreen>
     );
   }
   if (view.status === 'elsewhere') return <ElsewhereView view={view} />;
@@ -111,7 +114,7 @@ function ConnectingView({ view }: { view: MemberView }) {
           ? 'Entrando al grupo…'
           : 'Buscando la ruta…';
   return (
-    <Screen tone="dark" backdrop="signal" header={<AppHeader transparent compact onBack={exit} />}>
+    <RouteScreen tone="dark" desktopWidth="form" backdrop="signal" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
         <SignalSpinner size={96} />
         <TelText variant="title" color="cream" align="center">
@@ -136,7 +139,7 @@ function ConnectingView({ view }: { view: MemberView }) {
         )}
         {!view.solo && <DiagnosticsButton />}
       </View>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -145,7 +148,7 @@ function ConnectingView({ view }: { view: MemberView }) {
 function ElsewhereView({ view }: { view: MemberView }) {
   const [resuming, setResuming] = useState(false);
   return (
-    <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={() => router.replace('/home')} />}>
+    <RouteScreen tone="dark" desktopWidth="form" backdrop="stars" header={<AppHeader transparent compact onBack={() => router.replace('/home')} />}>
       <View style={styles.center}>
         <Rutix size={150} expression="think" />
         <TelText variant="title" color="cream" align="center">
@@ -166,7 +169,7 @@ function ElsewhereView({ view }: { view: MemberView }) {
         />
         <TelButton label="Ir al inicio" variant="outlineLight" onPress={() => router.replace('/home')} />
       </View>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -201,7 +204,7 @@ function ProblemView({ view }: { view: MemberView }) {
   const copy = problemCopy(view);
   const canRetry = view.status === 'not-found' || view.status === 'conflict' || view.status === 'unreachable' || view.status === 'incompatible';
   return (
-    <Screen tone="dark" backdrop="stars" header={<AppHeader transparent compact onBack={exit} />}>
+    <RouteScreen tone="dark" desktopWidth="form" backdrop="stars" header={<AppHeader transparent compact onBack={exit} />}>
       <View style={styles.center}>
         <Rutix size={150} expression="sad" />
         <TelText variant="title" color="cream" align="center">
@@ -228,7 +231,7 @@ function ProblemView({ view }: { view: MemberView }) {
         />
         {view.status !== 'kicked' && view.status !== 'rejected' && <DiagnosticsButton />}
       </View>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -266,7 +269,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
 
   if (confirmLeave) {
     return (
-      <Screen tone="dark" backdrop="stars" header={header}>
+      <RouteScreen tone="dark" backdrop="stars" header={header}>
         <View style={styles.center}>
           <Rutix size={130} expression="think" />
           <TelText variant="title" color="cream" align="center">
@@ -279,7 +282,7 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
           <TelButton label="Salir de la ruta" variant="dangerOutlineLight" onPress={exit} />
           {!view.solo && <DiagnosticsButton />}
         </View>
-      </Screen>
+      </RouteScreen>
     );
   }
 
@@ -339,55 +342,61 @@ interface PhaseProps {
 function LobbyView({ header, snapshot, me, solo, verification, warning }: PhaseProps & { solo: boolean; verification: string | null; warning: MemberView['warning'] }) {
   const entering = useEntering();
   return (
-    <Screen tone="dark" backdrop="signal" header={header}>
-      <Animated.View entering={entering.fadeUp()} style={styles.hero}>
-        <PlayerAvatar avatar={me.avatar} size={84} />
-        <TelText variant="overline" color="accent" align="center">
-          {solo ? 'Modo individual' : `Ruta ${snapshot.code}`}
-        </TelText>
-        <TelText variant="title" color="cream" align="center">
-          ¡Estás dentro, {me.alias}!
-        </TelText>
-        <TelText variant="body" color="accentSoft" align="center">
-          Espera a que el equipo del stand inicie la ruta. Mantén esta pantalla abierta.
-        </TelText>
-      </Animated.View>
-      <Guide>{solo ? 'Jugaremos la ruta completa tú y yo. ¡Vamos partiendo!' : 'Ya estás en el grupo. Cuando el stand inicie la ruta te llevo a la primera sala.'}</Guide>
-      {warning === 'impostor' && (
-        <TelCard tone="danger" style={styles.verifyCard}>
-          <TelIcon name="alert" size={22} color={colors.dangerInk} />
-          <TelText variant="caption" color="dangerInk" style={styles.flex}>
-            Apareció otro dispositivo usando este código. Revisa que el código de verificación coincida con el del stand; si no, sal y escanea su QR.
-          </TelText>
-        </TelCard>
-      )}
-      {verification && (
-        <View style={styles.verifyRow} accessible accessibilityLabel={`Código de verificación del stand: ${verification.split('').join(' ')}`}>
-          <TelIcon name="shieldCheck" size={18} color={colors.accent} />
-          <TelText variant="caption" color="accentSoft" style={styles.flex}>
-            Verificación del stand
-          </TelText>
-          <TelText variant="heading" color="cream" style={styles.verifyCode}>
-            {verification}
-          </TelText>
-        </View>
-      )}
-      <TelCard tone="dark" style={styles.gap}>
-        <TelText variant="label" color="cream">
-          Grupo · {snapshot.players.length} {snapshot.players.length === 1 ? 'participante' : 'participantes'}
-        </TelText>
-        <View style={styles.playerGrid}>
-          {snapshot.players.map((player) => (
-            <Animated.View key={player.id} entering={entering.pop()} style={styles.playerCell}>
-              <PlayerAvatar avatar={player.avatar} size={48} online={player.online} />
-              <TelText variant="small" color={player.id === me.id ? 'accent' : 'cream'} align="center" numberOfLines={1}>
-                {player.alias}
+    <RouteScreen tone="dark" backdrop="signal" header={header}>
+      <RouteColumns>
+        <RoutePanel>
+          <Animated.View entering={entering.fadeUp()} style={styles.hero}>
+            <PlayerAvatar avatar={me.avatar} size={84} />
+            <TelText variant="overline" color="accent" align="center">
+              {solo ? 'Modo individual' : `Ruta ${snapshot.code}`}
+            </TelText>
+            <TelText variant="title" color="cream" align="center">
+              ¡Estás dentro, {me.alias}!
+            </TelText>
+            <TelText variant="body" color="accentSoft" align="center">
+              Espera a que el equipo del stand inicie la ruta. Mantén esta pantalla abierta.
+            </TelText>
+          </Animated.View>
+          <Guide>{solo ? 'Jugaremos la ruta completa tú y yo. ¡Vamos partiendo!' : 'Ya estás en el grupo. Cuando el stand inicie la ruta te llevo a la primera sala.'}</Guide>
+          {warning === 'impostor' && (
+            <TelCard tone="danger" style={styles.verifyCard}>
+              <TelIcon name="alert" size={22} color={colors.dangerInk} />
+              <TelText variant="caption" color="dangerInk" style={styles.flex}>
+                Apareció otro dispositivo usando este código. Revisa que el código de verificación coincida con el del stand; si no, sal y escanea su QR.
               </TelText>
-            </Animated.View>
-          ))}
-        </View>
-      </TelCard>
-    </Screen>
+            </TelCard>
+          )}
+          {verification && (
+            <View style={styles.verifyRow} accessible accessibilityLabel={`Código de verificación del stand: ${verification.split('').join(' ')}`}>
+              <TelIcon name="shieldCheck" size={18} color={colors.accent} />
+              <TelText variant="caption" color="accentSoft" style={styles.flex}>
+                Verificación del stand
+              </TelText>
+              <TelText variant="heading" color="cream" style={styles.verifyCode}>
+                {verification}
+              </TelText>
+            </View>
+          )}
+        </RoutePanel>
+        <RoutePanel aside>
+          <TelCard tone="dark" style={styles.gap}>
+            <TelText variant="label" color="cream">
+              Grupo · {snapshot.players.length} {snapshot.players.length === 1 ? 'participante' : 'participantes'}
+            </TelText>
+            <View style={styles.playerGrid}>
+              {snapshot.players.map((player) => (
+                <Animated.View key={player.id} entering={entering.pop()} style={styles.playerCell}>
+                  <PlayerAvatar avatar={player.avatar} size={48} online={player.online} />
+                  <TelText variant="small" color={player.id === me.id ? 'accent' : 'cream'} align="center" numberOfLines={1}>
+                    {player.alias}
+                  </TelText>
+                </Animated.View>
+              ))}
+            </View>
+          </TelCard>
+        </RoutePanel>
+      </RouteColumns>
+    </RouteScreen>
   );
 }
 
@@ -400,69 +409,75 @@ function CheckinView({ header, snapshot, me, entry }: PhaseProps & { entry: Outb
   const waitingFor = snapshot.players.filter((player) => !player.checkedIn && player.online);
   const sending = !me.checkedIn && isOpen(entry);
   return (
-    <Screen tone="dark" backdrop="stars" header={header}>
-      <Animated.View key={stop} entering={entering.fadeUp()} style={styles.hero}>
-        <View style={styles.roomBadge}>
-          <TelIcon name={info.icon} size={44} color={colors.primary} />
-        </View>
-        <TelText variant="overline" color="accent" align="center">
-          Próxima parada · {info.place}
-        </TelText>
-        <TelText variant="title" color="cream" align="center">
-          {copy.heading}
-        </TelText>
-        <TelText variant="body" color="accentSoft" align="center">
-          {copy.hint}
-        </TelText>
-      </Animated.View>
-      <Guide>{guideLines[stop]}</Guide>
-      {me.checkedIn ? (
-        <TelCard tone="success" style={styles.confirmedCard}>
-          <TelIcon name="checkCircle" size={26} color={colors.success} />
-          <View style={styles.flex}>
-            <TelText variant="subtitle" color="successInk">
-              ¡Llegada confirmada!
+    <RouteScreen tone="dark" backdrop="stars" header={header}>
+      <RouteColumns>
+        <RoutePanel>
+          <Animated.View key={stop} entering={entering.fadeUp()} style={styles.hero}>
+            <View style={styles.roomBadge}>
+              <TelIcon name={info.icon} size={44} color={colors.primary} />
+            </View>
+            <TelText variant="overline" color="accent" align="center">
+              Próxima parada · {info.place}
             </TelText>
-            <TelText variant="caption" color="successInk">
-              {waitingFor.length ? `Esperando a ${waitingFor.length} ${waitingFor.length === 1 ? 'persona' : 'personas'} más.` : 'Todo el grupo está aquí. ¡Comenzamos!'}
+            <TelText variant="title" color="cream" align="center">
+              {copy.heading}
             </TelText>
-          </View>
-        </TelCard>
-      ) : (
-        <>
-          <TelButton
-            label={sending ? 'Confirmando con el stand…' : copy.confirm}
-            variant="cream"
-            size="lg"
-            icon="door"
-            loading={sending}
-            onPress={() => {
-              routeMember.checkin(stop);
-              void feedbackHeavy();
-            }}
-          />
-          {sending && entry?.state === 'queued' && (
-            <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
-              Sin conexión: tu llegada quedó guardada y se enviará sola al volver la señal.
+            <TelText variant="body" color="accentSoft" align="center">
+              {copy.hint}
             </TelText>
+          </Animated.View>
+          <Guide>{guideLines[stop]}</Guide>
+          {me.checkedIn ? (
+            <TelCard tone="success" style={styles.confirmedCard}>
+              <TelIcon name="checkCircle" size={26} color={colors.success} />
+              <View style={styles.flex}>
+                <TelText variant="subtitle" color="successInk">
+                  ¡Llegada confirmada!
+                </TelText>
+                <TelText variant="caption" color="successInk">
+                  {waitingFor.length ? `Esperando a ${waitingFor.length} ${waitingFor.length === 1 ? 'persona' : 'personas'} más.` : 'Todo el grupo está aquí. ¡Comenzamos!'}
+                </TelText>
+              </View>
+            </TelCard>
+          ) : (
+            <>
+              <TelButton
+                label={sending ? 'Confirmando con el stand…' : copy.confirm}
+                variant="cream"
+                size="lg"
+                icon="door"
+                loading={sending}
+                onPress={() => {
+                  routeMember.checkin(stop);
+                  void feedbackHeavy();
+                }}
+              />
+              {sending && entry?.state === 'queued' && (
+                <TelText variant="caption" color="accentSoft" align="center" accessibilityLiveRegion="polite">
+                  Sin conexión: tu llegada quedó guardada y se enviará sola al volver la señal.
+                </TelText>
+              )}
+            </>
           )}
-        </>
-      )}
-      <View style={styles.gap}>
-        <TelText variant="label" color="cream">
-          En la sala: {confirmed.length} de {snapshot.players.length}
-        </TelText>
-        <ProgressBar progress={snapshot.players.length ? confirmed.length / snapshot.players.length : 0} color={colors.accent} trackColor={colors.primarySoft} />
-        {snapshot.players.map((player) => (
-          <PlayerChip
-            key={player.id}
-            player={player}
-            me={player.id === me.id}
-            trailing={<TelIcon name={player.checkedIn ? 'checkCircle' : 'clock'} size={20} color={player.checkedIn ? colors.success : colors.slate} />}
-          />
-        ))}
-      </View>
-    </Screen>
+        </RoutePanel>
+        <RoutePanel aside>
+          <View style={styles.gap}>
+            <TelText variant="label" color="cream">
+              En la sala: {confirmed.length} de {snapshot.players.length}
+            </TelText>
+            <ProgressBar progress={snapshot.players.length ? confirmed.length / snapshot.players.length : 0} color={colors.accent} trackColor={colors.primarySoft} />
+            {snapshot.players.map((player) => (
+              <PlayerChip
+                key={player.id}
+                player={player}
+                me={player.id === me.id}
+                trailing={<TelIcon name={player.checkedIn ? 'checkCircle' : 'clock'} size={20} color={player.checkedIn ? colors.success : colors.slate} />}
+              />
+            ))}
+          </View>
+        </RoutePanel>
+      </RouteColumns>
+    </RouteScreen>
   );
 }
 
@@ -491,7 +506,7 @@ function seedFor(code: string, playerId: string, game: string): number {
 function B215Countdown({ header, startsAt }: { header: React.ReactNode; startsAt: number }) {
   const hostNow = useHostClock(250);
   return (
-    <Screen tone="dark" backdrop="signal" header={header}>
+    <RouteScreen tone="dark" backdrop="signal" header={header}>
       <BigCountdown seconds={Math.ceil((startsAt - hostNow) / 1000)} label="Operación Red B215 comienza en" />
       <TelCard tone="dark" style={styles.gap}>
         <TelText variant="subtitle" color="cream">
@@ -501,7 +516,7 @@ function B215Countdown({ header, startsAt }: { header: React.ReactNode; startsAt
           Routers, switches y access points: en 2 minutos tendrás que armar la red, enrutar paquetes y ordenar los canales Wi-Fi.
         </TelText>
       </TelCard>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -521,7 +536,7 @@ function B215View({ header, gameHeader, snapshot, me, offset, entry, forceFinish
   if (!started && startsAt !== null) return <B215Countdown header={header} startsAt={startsAt} />;
 
   return (
-    <Screen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B215 · Redes')} contentStyle={styles.gameContent}>
+    <RouteScreen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B215 · Redes')} contentStyle={styles.gameContent}>
       <StationGameHost
         game="red-b215"
         pace={snapshot.settings.pace ?? 1}
@@ -531,7 +546,7 @@ function B215View({ header, gameHeader, snapshot, me, offset, entry, forceFinish
         deadline={forceFinish || snapshot.deadline === null ? 1 : snapshot.deadline - offset - 2500}
         onDone={(result) => routeMember.submitScore('red-b215', result.score, result.accuracy)}
       />
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -540,40 +555,46 @@ function WaitingView({ header, snapshot, me, game, entry }: PhaseProps & { game:
   // Qué pasó con el puntaje: en el teléfono, en camino, guardado en el stand o perdido (con motivo).
   const status = scoreStatus(me.games[game], entry);
   return (
-    <Screen tone="dark" backdrop="orbits" header={header}>
-      <View style={styles.hero}>
-        <Rutix size={120} expression={status.lost ? 'sad' : 'happy'} pose="wave" />
-        <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="polite">
-          {status.title}
-        </TelText>
-        <TelText variant="caption" color="accentSoft" align="center">
-          {status.note}
-        </TelText>
-        {status.canRetry && <TelButton label="Enviar otra vez" variant="cream" icon="refresh" fullWidth={false} onPress={() => routeMember.retry(`score:${game}`)} />}
-        <TelText variant="body" color="accentSoft" align="center">
-          Esperando al resto del grupo: {finished.length} de {snapshot.players.length} terminaron {stationTitles[game]}.
-        </TelText>
-      </View>
-      <ProgressBar progress={snapshot.players.length ? finished.length / snapshot.players.length : 0} color={colors.accent} trackColor={colors.primarySoft} />
-      <View style={styles.gap}>
-        {snapshot.players.map((player) => (
-          <PlayerChip
-            key={player.id}
-            player={player}
-            me={player.id === me.id}
-            trailing={
-              player.games[game] !== undefined ? (
-                <TelText variant="label" color="cream" tabular>
-                  {formatNumber(player.games[game] ?? 0)}
-                </TelText>
-              ) : (
-                <SignalSpinner size={22} />
-              )
-            }
-          />
-        ))}
-      </View>
-    </Screen>
+    <RouteScreen tone="dark" backdrop="orbits" header={header}>
+      <RouteColumns>
+        <RoutePanel>
+          <View style={styles.hero}>
+            <Rutix size={120} expression={status.lost ? 'sad' : 'happy'} pose="wave" />
+            <TelText variant="title" color="cream" align="center" accessibilityLiveRegion="polite">
+              {status.title}
+            </TelText>
+            <TelText variant="caption" color="accentSoft" align="center">
+              {status.note}
+            </TelText>
+            {status.canRetry && <TelButton label="Enviar otra vez" variant="cream" icon="refresh" fullWidth={false} onPress={() => routeMember.retry(`score:${game}`)} />}
+            <TelText variant="body" color="accentSoft" align="center">
+              Esperando al resto del grupo: {finished.length} de {snapshot.players.length} terminaron {stationTitles[game]}.
+            </TelText>
+          </View>
+        </RoutePanel>
+        <RoutePanel aside>
+          <ProgressBar progress={snapshot.players.length ? finished.length / snapshot.players.length : 0} color={colors.accent} trackColor={colors.primarySoft} />
+          <View style={styles.gap}>
+            {snapshot.players.map((player) => (
+              <PlayerChip
+                key={player.id}
+                player={player}
+                me={player.id === me.id}
+                trailing={
+                  player.games[game] !== undefined ? (
+                    <TelText variant="label" color="cream" tabular>
+                      {formatNumber(player.games[game] ?? 0)}
+                    </TelText>
+                  ) : (
+                    <SignalSpinner size={22} />
+                  )
+                }
+              />
+            ))}
+          </View>
+        </RoutePanel>
+      </RouteColumns>
+    </RouteScreen>
   );
 }
 
@@ -582,34 +603,40 @@ function ResultsView({ header, snapshot, me }: PhaseProps) {
   const ranking = [...snapshot.players].sort((a, b) => (b.games['red-b215'] ?? 0) - (a.games['red-b215'] ?? 0));
   const seconds = snapshot.deadline ? Math.max(0, Math.ceil((snapshot.deadline - hostNow) / 1000)) : 0;
   return (
-    <Screen tone="dark" backdrop="orbits" header={header}>
-      <View style={styles.hero}>
-        <TelText variant="overline" color="accent" align="center">
-          Resultados · Sala B215
-        </TelText>
-        <TelText variant="title" color="cream" align="center">
-          ¡La red quedó operativa!
-        </TelText>
-        <TelText variant="body" color="accentSoft" align="center">
-          Próxima parada: sala B213 en {seconds}s
-        </TelText>
-      </View>
-      <View style={styles.gap}>
-        {ranking.map((player, index) => (
-          <Animated.View key={player.id} entering={FadeInDown.delay(index * 80)}>
-            <PlayerChip
-              player={player}
-              me={player.id === me.id}
-              trailing={
-                <TelText variant="label" color="cream" tabular>
-                  {index + 1}º · {formatNumber(player.games['red-b215'] ?? 0)}
-                </TelText>
-              }
-            />
-          </Animated.View>
-        ))}
-      </View>
-    </Screen>
+    <RouteScreen tone="dark" backdrop="orbits" header={header}>
+      <RouteColumns>
+        <RoutePanel>
+          <View style={styles.hero}>
+            <TelText variant="overline" color="accent" align="center">
+              Resultados · Sala B215
+            </TelText>
+            <TelText variant="title" color="cream" align="center">
+              ¡La red quedó operativa!
+            </TelText>
+            <TelText variant="body" color="accentSoft" align="center">
+              Próxima parada: sala B213 en {seconds}s
+            </TelText>
+          </View>
+        </RoutePanel>
+        <RoutePanel aside>
+          <View style={styles.gap}>
+            {ranking.map((player, index) => (
+              <Animated.View key={player.id} entering={FadeInDown.delay(index * 80)}>
+                <PlayerChip
+                  player={player}
+                  me={player.id === me.id}
+                  trailing={
+                    <TelText variant="label" color="cream" tabular>
+                      {index + 1}º · {formatNumber(player.games['red-b215'] ?? 0)}
+                    </TelText>
+                  }
+                />
+              </Animated.View>
+            ))}
+          </View>
+        </RoutePanel>
+      </RouteColumns>
+    </RouteScreen>
   );
 }
 
@@ -620,6 +647,7 @@ function MinutesLeft({ deadline }: { deadline: number }) {
 }
 
 function ProjectsView({ header, gameHeader, snapshot, me, outbox, active, onActive }: PhaseProps & { gameHeader: (title: string) => React.ReactNode; outbox: MemberView['outbox']; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
+  const { isDesktop } = useDesktopLayout();
   // Un pilar se enciende cuando su puntaje ya está en camino o guardado en el stand.
   const entryOf = (id: PillarId) => outbox[`score:${id}`];
   const lit = Object.fromEntries(pillarIds.map((id) => [id, me.games[id] !== undefined || (Boolean(entryOf(id)) && !isLost(entryOf(id)))])) as Record<PillarId, boolean>;
@@ -629,7 +657,7 @@ function ProjectsView({ header, gameHeader, snapshot, me, outbox, active, onActi
 
   if (active) {
     return (
-      <Screen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B213 · Proyectos')} contentStyle={styles.gameContent}>
+      <RouteScreen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B213 · Proyectos')} contentStyle={styles.gameContent}>
         {moved && (
           <View style={styles.movedBar} accessible accessibilityLiveRegion="polite">
             <TelIcon name="alert" size={18} color={colors.primary} />
@@ -649,75 +677,81 @@ function ProjectsView({ header, gameHeader, snapshot, me, outbox, active, onActi
             onActive(null);
           }}
         />
-      </Screen>
+      </RouteScreen>
     );
   }
 
   return (
-    <Screen tone="dark" backdrop="stars" header={header}>
-      <View style={styles.hero}>
-        <TelText variant="overline" color="accent" align="center">
-          Sala B213 · Pilares de Telemática
-        </TelText>
-        <TelText variant="title" color="cream" align="center">
-          {doneCount === 5 ? '¡Templo restaurado!' : 'Enciende los 5 pilares'}
-        </TelText>
-        <TelText variant="body" color="accentSoft" align="center">
-          {doneCount === 5
-            ? `Esperando al grupo: ${groupDone} de ${snapshot.players.length} listos.`
-            : 'Cada proyecto de la sala tiene su juego. Acércate al proyecto y juega en el orden que quieras.'}
-          {snapshot.deadline !== null && doneCount < 5 ? <MinutesLeft deadline={snapshot.deadline} /> : null}
-        </TelText>
-      </View>
-      <Temple lit={lit} />
-      {doneCount < 5 && <Guide>{doneCount === 0 ? 'Elige cualquier proyecto para empezar. Cada juego enciende un pilar del templo.' : `¡Van ${doneCount} de 5 pilares! Sigue con el que quieras.`}</Guide>}
-      <View style={styles.gap}>
-        {pillars.map((pillar, index) => {
-          const done = lit[pillar.id];
-          const score = me.games[pillar.id];
-          const entry = entryOf(pillar.id);
-          const lost = score === undefined && isLost(entry);
-          const state = pillarState(score, entry);
-          return (
-            <Animated.View key={pillar.id} entering={FadeInDown.delay(index * 70)}>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={`${pillar.pillar}: ${pillar.game}${done ? `, completado, ${state}` : lost ? ', el puntaje anterior no se registró' : ''}`}
-                disabled={done}
-                onPress={() => onActive(pillar.id)}
-                scaleTo={0.97}
-                style={[styles.project, { borderColor: pillar.color }, done && styles.projectDone]}
-              >
-                <View style={[styles.projectIcon, { backgroundColor: pillar.color }]}>
-                  <TelIcon name={pillar.icon} size={26} color={colors.primary} />
-                </View>
-                <View style={styles.flex}>
-                  <TelText variant="small" color="accentSoft">
-                    {pillar.pillar.toUpperCase()} · {pillar.project}
-                  </TelText>
-                  <TelText variant="subtitle" color="cream">
-                    {pillar.game}
-                  </TelText>
-                  <TelText variant="caption" color="accentSoft" numberOfLines={2}>
-                    {lost ? 'Tu puntaje anterior no alcanzó a registrarse. Puedes jugarlo de nuevo.' : pillar.summary}
-                  </TelText>
-                </View>
-                {done ? (
-                  <View style={styles.projectScore}>
-                    <TelIcon name={score !== undefined || entry?.state === 'accepted' ? 'checkCircle' : 'clock'} size={22} color={score !== undefined || entry?.state === 'accepted' ? colors.success : colors.cream} />
-                    <TelText variant="small" color="cream" tabular>
-                      {state}
-                    </TelText>
-                  </View>
-                ) : (
-                  <TelIcon name="play" size={22} color={colors.cream} />
-                )}
-              </PressableScale>
-            </Animated.View>
-          );
-        })}
-      </View>
-    </Screen>
+    <RouteScreen desktopWidth="content" tone="dark" backdrop="stars" header={header}>
+      <RouteColumns>
+        <RoutePanel>
+          <View style={styles.hero}>
+            <TelText variant="overline" color="accent" align="center">
+              Sala B213 · Pilares de Telemática
+            </TelText>
+            <TelText variant="title" color="cream" align="center">
+              {doneCount === 5 ? '¡Templo restaurado!' : 'Enciende los 5 pilares'}
+            </TelText>
+            <TelText variant="body" color="accentSoft" align="center">
+              {doneCount === 5
+                ? `Esperando al grupo: ${groupDone} de ${snapshot.players.length} listos.`
+                : 'Cada proyecto de la sala tiene su juego. Acércate al proyecto y juega en el orden que quieras.'}
+              {snapshot.deadline !== null && doneCount < 5 ? <MinutesLeft deadline={snapshot.deadline} /> : null}
+            </TelText>
+          </View>
+          <Temple lit={lit} width={isDesktop ? desktopLayout.routeTempleWidth : undefined} />
+          {doneCount < 5 && <Guide>{doneCount === 0 ? 'Elige cualquier proyecto para empezar. Cada juego enciende un pilar del templo.' : `¡Van ${doneCount} de 5 pilares! Sigue con el que quieras.`}</Guide>}
+        </RoutePanel>
+        <RoutePanel>
+          <View style={styles.gap}>
+            {pillars.map((pillar, index) => {
+              const done = lit[pillar.id];
+              const score = me.games[pillar.id];
+              const entry = entryOf(pillar.id);
+              const lost = score === undefined && isLost(entry);
+              const state = pillarState(score, entry);
+              return (
+                <Animated.View key={pillar.id} entering={FadeInDown.delay(index * 70)}>
+                  <PressableScale
+                    accessibilityRole="button"
+                    accessibilityLabel={`${pillar.pillar}: ${pillar.game}${done ? `, completado, ${state}` : lost ? ', el puntaje anterior no se registró' : ''}`}
+                    disabled={done}
+                    onPress={() => onActive(pillar.id)}
+                    scaleTo={0.97}
+                    style={[styles.project, isDesktop && styles.desktopProject, { borderColor: pillar.color }, done && styles.projectDone]}
+                  >
+                    <View style={[styles.projectIcon, { backgroundColor: pillar.color }]}>
+                      <TelIcon name={pillar.icon} size={26} color={colors.primary} />
+                    </View>
+                    <View style={styles.flex}>
+                      <TelText variant="small" color="accentSoft">
+                        {pillar.pillar.toUpperCase()} · {pillar.project}
+                      </TelText>
+                      <TelText variant="subtitle" color="cream">
+                        {pillar.game}
+                      </TelText>
+                      <TelText variant="caption" color="accentSoft" numberOfLines={2}>
+                        {lost ? 'Tu puntaje anterior no alcanzó a registrarse. Puedes jugarlo de nuevo.' : pillar.summary}
+                      </TelText>
+                    </View>
+                    {done ? (
+                      <View style={styles.projectScore}>
+                        <TelIcon name={score !== undefined || entry?.state === 'accepted' ? 'checkCircle' : 'clock'} size={22} color={score !== undefined || entry?.state === 'accepted' ? colors.success : colors.cream} />
+                        <TelText variant="small" color="cream" tabular>
+                          {state}
+                        </TelText>
+                      </View>
+                    ) : (
+                      <TelIcon name="play" size={22} color={colors.cream} />
+                    )}
+                  </PressableScale>
+                </Animated.View>
+              );
+            })}
+          </View>
+        </RoutePanel>
+      </RouteColumns>
+    </RouteScreen>
   );
 }
 
@@ -733,7 +767,7 @@ function QuizView({ header, snapshot, me, outbox }: PhaseProps & { outbox: Membe
   // Honesto con lo que pasó: en el teléfono, en camino, registrada o perdida.
   const note = answerNote(me.answered, entry);
   return (
-    <Screen tone="dark" backdrop="signal" header={header}>
+    <RouteScreen tone="dark" backdrop="signal" header={header}>
       {quiz.step === 'question' ? (
         <QuizQuestion
           quiz={quiz}
@@ -751,13 +785,14 @@ function QuizView({ header, snapshot, me, outbox }: PhaseProps & { outbox: Membe
       ) : (
         <QuizReveal quiz={quiz} players={snapshot.players} meId={me.id} />
       )}
-    </Screen>
+    </RouteScreen>
   );
 }
 
 type Reward = { state: 'saving' } | { state: 'saved'; xp: number | null } | { state: 'failed' };
 
 function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean }) {
+  const { isDesktop } = useDesktopLayout();
   const top = me.rank <= 3 && snapshot.players.length > 1;
   // La ruta solo cuenta como completada si la trivia terminó y respondiste en ella.
   const completed = snapshot.completed && me.answeredCount > 0;
@@ -795,7 +830,7 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
   const winners = snapshot.players.slice(0, 3).map((player) => player.alias);
 
   return (
-    <Screen tone="dark" backdrop="orbits" header={header}>
+    <RouteScreen tone="dark" backdrop="orbits" header={header}>
       <Celebration burstKey={snapshot.code} count={48} />
       <Animated.View entering={FadeIn.duration(400)} style={styles.hero}>
         <TelText variant="overline" color="accent" align="center">
@@ -805,7 +840,7 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
           {snapshot.players.length > 1 ? `¡Felicitaciones, ${winners.join(', ')}!` : '¡Completaste la Ruta Telemática!'}
         </TelText>
       </Animated.View>
-      {snapshot.players.length > 1 && <Podium players={snapshot.players} meId={me.id} />}
+      {snapshot.players.length > 1 && <Podium players={snapshot.players} meId={me.id} large={isDesktop} />}
       <TelCard tone={top ? 'cream' : 'dark'} style={styles.myResult}>
         <PlayerAvatar avatar={me.avatar} size={52} />
         <View style={styles.flex}>
@@ -869,7 +904,7 @@ function PodiumView({ header, snapshot, me, solo }: PhaseProps & { solo: boolean
           {stationGames.length} juegos de la ruta disponibles para practicar en la pestaña Jugar.
         </TelText>
       </View>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -947,6 +982,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,
     borderLeftWidth: 5,
+  },
+  desktopProject: {
+    padding: spacing.md,
+    minHeight: spacing.xxl * 2,
   },
   projectDone: {
     opacity: 0.8,

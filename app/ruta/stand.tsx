@@ -10,7 +10,7 @@ import { Celebration } from '@/components/feedback/Celebration';
 import { SignalSpinner } from '@/components/feedback/Loaders';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { IconButton } from '@/components/IconButton';
-import { Screen } from '@/components/Screen';
+import { RouteScreen } from '@/features/route/RouteScreen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
@@ -90,7 +90,7 @@ export default function StandScreen() {
 
   if (invalid) {
     return (
-      <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.replace('/ruta/stand')} />}>
+      <RouteScreen tone="dark" header={<AppHeader transparent compact onBack={() => router.replace('/ruta/stand')} />}>
         <View style={styles.center}>
           <TelText variant="title" color="cream" align="center">
             Ese enlace del stand no es válido
@@ -100,13 +100,13 @@ export default function StandScreen() {
           </TelText>
           <TelButton label="Volver al modo stand" variant="cream" onPress={() => router.replace('/ruta/stand')} />
         </View>
-      </Screen>
+      </RouteScreen>
     );
   }
   if (!code) return <StandHome />;
   if (current && !current.controller) {
     return (
-      <Screen tone="dark" header={<AppHeader transparent compact onBack={() => router.replace('/ruta/stand')} />}>
+      <RouteScreen tone="dark" header={<AppHeader transparent compact onBack={() => router.replace('/ruta/stand')} />}>
         <View style={styles.center}>
           <TelText variant="title" color="cream" align="center">
             La ruta {code} no está en este dispositivo
@@ -116,19 +116,19 @@ export default function StandScreen() {
           </TelText>
           <TelButton label="Volver al modo stand" variant="cream" onPress={() => router.replace('/ruta/stand')} />
         </View>
-      </Screen>
+      </RouteScreen>
     );
   }
   if (!current?.controller || !view) {
     return (
-      <Screen tone="dark" header={<AppHeader transparent compact />}>
+      <RouteScreen tone="dark" header={<AppHeader transparent compact />}>
         <View style={styles.center}>
           <SignalSpinner size={80} />
           <TelText variant="heading" color="cream">
             Abriendo la ruta {code}…
           </TelText>
         </View>
-      </Screen>
+      </RouteScreen>
     );
   }
   return <StandLive controller={current.controller} view={view} taking={taking} onTakeControl={() => void takeControl()} />;
@@ -200,7 +200,8 @@ function StandHome() {
   }
 
   return (
-    <Screen
+    <RouteScreen
+      desktopWidth="form"
       header={<AppHeader onBack={() => (router.canGoBack() ? router.back() : router.replace('/ruta'))} kicker="Modo stand" title="Conduce una ruta" subtitle="Para el equipo del stand de Telemática" />}
     >
       <TelCard style={styles.gap}>
@@ -264,7 +265,7 @@ function StandHome() {
           )}
         </View>
       )}
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -299,6 +300,8 @@ function linkLabel(view: HostView): { ok: boolean; label: string } {
 function StandLive({ controller, view, taking, onTakeControl }: { controller: HostController; view: HostView; taking: boolean; onTakeControl: () => void }) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
+  // Pantalla del stand en proyector / monitor grande: código y QR crecen para leerse desde lejos.
+  const huge = width >= 1600;
   const snapshot = view.snapshot;
   const readOnly = view.readOnly;
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -307,7 +310,7 @@ function StandLive({ controller, view, taking, onTakeControl }: { controller: Ho
   const link = linkLabel(view);
 
   const codePanel = (
-    <TelCard tone="navy" style={[styles.codePanel, wide && styles.codePanelWide]}>
+    <TelCard tone="navy" style={[styles.codePanel, wide && styles.codePanelWide, huge && styles.codePanelHuge]}>
       <View style={styles.rowBetween}>
         <Tag tone={link.ok ? 'success' : 'warning'} icon={link.ok ? 'wifi' : 'wifiOff'} label={link.label} />
         <Tag tone="glass" icon="users" label={`${snapshot.players.length}`} />
@@ -315,11 +318,11 @@ function StandLive({ controller, view, taking, onTakeControl }: { controller: Ho
       <TelText variant="overline" color="accent" align="center">
         Código de la ruta
       </TelText>
-      <TelText variant="display" color="cream" align="center" style={[styles.bigCode, wide && styles.bigCodeWide]}>
+      <TelText variant="display" color="cream" align="center" style={[styles.bigCode, wide && styles.bigCodeWide, huge && styles.bigCodeHuge]}>
         {view.code}
       </TelText>
       <View style={styles.qrWrap}>
-        <QrCode value={view.joinUrl} size={wide ? 280 : 220} />
+        <QrCode value={view.joinUrl} size={huge ? 400 : wide ? 280 : 220} />
       </View>
       <TelText variant="label" color="accentSoft" align="center">
         Escanea o entra a {joinHost}/ruta
@@ -442,7 +445,8 @@ function StandLive({ controller, view, taking, onTakeControl }: { controller: Ho
   );
 
   return (
-    <Screen
+    <RouteScreen
+      desktopWidth="wide"
       tone="dark"
       backdrop="stars"
       header={
@@ -460,7 +464,7 @@ function StandLive({ controller, view, taking, onTakeControl }: { controller: Ho
         {codePanel}
         {controlPanel}
       </View>
-    </Screen>
+    </RouteScreen>
   );
 }
 
@@ -689,6 +693,9 @@ const styles = StyleSheet.create({
   codePanelWide: {
     width: 360,
   },
+  codePanelHuge: {
+    width: 520,
+  },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -709,9 +716,14 @@ const styles = StyleSheet.create({
     fontSize: 54,
     lineHeight: 62,
   },
+  bigCodeHuge: {
+    letterSpacing: 8,
+    fontSize: 76,
+    lineHeight: 84,
+  },
   qrWrap: {
     alignSelf: 'center',
-    padding: 4,
+    padding: 12,
     borderRadius: radius.lg,
     backgroundColor: colors.white,
     overflow: 'hidden',
