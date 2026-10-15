@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { initAccount } from '@/account/store';
 import { ToastHost } from '@/components/feedback/ToastHost';
+import { AchievementCelebration } from '@/features/celebration/AchievementCelebration';
 import { useRouteForeground } from '@/route/hooks';
 import { routeMember } from '@/route/member';
 import { loadInbox } from '@/storage/inbox';
@@ -80,6 +81,7 @@ export default function RootLayout() {
           <Stack.Screen name="cuenta/recuperar" />
         </Stack>
         <ToastHost />
+        <AchievementCelebration />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

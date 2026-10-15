@@ -9,15 +9,20 @@ import { feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { colors, spacing } from '@/theme';
 import { packetRushTarget } from '../packets';
+import { GameFrame, useGameDensity } from '../parts';
 import type { MicroGameProps } from '../types';
+
+const BUTTON = { compact: 108, regular: 128, roomy: 150 } as const;
 
 // Microjuego 8: toca lo más rápido posible para despachar los paquetes hacia el servidor.
 export function PacketRushGame({ active, level, onAnswer }: MicroGameProps) {
+  const density = useGameDensity();
   const target = packetRushTarget(level);
   const motion = useMotionEnabled();
   const [taps, setTaps] = useState(0);
   const [flying, setFlying] = useState<number[]>([]);
   const answered = useRef(false);
+  const size = BUTTON[density];
 
   function tap() {
     if (!active || answered.current) return;
@@ -33,13 +38,14 @@ export function PacketRushGame({ active, level, onAnswer }: MicroGameProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame style={styles.container}>
       <View style={styles.server}>
-        <TelIcon name="server" size={40} color={colors.cream} />
+        <TelIcon name="server" size={28} color={colors.cream} />
         <TelText variant="small" color="accentSoft">
           SERVIDOR
         </TelText>
       </View>
+      {/* El carril se estira o encoge con el espacio libre; el botón conserva su tamaño. */}
       <View style={styles.lane}>
         {flying.map((id) => (
           <Animated.View
@@ -55,28 +61,37 @@ export function PacketRushGame({ active, level, onAnswer }: MicroGameProps) {
       <TelText variant="subtitle" color="cream" align="center" tabular>
         {taps}/{target} paquetes
       </TelText>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Enviar paquete" disabled={!active} onPress={tap} scaleTo={0.88} style={styles.button}>
-        <TelIcon name="send" size={46} color={colors.primary} />
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="Enviar paquete"
+        disabled={!active}
+        onPress={tap}
+        scaleTo={0.88}
+        style={[styles.button, { width: size, height: size, borderRadius: size / 2 }]}
+      >
+        <TelIcon name="send" size={Math.round(size * 0.3)} color={colors.primary} />
       </PressableScale>
-    </View>
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'flex-start',
   },
   server: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    padding: spacing.sm,
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
     borderRadius: 18,
     backgroundColor: colors.secondary,
-    width: 96,
   },
   lane: {
-    height: 60,
+    flex: 1,
+    minHeight: 36,
     alignSelf: 'stretch',
   },
   bar: {
@@ -93,9 +108,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   button: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
     backgroundColor: colors.cream,
     borderWidth: 6,
     borderColor: colors.accent,

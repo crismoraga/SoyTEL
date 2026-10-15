@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type PropsWithChildren } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ProgressBar } from '@/components/feedback/Progress';
 import { Rutix } from '@/components/graphics/Rutix';
@@ -21,9 +21,20 @@ export interface StationGameProps {
   // Ritmo de juego: multiplica los tiempos (1 = original). En la ruta en vivo lo fija el stand para todos.
   pace?: number;
   seed: number;
+  // Semilla compartida por todo el grupo en la ruta en vivo (elige qué juegos tocan); en una práctica no
+  // viene y se usa `seed`.
+  groupSeed?: number;
   // Hora local (ms) en que el juego debe cerrarse sí o sí (B215 va sincronizado con el grupo).
   deadline?: number | null;
   onComplete: (result: StationGameResult) => void;
+}
+
+// ——— Pantallas bajas ———
+// Bajo esta altura de ventana (px) el HUD, las presentaciones, las pistas y los resultados se compactan.
+export const COMPACT_HEIGHT = 640;
+
+export function useCompact(): boolean {
+  return useWindowDimensions().height < COMPACT_HEIGHT;
 }
 
 // ——— Reloj del juego ———
@@ -88,7 +99,7 @@ export function useGameTimeout(at: number | null | undefined, onTime: () => void
   const paused = useGamePaused();
   useEffect(() => {
     if (at === null || at === undefined || paused) return;
-    const timer = setTimeout(() => callback.current(), Math.max(0, at - gameNow()));
+    const timer = setTimeout(() => callback.current(), clamp(at - gameNow(), 0, MAX_TIMEOUT));
     return () => clearTimeout(timer);
   }, [at, paused, token]);
 }
@@ -106,6 +117,9 @@ export function useSubmitOnce(onComplete: (result: StationGameResult) => void): 
   );
 }
 
+// Un setTimeout largo (más de ~24 días) se dispararía al instante: se acota.
+const MAX_TIMEOUT = 2_147_483_647;
+
 // Cierra el juego a la hora indicada (hora local en ms). En la ruta en vivo la decide el stand: cuando
 // el grupo avanza, el juego abierto se cierra solo y entrega lo logrado hasta ese momento.
 export function useDeadline(deadline: number | null | undefined, onDeadline: () => void): void {
@@ -115,13 +129,77 @@ export function useDeadline(deadline: number | null | undefined, onDeadline: () 
   });
   useEffect(() => {
     if (!deadline) return;
-    const timer = setTimeout(() => callback.current(), Math.max(0, deadline - Date.now()));
+    const timer = setTimeout(() => callback.current(), clamp(deadline - clockNow(), 0, MAX_TIMEOUT));
     return () => clearTimeout(timer);
   }, [deadline]);
 }
 
+// Marca breve (un temblor, un destello): guarda un valor un rato y lo borra solo. El temporizador se
+// cancela al desmontar, así no queda ningún cambio de estado pendiente.
+export function useFlash<T>(ms = 400): [T | null, (value: T) => void] {
+  const [value, setValue] = useState<T | null>(null);
+  useEffect(() => {
+    if (value === null) return;
+    const timer = setTimeout(() => setValue(null), ms);
+    return () => clearTimeout(timer);
+  }, [ms, value]);
+  return [value, setValue];
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// ——— Etapas con presentación ———
+// Orden de una partida: presentación → etapa con tiempo → (siguiente presentación…) → cierre.
+export interface StageFlow {
+  // Etapa actual (0, 1, 2…).
+  index: number;
+  // La presentación de la etapa está en pantalla (el reloj de la etapa aún no corre).
+  banner: boolean;
+  // Hora del juego en que termina la etapa en curso (null mientras se lee la presentación).
+  endsAt: number | null;
+  // Ya no quedan etapas.
+  finished: boolean;
+  // El jugador cerró la presentación: arranca el reloj de la etapa.
+  start: () => void;
+  // Termina la etapa `from`. Solo cuenta una vez por etapa: un cierre repetido o atrasado se ignora.
+  finish: (from: number) => void;
+}
+
+export function useStageFlow(seconds: readonly number[], pace: number): StageFlow {
+  const [index, setIndex] = useState(0);
+  const [banner, setBanner] = useState(true);
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [finished, setFinished] = useState(false);
+  const current = useRef(0);
+  const running = useRef(false);
+  const count = seconds.length;
+
+  const start = useCallback(() => {
+    if (running.current) return;
+    running.current = true;
+    setBanner(false);
+    setEndsAt(gameNow() + (seconds[current.current] ?? 20) * pace * 1000);
+  }, [pace, seconds]);
+
+  const finish = useCallback(
+    (from: number) => {
+      if (from !== current.current || !running.current) return;
+      running.current = false;
+      setEndsAt(null);
+      if (from < count - 1) {
+        current.current = from + 1;
+        setIndex(from + 1);
+        setBanner(true);
+      } else {
+        setFinished(true);
+      }
+    },
+    [count],
+  );
+
+  return { index, banner, endsAt, finished, start, finish };
 }
 
 interface HudProps {
@@ -132,24 +210,29 @@ interface HudProps {
   secondsLeft: number | null;
   totalSeconds?: number;
   accent?: string;
+  // Palabra del contador ("ETAPA 2 DE 3"); un juego por mensajes puede decir "MENSAJE".
+  unit?: string;
 }
 
-// Barra superior del juego: etapa, puntaje y tiempo.
-export function StationHud({ stage, stages, title, score, secondsLeft, totalSeconds, accent = colors.accent }: HudProps) {
+// Barra superior del juego: etapa, puntaje y tiempo. En pantallas bajas cabe en una sola línea.
+export function StationHud({ stage, stages, title, score, secondsLeft, totalSeconds, accent = colors.accent, unit = 'ETAPA' }: HudProps) {
+  const compact = useCompact();
   const urgent = secondsLeft !== null && secondsLeft <= 5;
   return (
-    <View style={styles.hud}>
+    <View style={[styles.hud, compact && styles.hudCompact]}>
       <View style={styles.hudRow}>
-        <View style={styles.flex}>
-          <TelText variant="small" color="accentSoft" style={styles.kicker}>
-            ETAPA {stage} DE {stages}
-          </TelText>
-          <TelText variant="subtitle" color="cream" numberOfLines={1}>
-            {title}
+        <View style={styles.hudTitle} accessible accessibilityLabel={`${unit} ${stage} de ${stages}: ${title}`}>
+          {!compact && (
+            <TelText variant="small" color="accentSoft" style={styles.kicker}>
+              {`${unit} ${stage} DE ${stages}`}
+            </TelText>
+          )}
+          <TelText variant={compact ? 'label' : 'subtitle'} color="cream" numberOfLines={1}>
+            {compact ? `${stage}/${stages} · ${title}` : title}
           </TelText>
         </View>
-        <View style={styles.scoreBox} accessibilityLabel={`${score} puntos`}>
-          <TelText variant="heading" color="cream" tabular>
+        <View style={[styles.scoreBox, compact && styles.scoreBoxCompact]} accessibilityLabel={`${score} puntos`}>
+          <TelText variant={compact ? 'subtitle' : 'heading'} color="cream" tabular>
             {score}
           </TelText>
           <TelText variant="small" color="accentSoft">
@@ -157,8 +240,8 @@ export function StationHud({ stage, stages, title, score, secondsLeft, totalSeco
           </TelText>
         </View>
         {secondsLeft !== null && (
-          <View style={[styles.timeBox, urgent && styles.timeUrgent]} accessibilityLabel={`${secondsLeft} segundos`}>
-            <TelIcon name="timer" size={16} color={urgent ? colors.white : colors.cream} />
+          <View style={[styles.timeBox, compact && styles.timeBoxCompact, urgent && styles.timeUrgent]} accessibilityLabel={`${secondsLeft} segundos`}>
+            <TelIcon name="timer" size={compact ? 14 : 16} color={urgent ? colors.white : colors.cream} />
             <TelText variant="label" color={urgent ? 'white' : 'cream'} tabular>
               {secondsLeft}s
             </TelText>
@@ -166,7 +249,7 @@ export function StationHud({ stage, stages, title, score, secondsLeft, totalSeco
         )}
       </View>
       {secondsLeft !== null && totalSeconds ? (
-        <ProgressBar progress={clamp(secondsLeft / totalSeconds, 0, 1)} color={urgent ? colors.danger : accent} trackColor={colors.primarySoft} height={5} />
+        <ProgressBar progress={clamp(secondsLeft / totalSeconds, 0, 1)} color={urgent ? colors.danger : accent} trackColor={colors.primarySoft} height={compact ? 4 : 5} />
       ) : null}
     </View>
   );
@@ -229,10 +312,27 @@ function ContinueHost({ children, pausable }: PropsWithChildren<{ pausable: bool
     };
   }, [pausable]);
 
+  // El juego ocupa exactamente el espacio que deja la pantalla: el contenedor no tiene alto propio
+  // (así nunca empuja a la pantalla) y el juego se dibuja encima, con el botón "Continuar" abajo.
   return (
     <ContinueContext.Provider value={api}>
       <View style={styles.continueHost}>
-        <View style={styles.continueGame}>{children}</View>
+        <View style={styles.continueFill}>
+          <View style={styles.continueGame}>{children}</View>
+          {pending && (
+            <Animated.View entering={motion ? FadeInDown.duration(180) : undefined} style={styles.continueBar}>
+              <TelButton
+                label={pending.label}
+                variant="cream"
+                iconRight="arrowRight"
+                onPress={() => {
+                  setPending(null);
+                  pending.action();
+                }}
+              />
+            </Animated.View>
+          )}
+        </View>
         {away && pausable && (
           <View style={styles.pauseLayer} accessibilityViewIsModal>
             <View style={styles.pauseCard}>
@@ -246,19 +346,6 @@ function ContinueHost({ children, pausable }: PropsWithChildren<{ pausable: bool
               <TelButton label="Seguir jugando" variant="cream" icon="play" onPress={() => setAway(false)} />
             </View>
           </View>
-        )}
-        {pending && (
-          <Animated.View entering={motion ? FadeInDown.duration(180) : undefined} style={styles.continueBar}>
-            <TelButton
-              label={pending.label}
-              variant="cream"
-              iconRight="arrowRight"
-              onPress={() => {
-                setPending(null);
-                pending.action();
-              }}
-            />
-          </Animated.View>
         )}
       </View>
     </ContinueContext.Provider>
@@ -286,13 +373,17 @@ interface BannerProps {
   body: string;
   icon: IconName;
   accent?: string;
+  // La meta de la etapa en una frase (≤ 80 caracteres): se destaca sobre la explicación.
+  goal?: string;
   onDone: () => void;
 }
 
-// Presentación de cada etapa: queda en pantalla hasta que el jugador la toca (se lee con calma).
-export function StageBanner({ index, title, body, icon, accent = colors.accent, onDone }: BannerProps) {
+// Presentación de cada etapa: queda en pantalla hasta que el jugador la toca (se lee con calma). El
+// texto se desplaza si la pantalla es baja, y "Toca para empezar" siempre queda a la vista.
+export function StageBanner({ index, title, body, icon, accent = colors.accent, goal, onDone }: BannerProps) {
   const motion = useMotionEnabled();
   const coach = useCoachEnabled();
+  const compact = useCompact();
   const shownAt = useRef(0);
   useEffect(() => {
     shownAt.current = clockNow();
@@ -302,37 +393,52 @@ export function StageBanner({ index, title, body, icon, accent = colors.accent, 
     if (clockNow() - shownAt.current < 350) return;
     onDone();
   }
+  const mascot = compact ? 64 : 112;
   return (
     <Animated.View entering={motion ? FadeIn.duration(200) : undefined} exiting={motion ? FadeOut.duration(160) : undefined} style={styles.bannerWrap}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Etapa ${index}: ${title}. ${body} Toca para empezar`} onPress={start} style={styles.banner}>
-        {coach ? (
-          <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={styles.bannerRutix}>
-            <Rutix size={124} expression="happy" pose="point" />
-            <View style={[styles.bannerBadge, { backgroundColor: accent }]}>
-              <TelIcon name={icon} size={24} color={colors.primary} />
-            </View>
-          </Animated.View>
-        ) : (
-          <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={[styles.bannerIcon, { backgroundColor: accent }]}>
-            <TelIcon name={icon} size={40} color={colors.primary} />
-          </Animated.View>
-        )}
-        <TelText variant="overline" color="accent" align="center">
-          Etapa {index}
-        </TelText>
-        <TelText variant="title" color="cream" align="center">
-          {title}
-        </TelText>
-        <TelText variant="body" color="accentSoft" align="center" style={styles.bannerBody}>
-          {body}
-        </TelText>
-        <View style={[styles.bannerCta, { borderColor: accent }]}>
+      <ScrollView style={styles.bannerScroll} contentContainerStyle={[styles.bannerContent, compact && styles.bannerContentCompact]} showsVerticalScrollIndicator={false}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Etapa ${index}: ${title}. ${goal ? `${goal} ` : ''}${body} Toca para empezar`}
+          onPress={start}
+          style={[styles.banner, compact && styles.bannerCompact]}
+        >
+          {coach ? (
+            <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={{ width: mascot, height: mascot }}>
+              <Rutix size={mascot} expression="happy" pose="point" />
+              <View style={[styles.bannerBadge, compact && styles.bannerBadgeCompact, { backgroundColor: accent }]}>
+                <TelIcon name={icon} size={compact ? 16 : 24} color={colors.primary} />
+              </View>
+            </Animated.View>
+          ) : (
+            <Animated.View entering={motion ? ZoomIn.springify().damping(12) : undefined} style={[styles.bannerIcon, compact && styles.bannerIconCompact, { backgroundColor: accent }]}>
+              <TelIcon name={icon} size={compact ? 26 : 40} color={colors.primary} />
+            </Animated.View>
+          )}
+          <TelText variant="overline" color="accent" align="center">
+            Etapa {index}
+          </TelText>
+          <TelText variant={compact ? 'heading' : 'title'} color="cream" align="center">
+            {title}
+          </TelText>
+          {goal ? (
+            <TelText variant={compact ? 'label' : 'bodyStrong'} color="cream" align="center" style={styles.bannerBody}>
+              {goal}
+            </TelText>
+          ) : null}
+          <TelText variant={compact ? 'caption' : 'body'} color="accentSoft" align="center" style={styles.bannerBody}>
+            {body}
+          </TelText>
+        </Pressable>
+      </ScrollView>
+      <View style={styles.bannerFooter}>
+        <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" onPress={start} style={[styles.bannerCta, { borderColor: accent }]}>
           <TelIcon name="tap" size={18} color={colors.cream} />
           <TelText variant="label" color="cream">
             Toca para empezar
           </TelText>
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -355,76 +461,127 @@ interface ResultProps {
   onSubmit: () => void;
 }
 
+// Resultado de la partida. El contenido se desplaza si no cabe; el botón de enviar queda siempre a la vista.
 export function StationSummary({ title, message, rows, total, learned, accent = colors.accent, submitLabel = 'Enviar mi puntaje', onSubmit }: ResultProps) {
   // Si el tiempo cerró el juego con un "Continuar" pendiente, ya no corresponde mostrarlo.
   const { cancel } = useContext(ContinueContext);
   const coach = useCoachEnabled();
+  const compact = useCompact();
   const ratio = clamp(total / 1000, 0, 1);
   useEffect(() => {
     cancel();
   }, [cancel]);
   return (
     <Animated.View entering={FadeIn.duration(260)} style={styles.summary}>
-      {coach && (
-        <CoachBubble mood={coachMoodForScore(ratio)} tone={ratio >= 0.45 ? 'good' : 'info'} size={76}>
-          {coachSummaryLine(ratio)}
-        </CoachBubble>
-      )}
-      <View style={styles.summaryHead}>
-        <TelText variant="overline" color="accent" align="center">
-          {title}
-        </TelText>
-        <TelText variant="display" color="cream" align="center" tabular>
-          {total}
-        </TelText>
-        <TelText variant="label" color="accentSoft" align="center">
-          {message}
-        </TelText>
-      </View>
-      <View style={styles.rows}>
-        {rows.map((row) => (
-          <View key={row.label} style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: accent }]}>
-              <TelIcon name={row.icon} size={18} color={colors.primary} />
-            </View>
-            <View style={styles.flex}>
-              <TelText variant="label" color="cream">
-                {row.label}
+      <ScrollView style={styles.summaryScroll} contentContainerStyle={[styles.summaryContent, compact && styles.summaryContentCompact]} showsVerticalScrollIndicator={false}>
+        {coach && (
+          <CoachBubble mood={coachMoodForScore(ratio)} tone={ratio >= 0.45 ? 'good' : 'info'} size={compact ? 52 : 76}>
+            {coachSummaryLine(ratio)}
+          </CoachBubble>
+        )}
+        <View style={styles.summaryHead}>
+          <TelText variant="overline" color="accent" align="center">
+            {title}
+          </TelText>
+          <TelText variant={compact ? 'hero' : 'display'} color="cream" align="center" tabular>
+            {total}
+          </TelText>
+          <TelText variant="label" color="accentSoft" align="center">
+            {message}
+          </TelText>
+        </View>
+        <View style={[styles.rows, compact && styles.rowsCompact]}>
+          {rows.map((row) => (
+            <View key={row.label} style={styles.row}>
+              <View style={[styles.rowIcon, { backgroundColor: accent }]}>
+                <TelIcon name={row.icon} size={18} color={colors.primary} />
+              </View>
+              <View style={styles.flex}>
+                <TelText variant="label" color="cream">
+                  {row.label}
+                </TelText>
+                <ProgressBar progress={row.max ? clamp(row.value / row.max, 0, 1) : 0} color={accent} trackColor={colors.primary} height={5} />
+              </View>
+              <TelText variant="label" color="cream" tabular>
+                {row.value}/{row.max}
               </TelText>
-              <ProgressBar progress={row.max ? clamp(row.value / row.max, 0, 1) : 0} color={accent} trackColor={colors.primary} height={5} />
             </View>
-            <TelText variant="label" color="cream" tabular>
-              {row.value}/{row.max}
-            </TelText>
-          </View>
-        ))}
-      </View>
-      <View style={styles.learned}>
-        <TelIcon name="lightbulb" size={20} color={colors.cream} />
-        <TelText variant="caption" color="cream" style={styles.flex}>
-          {learned}
-        </TelText>
-      </View>
+          ))}
+        </View>
+        <View style={styles.learned}>
+          <TelIcon name="lightbulb" size={20} color={colors.cream} />
+          <TelText variant="caption" color="cream" style={styles.flex}>
+            {learned}
+          </TelText>
+        </View>
+      </ScrollView>
       <TelButton label={submitLabel} variant="cream" iconRight="send" onPress={onSubmit} />
     </Animated.View>
   );
 }
 
+export interface PopMessage {
+  id: number;
+  text: string;
+  tone: 'good' | 'bad';
+}
+
+// Mensaje corto que salta y se borra solo ("+25", "¡Racha x3!"): `show` lo muestra y el temporizador
+// se cancela al desmontar.
+export function usePop(ms = 900): [PopMessage | null, (text: string, tone?: 'good' | 'bad') => void] {
+  const [pop, setPop] = useFlash<PopMessage>(ms);
+  const counter = useRef(0);
+  const show = useCallback(
+    (text: string, tone: 'good' | 'bad' = 'good') => {
+      counter.current += 1;
+      setPop({ id: counter.current, text, tone });
+    },
+    [setPop],
+  );
+  return [pop, show];
+}
+
+// Cartelito que sale con un rebote y se desvanece: refuerza cada acierto sin tapar el juego. Se ubica
+// arriba y al centro del contenedor donde se ponga (que debe ser relativo, como cualquier vista).
+export function ScorePop({ pop }: { pop: PopMessage | null }) {
+  const motion = useMotionEnabled();
+  if (!pop) return null;
+  return (
+    <Animated.View
+      key={pop.id}
+      pointerEvents="none"
+      entering={motion ? ZoomIn.springify().damping(9) : undefined}
+      exiting={motion ? FadeOut.duration(220) : undefined}
+      style={[styles.pop, pop.tone === 'bad' ? styles.popBad : styles.popGood]}
+    >
+      <TelText variant="subtitle" color="white">
+        {pop.text}
+      </TelText>
+    </Animated.View>
+  );
+}
+
+// Superficie del tablero. No impone alto: quien la usa decide (flex: 1 o un FitBox adentro).
 export function GameBoard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   return <View style={[styles.board, style]}>{children}</View>;
 }
 
 // Pista o reacción durante el juego. Con "Rutix en los juegos" activo la dice Rutix en una burbuja.
+// Reserva el alto de dos líneas para que el tablero no salte cuando cambia el texto.
 export function Hint({ children, tone = 'info' }: PropsWithChildren<{ tone?: 'info' | 'good' | 'bad' }>) {
   const coach = useCoachEnabled();
-  if (coach) {
-    return (
-      <CoachBubble mood={tone === 'good' ? 'good' : tone === 'bad' ? 'bad' : 'tip'} tone={tone} size={44}>
-        {children}
-      </CoachBubble>
-    );
-  }
-  return <PlainHint tone={tone}>{children}</PlainHint>;
+  const compact = useCompact();
+  return (
+    <View style={[styles.hintSlot, { minHeight: compact ? 44 : 52 }]}>
+      {coach ? (
+        <CoachBubble mood={tone === 'good' ? 'good' : tone === 'bad' ? 'bad' : 'tip'} tone={tone} size={compact ? 32 : 44}>
+          {children}
+        </CoachBubble>
+      ) : (
+        <PlainHint tone={tone}>{children}</PlainHint>
+      )}
+    </View>
+  );
 }
 
 function PlainHint({ children, tone = 'info' }: PropsWithChildren<{ tone?: 'info' | 'good' | 'bad' }>) {
@@ -442,6 +599,7 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
   },
   kicker: {
     letterSpacing: 1.2,
@@ -449,14 +607,27 @@ const styles = StyleSheet.create({
   hud: {
     gap: 8,
   },
+  hudCompact: {
+    gap: 4,
+  },
   hudRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
+  },
+  hudTitle: {
+    flex: 1,
+    minWidth: 0,
   },
   scoreBox: {
     alignItems: 'center',
-    minWidth: 58,
+    minWidth: 52,
+  },
+  scoreBoxCompact: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+    minWidth: 0,
   },
   timeBox: {
     flexDirection: 'row',
@@ -467,22 +638,39 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.primarySoft,
   },
+  timeBoxCompact: {
+    height: 28,
+    paddingHorizontal: 8,
+  },
   timeUrgent: {
     backgroundColor: colors.danger,
   },
   bannerWrap: {
     ...StyleSheet.absoluteFill,
     zIndex: 20,
-    backgroundColor: 'rgba(7, 31, 49, 0.94)',
-    justifyContent: 'center',
-    padding: spacing.lg,
+    backgroundColor: 'rgba(7, 31, 49, 0.96)',
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: 'rgba(167, 212, 237, 0.25)',
+    overflow: 'hidden',
+  },
+  bannerScroll: {
+    flex: 1,
+  },
+  bannerContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  bannerContentCompact: {
+    padding: spacing.sm,
   },
   banner: {
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  bannerCompact: {
+    gap: 4,
   },
   bannerIcon: {
     width: 84,
@@ -492,12 +680,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.xs,
   },
-  bannerBody: {
-    maxWidth: 320,
+  bannerIconCompact: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginBottom: 0,
   },
-  bannerRutix: {
-    width: 124,
-    height: 124,
+  bannerBody: {
+    maxWidth: 340,
   },
   bannerBadge: {
     position: 'absolute',
@@ -511,22 +701,41 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: colors.primaryDeep,
   },
+  bannerBadgeCompact: {
+    right: -6,
+    bottom: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+  },
+  bannerFooter: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: 6,
+    paddingBottom: spacing.sm,
+  },
   bannerCta: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    marginTop: spacing.xs,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
     borderRadius: radius.pill,
     borderWidth: 1.5,
   },
   continueHost: {
     flex: 1,
+    minHeight: 0,
+  },
+  continueFill: {
+    ...StyleSheet.absoluteFill,
     gap: spacing.sm,
   },
   continueGame: {
     flex: 1,
+    minHeight: 0,
   },
   continueBar: {
     paddingBottom: spacing.xs,
@@ -552,10 +761,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   summary: {
+    flex: 1,
+    minHeight: 0,
+    gap: spacing.sm,
+  },
+  summaryScroll: {
+    flex: 1,
+  },
+  summaryContent: {
     gap: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  summaryContentCompact: {
+    gap: spacing.sm,
   },
   summaryHead: {
-    gap: 4,
+    gap: 2,
     alignItems: 'center',
   },
   rows: {
@@ -563,6 +784,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,
+  },
+  rowsCompact: {
+    gap: spacing.xs,
+    padding: spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -587,11 +812,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(244, 236, 215, 0.25)',
   },
   board: {
+    minHeight: 0,
     borderRadius: radius.lg,
     backgroundColor: 'rgba(18, 61, 92, 0.75)',
     borderWidth: 1,
     borderColor: 'rgba(167, 212, 237, 0.2)',
     overflow: 'hidden',
+  },
+  pop: {
+    position: 'absolute',
+    alignSelf: 'center',
+    top: 48,
+    zIndex: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  popGood: {
+    backgroundColor: '#1F8A5B',
+  },
+  popBad: {
+    backgroundColor: '#B23A3A',
+  },
+  hintSlot: {
+    justifyContent: 'center',
   },
   hint: {
     borderRadius: radius.md,

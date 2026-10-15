@@ -16,6 +16,11 @@ module.exports = defineConfig([
     },
   },
   {
+    // Las fuentes web (.woff2) se cargan como recursos, igual que las imágenes.
+    files: ['src/theme/fontAssets.web.ts'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     // Los mocks de Jest se declaran con require() dentro de jest.mock.
     files: ['tests/**/*.ts', 'tests/**/*.tsx'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },

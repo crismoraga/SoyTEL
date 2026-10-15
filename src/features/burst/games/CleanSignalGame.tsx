@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { TelText } from '@/components/TelText';
 import { seededRandom } from '@/graphics/shapes';
-import { colors, spacing } from '@/theme';
+import { colors } from '@/theme';
 import { shuffle } from '../logic';
-import { ChoiceTile, TileGrid, type TileState } from '../parts';
+import { ChoiceTile, GameFrame, TileGrid, useGameDensity, type TileState } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface WaveOption {
@@ -35,6 +34,7 @@ const noiseRound: WaveOption[] = [
 
 // Microjuego 2: compara señales. Dos variantes: menos ruido o mayor frecuencia.
 export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
+  const density = useGameDensity();
   const [round] = useState(() => {
     const mode: 'noise' | 'frequency' = Math.random() < 0.5 ? 'noise' : 'frequency';
     if (mode === 'noise') {
@@ -47,6 +47,7 @@ export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
     return { mode, prompt: '¿Qué señal tiene mayor frecuencia?', answer, options };
   });
   const [chosen, setChosen] = useState<string | null>(null);
+  const compact = density === 'compact';
 
   function choose(option: WaveOption) {
     if (!active || chosen) return;
@@ -55,7 +56,7 @@ export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <TelText variant="subtitle" color="cream" align="center">
         {round.prompt}
       </TelText>
@@ -65,24 +66,18 @@ export function CleanSignalGame({ active, onAnswer }: MicroGameProps) {
           if (chosen) state = option.id === round.answer ? 'correct' : option.id === chosen ? 'wrong' : 'dimmed';
           return (
             <ChoiceTile key={option.id} label={option.label} state={state} disabled={!active || Boolean(chosen)} onPress={() => choose(option)}>
-              <Svg width={120} height={44} viewBox="0 0 120 44">
+              <Svg width={compact ? 90 : 120} height={compact ? 32 : 44} viewBox="0 0 120 44">
                 <Path d={wavePath(option.cycles, option.noise, index * 31 + 7)} stroke={colors.accent} strokeWidth={2.4} fill="none" strokeLinejoin="round" />
               </Svg>
             </ChoiceTile>
           );
         })}
       </TileGrid>
-      {round.mode === 'frequency' && (
+      {round.mode === 'frequency' && !compact && (
         <TelText variant="caption" color="accentSoft" align="center">
           Frecuencia = cuántas oscilaciones hay en el mismo tiempo.
         </TelText>
       )}
-    </View>
+    </GameFrame>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
-});

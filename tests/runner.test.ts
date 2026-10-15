@@ -242,6 +242,7 @@ describe('guidance for new players', () => {
   it('gives every micro game short how-to steps and a lesson', () => {
     microGameCatalog.forEach((game) => {
       const guide = microGameGuides[game.id];
+      if (!guide) throw new Error(`Falta la guía de ${game.id}`);
       expect(guide.steps.length).toBeGreaterThanOrEqual(2);
       expect(guide.steps.length).toBeLessThanOrEqual(3);
       guide.steps.forEach((step) => expect(step.length).toBeLessThan(90));

@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { FitBox } from '@/components/FitBox';
 import { TelIcon } from '@/components/TelIcon';
 import { TelText } from '@/components/TelText';
 import { feedbackSuccess, feedbackTap, feedbackWarning } from '@/lib/feedback';
 import { usePanHandlers } from '@/lib/usePanHandlers';
 import { colors, radius, spacing } from '@/theme';
 import { shuffle } from '../logic';
+import { GameFrame } from '../parts';
 import type { MicroGameProps } from '../types';
 
 interface Cable {
@@ -27,30 +29,27 @@ const ALL_CABLES: Cable[] = [
   { id: 'brown', label: 'marrón', color: '#A0694A' },
 ];
 
-const HEIGHT = 300;
 const EDGE = 44;
 const HIT = 46;
+
+// Superficie que se arrastra: en la web el navegador no debe desplazar ni ampliar la página mientras tanto.
+const dragSurface = { touchAction: 'none', userSelect: 'none' } as ViewStyle;
 
 function cablePath(x1: number, y1: number, x2: number, y2: number): string {
   const bend = Math.max(40, Math.abs(x2 - x1) * 0.45);
   return `M${x1} ${y1}C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}`;
 }
 
-const rowY = (index: number, count: number) => (HEIGHT * (index + 1)) / (count + 1);
+const rowY = (index: number, count: number, height: number) => (height * (index + 1)) / (count + 1);
 
 // Microjuego 9: arrastra cada cable hasta el puerto del mismo color (o toca cable y luego puerto).
 export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
   const [cables] = useState(() => ALL_CABLES.slice(0, level >= 3 ? 4 : 3));
   const [ports] = useState(() => shuffle(cables));
-  const [width, setWidth] = useState(320);
   const [connections, setConnections] = useState<Record<string, number>>({});
-  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [errors, setErrors] = useState(0);
   const done = useRef(false);
-
-  const plugPos = (index: number): Point => ({ x: EDGE, y: rowY(index, cables.length) });
-  const portPos = (index: number): Point => ({ x: width - EDGE, y: rowY(index, ports.length) });
 
   function attempt(cableId: string, portIndex: number) {
     if (!active || done.current || connections[cableId] !== undefined) return;
@@ -74,24 +73,8 @@ export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
     }
   }
 
-  function drop(cableId: string, end: Point | null) {
-    setDrag(null);
-    if (!end) return;
-    const target = ports.findIndex((_, portIndex) => {
-      const pos = portPos(portIndex);
-      return Math.hypot(pos.x - end.x, pos.y - end.y) < HIT;
-    });
-    if (target >= 0) attempt(cableId, target);
-  }
-
-  function onLayout(event: LayoutChangeEvent) {
-    setWidth(event.nativeEvent.layout.width);
-  }
-
-  const dragging = drag ? cables.findIndex((cable) => cable.id === drag.id) : -1;
-
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <View style={styles.header}>
         <TelText variant="label" color="accentSoft">
           Switch
@@ -100,57 +83,109 @@ export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
           Patch panel
         </TelText>
       </View>
-      <View style={styles.board} onLayout={onLayout}>
-        <Svg width={width} height={HEIGHT} style={StyleSheet.absoluteFill} pointerEvents="none">
-          {cables.map((cable, index) => {
-            const port = connections[cable.id];
-            if (port === undefined) return null;
-            const from = plugPos(index);
-            const to = portPos(port);
-            return <Path key={cable.id} d={cablePath(from.x, from.y, to.x, to.y)} stroke={cable.color} strokeWidth={9} strokeLinecap="round" fill="none" />;
-          })}
-          {drag && dragging >= 0 && (
-            <Path d={cablePath(plugPos(dragging).x, plugPos(dragging).y, drag.x, drag.y)} stroke={cables[dragging].color} strokeWidth={9} strokeLinecap="round" fill="none" opacity={0.85} />
-          )}
-        </Svg>
-        {cables.map((cable, index) => (
-          <Plug
-            key={cable.id}
-            cable={cable}
-            origin={plugPos(index)}
+      <FitBox maxWidth={440} maxHeight={380}>
+        {({ width, height }) => (
+          <CableBoard
+            width={width}
+            height={height}
+            cables={cables}
+            ports={ports}
             active={active}
-            connected={connections[cable.id] !== undefined}
-            selected={selected === cable.id}
-            onDrag={(point) => setDrag({ id: cable.id, ...point })}
-            onDrop={(point) => drop(cable.id, point)}
-            onTap={() => setSelected((value) => (value === cable.id ? null : cable.id))}
+            connections={connections}
+            selected={selected}
+            onSelect={setSelected}
+            onAttempt={attempt}
           />
-        ))}
-        {ports.map((port, index) => {
-          const pos = portPos(index);
-          const taken = Object.values(connections).includes(index);
-          return (
-            <Pressable
-              key={port.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Puerto ${port.label}${taken ? ', ocupado' : ''}`}
-              disabled={!active || taken}
-              onPress={() => {
-                if (selected) {
-                  attempt(selected, index);
-                  setSelected(null);
-                }
-              }}
-              style={[styles.port, { left: pos.x - 26, top: pos.y - 26, borderColor: port.color }, taken && { backgroundColor: port.color }]}
-            >
-              <View style={styles.portHole} />
-            </Pressable>
-          );
-        })}
-      </View>
+        )}
+      </FitBox>
       <TelText variant="caption" color="accentSoft" align="center">
         {errors > 0 ? '¡Ojo! Un error más y se cae el enlace.' : 'Arrastra o toca un cable y luego su puerto.'}
       </TelText>
+    </GameFrame>
+  );
+}
+
+interface BoardProps {
+  width: number;
+  height: number;
+  cables: Cable[];
+  ports: Cable[];
+  active: boolean;
+  connections: Record<string, number>;
+  selected: string | null;
+  onSelect: (cableId: string | null) => void;
+  onAttempt: (cableId: string, portIndex: number) => void;
+}
+
+// Tablero a la medida que dejó la pantalla: las filas se reparten el alto y los enchufes se achican si hace falta.
+function CableBoard({ width, height, cables, ports, active, connections, selected, onSelect, onAttempt }: BoardProps) {
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const row = height / (cables.length + 1);
+  const plugSize = Math.max(40, Math.min(48, Math.floor(row - 6)));
+  const portSize = plugSize + 4;
+  const plugPos = (index: number): Point => ({ x: EDGE, y: rowY(index, cables.length, height) });
+  const portPos = (index: number): Point => ({ x: width - EDGE, y: rowY(index, ports.length, height) });
+  const dragging = drag ? cables.findIndex((cable) => cable.id === drag.id) : -1;
+
+  function drop(cableId: string, end: Point | null) {
+    setDrag(null);
+    if (!end) return;
+    const target = ports.findIndex((_, portIndex) => {
+      const pos = portPos(portIndex);
+      return Math.hypot(pos.x - end.x, pos.y - end.y) < HIT;
+    });
+    if (target >= 0) onAttempt(cableId, target);
+  }
+
+  return (
+    <View style={styles.board}>
+      <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+        {cables.map((cable, index) => {
+          const port = connections[cable.id];
+          if (port === undefined) return null;
+          const from = plugPos(index);
+          const to = portPos(port);
+          return <Path key={cable.id} d={cablePath(from.x, from.y, to.x, to.y)} stroke={cable.color} strokeWidth={9} strokeLinecap="round" fill="none" />;
+        })}
+        {drag && dragging >= 0 && (
+          <Path d={cablePath(plugPos(dragging).x, plugPos(dragging).y, drag.x, drag.y)} stroke={cables[dragging].color} strokeWidth={9} strokeLinecap="round" fill="none" opacity={0.85} />
+        )}
+      </Svg>
+      {cables.map((cable, index) => (
+        <Plug
+          key={cable.id}
+          cable={cable}
+          origin={plugPos(index)}
+          size={plugSize}
+          active={active}
+          connected={connections[cable.id] !== undefined}
+          selected={selected === cable.id}
+          onDrag={(point) => setDrag({ id: cable.id, ...point })}
+          onDrop={(point) => drop(cable.id, point)}
+          onTap={() => onSelect(selected === cable.id ? null : cable.id)}
+        />
+      ))}
+      {ports.map((port, index) => {
+        const pos = portPos(index);
+        const taken = Object.values(connections).includes(index);
+        return (
+          <Pressable
+            key={port.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Puerto ${port.label}${taken ? ', ocupado' : ''}`}
+            disabled={!active || taken}
+            onPress={() => {
+              if (selected) {
+                onAttempt(selected, index);
+                onSelect(null);
+              }
+            }}
+            style={[styles.port, { width: portSize, height: portSize, left: pos.x - portSize / 2, top: pos.y - portSize / 2, borderColor: port.color }, taken && { backgroundColor: port.color }]}
+          >
+            <View style={styles.portHole} />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -158,6 +193,7 @@ export function CableConnectGame({ active, level, onAnswer }: MicroGameProps) {
 interface PlugProps {
   cable: Cable;
   origin: Point;
+  size: number;
   active: boolean;
   connected: boolean;
   selected: boolean;
@@ -166,7 +202,7 @@ interface PlugProps {
   onTap: () => void;
 }
 
-function Plug({ cable, origin, active, connected, selected, onDrag, onDrop, onTap }: PlugProps) {
+function Plug({ cable, origin, size, active, connected, selected, onDrag, onDrop, onTap }: PlugProps) {
   const panHandlers = usePanHandlers({
     canStart: () => active && !connected,
     onGrant: () => {
@@ -193,7 +229,8 @@ function Plug({ cable, origin, active, connected, selected, onDrag, onDrop, onTa
       accessibilityLabel={`Cable ${cable.label}${connected ? ', conectado' : selected ? ', seleccionado' : ''}`}
       style={[
         styles.plug,
-        { left: origin.x - 24, top: origin.y - 24, backgroundColor: cable.color },
+        dragSurface,
+        { left: origin.x - size / 2, top: origin.y - size / 2, width: size, height: size, backgroundColor: cable.color },
         selected && styles.plugSelected,
         connected && styles.plugDone,
       ]}
@@ -204,16 +241,13 @@ function Plug({ cable, origin, active, connected, selected, onDrag, onDrop, onTa
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.sm,
-  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xs,
   },
   board: {
-    height: HEIGHT,
+    flex: 1,
     borderRadius: radius.lg,
     backgroundColor: 'rgba(18, 61, 92, 0.7)',
     borderWidth: 1,
@@ -221,8 +255,6 @@ const styles = StyleSheet.create({
   },
   plug: {
     position: 'absolute',
-    width: 48,
-    height: 48,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -238,8 +270,6 @@ const styles = StyleSheet.create({
   },
   port: {
     position: 'absolute',
-    width: 52,
-    height: 52,
     borderRadius: 12,
     borderWidth: 4,
     backgroundColor: colors.primary,

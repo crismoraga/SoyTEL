@@ -26,12 +26,18 @@ const expectedIds: MicroGameId[] = [
   'device-role',
   'wifi-safe',
   'acronym',
+  'switch-learn',
+  'router-table',
+  'dns-agenda',
+  'tcp-handshake',
+  'same-subnet',
+  'topology-pick',
 ];
 
 describe('burst registry', () => {
-  it('has twenty-two unique microgames', () => {
+  it('has twenty-eight unique microgames', () => {
     const ids = microGameRegistry.map((game) => game.id);
-    expect(new Set(ids).size).toBe(22);
+    expect(new Set(ids).size).toBe(28);
     expect([...ids].sort()).toEqual([...expectedIds].sort());
   });
 

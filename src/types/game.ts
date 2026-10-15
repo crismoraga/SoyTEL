@@ -37,7 +37,35 @@ export type MicroGameId =
   | 'port-match'
   | 'device-role'
   | 'wifi-safe'
-  | 'acronym';
+  | 'acronym'
+  // Paquete «Redes»
+  | 'switch-learn'
+  | 'router-table'
+  | 'dns-agenda'
+  | 'tcp-handshake'
+  | 'same-subnet'
+  | 'topology-pick'
+  // Paquete «Señales»
+  | 'wave-frequency'
+  | 'am-fm'
+  | 'wifi-channel'
+  | 'fiber-angle'
+  | 'signal-noise'
+  | 'sampling'
+  // Paquete «Datos»
+  | 'parity-bit'
+  | 'logic-gate'
+  | 'binary-search'
+  | 'sql-filter'
+  | 'chart-read'
+  | 'compress-rle'
+  // Paquete «Sistemas»
+  | 'phishing-mail'
+  | 'caesar-shift'
+  | 'redundancy'
+  | 'cpu-hog'
+  | 'http-status'
+  | 'bug-hunt';
 
 export type AchievementId =
   | 'first-signal'

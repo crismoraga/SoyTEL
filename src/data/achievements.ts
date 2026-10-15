@@ -1,4 +1,5 @@
 import type { Achievement, AchievementId } from '@/types/game';
+import { microGameCatalog } from '@/features/burst/catalog';
 
 export const achievements: Achievement[] = [
   {
@@ -264,11 +265,11 @@ export const achievements: Achievement[] = [
   {
     id: 'burst-master',
     title: 'Maestro de la ráfaga',
-    description: 'Gana los 22 microjuegos al menos una vez.',
+    description: `Gana los ${microGameCatalog.length} microjuegos al menos una vez.`,
     hint: 'Practica cada microjuego desde la pestaña Jugar.',
     area: 'general',
     tier: 'platino',
-    threshold: 22,
+    threshold: microGameCatalog.length,
     glyph: 'star',
   },
   {

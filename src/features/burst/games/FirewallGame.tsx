@@ -7,7 +7,7 @@ import { feedbackTap } from '@/lib/feedback';
 import { useMotionEnabled } from '@/lib/motion';
 import { colors, radius, spacing } from '@/theme';
 import { firewallRound, type Packet } from '../logic';
-import { ChoiceTile, TileGrid } from '../parts';
+import { ChoiceTile, GameFrame, TileGrid } from '../parts';
 import type { MicroGameProps } from '../types';
 
 // Microjuego 5: llegan paquetes uno a uno; permite los legítimos y bloquea los maliciosos.
@@ -38,7 +38,7 @@ export function FirewallGame({ active, level, onAnswer }: MicroGameProps) {
   }
 
   return (
-    <View style={styles.container}>
+    <GameFrame>
       <View style={styles.progress} accessibilityLabel={`Paquete ${Math.min(index + 1, packets.length)} de ${packets.length}`}>
         {packets.map((item, position) => (
           <View key={item.id} style={[styles.pip, position < index && styles.pipDone, position === index && styles.pipCurrent]} />
@@ -50,33 +50,33 @@ export function FirewallGame({ active, level, onAnswer }: MicroGameProps) {
           FIREWALL DEL CAMPUS
         </TelText>
       </View>
-      {packet && (
-        <Animated.View key={packet.id} entering={motion ? SlideInRight.duration(220) : undefined} style={[styles.packet, verdict === 'fail' && styles.packetFail]}>
-          <View style={styles.packetIcon}>
-            <TelIcon name="packet" size={26} color={colors.primary} />
-          </View>
-          <View style={styles.flex}>
-            <TelText variant="subtitle" color="cream">
-              {packet.title}
-            </TelText>
-            <TelText variant="caption" color="accentSoft">
-              {packet.detail}
-            </TelText>
-          </View>
-        </Animated.View>
-      )}
+      {/* Alto fijo para el texto más largo: la tarjeta no cambia de tamaño entre un paquete y otro. */}
+      <View style={styles.slot}>
+        {packet && (
+          <Animated.View key={packet.id} entering={motion ? SlideInRight.duration(220) : undefined} style={[styles.packet, verdict === 'fail' && styles.packetFail]}>
+            <View style={styles.packetIcon}>
+              <TelIcon name="packet" size={26} color={colors.primary} />
+            </View>
+            <View style={styles.flex}>
+              <TelText variant="subtitle" color="cream">
+                {packet.title}
+              </TelText>
+              <TelText variant="caption" color="accentSoft">
+                {packet.detail}
+              </TelText>
+            </View>
+          </Animated.View>
+        )}
+      </View>
       <TileGrid>
         <ChoiceTile label="Permitir" icon="check" disabled={!active || Boolean(verdict)} onPress={() => decide(false)} />
         <ChoiceTile label="Bloquear" icon="shield" disabled={!active || Boolean(verdict)} onPress={() => decide(true)} style={styles.blockTile} />
       </TileGrid>
-    </View>
+    </GameFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
   progress: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -103,11 +103,15 @@ const styles = StyleSheet.create({
   wallText: {
     letterSpacing: 1.6,
   },
+  slot: {
+    minHeight: 112,
+    justifyContent: 'center',
+  },
   packet: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    padding: spacing.md,
+    padding: spacing.sm,
     minHeight: 96,
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,

@@ -1,4 +1,8 @@
 import type { MicroGameId } from '@/types/game';
+import { datosGuides } from './packs/datos.meta';
+import { redesGuides } from './packs/redes.meta';
+import { senalesGuides } from './packs/senales.meta';
+import { sistemasGuides } from './packs/sistemas.meta';
 
 // Guía de cada microjuego: cómo se juega (pasos cortos, en orden) y qué se aprende con él.
 // Los pasos se muestran antes de cada ronda; la idea, junto al resultado.
@@ -7,7 +11,7 @@ export interface MicroGameGuide {
   learn: string;
 }
 
-export const microGameGuides: Record<MicroGameId, MicroGameGuide> = {
+const coreGuides: Partial<Record<MicroGameId, MicroGameGuide>> = {
   'connect-network': {
     steps: ['Mira qué equipo falta en el camino.', 'Toca el equipo que completa la conexión.'],
     learn: 'El router conecta tu red con Internet; el switch une los equipos dentro de la misma red.',
@@ -98,6 +102,9 @@ export const microGameGuides: Record<MicroGameId, MicroGameGuide> = {
   },
 };
 
+export const microGameGuides: Partial<Record<MicroGameId, MicroGameGuide>> = { ...coreGuides, ...redesGuides, ...senalesGuides, ...datosGuides, ...sistemasGuides };
+
+// Todo microjuego tiene su guía (lo exige una prueba); el respaldo solo evita una pantalla vacía.
 export function getMicroGameGuide(id: MicroGameId): MicroGameGuide {
-  return microGameGuides[id];
+  return microGameGuides[id] ?? { steps: ['Lee la instrucción.', 'Juega antes de que se acabe el tiempo.'], learn: 'Cada microjuego muestra una idea de la carrera de Telemática.' };
 }

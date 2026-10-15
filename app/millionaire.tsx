@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
@@ -41,6 +41,7 @@ interface RutixHint {
 
 export default function MillionaireScreen() {
   const entering = useEntering();
+  const windowHeight = useWindowDimensions().height;
   const [phase, setPhase] = useState<Phase>('intro');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [index, setIndex] = useState(0);
@@ -162,9 +163,18 @@ export default function MillionaireScreen() {
 
   if (phase === 'intro') {
     return (
-      <Screen tone="dark" backdrop="signal" header={<AppHeader transparent onBack={() => router.back()} compact />}>
+      <Screen
+        tone="dark"
+        backdrop="signal"
+        header={<AppHeader transparent onBack={() => router.back()} compact />}
+        footer={
+          <ScreenFooter tone="dark">
+            <TelButton label="Comenzar el concurso" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
+          </ScreenFooter>
+        }
+      >
         <Animated.View entering={entering.pop()} style={styles.introArt}>
-          <Illustration name="quiz" width={260} tone="dark" />
+          <Illustration name="quiz" width={Math.min(260, Math.max(130, Math.round(windowHeight * 0.24)))} tone="dark" />
         </Animated.View>
         <View style={styles.introText}>
           <TelText variant="overline" color="accent" align="center">
@@ -183,7 +193,6 @@ export default function MillionaireScreen() {
           <Rule icon="users" text="Consulta al público: mira cómo votaría la sala." />
           <Rule icon="flag" text="Plántate cuando quieras para asegurar tus puntos." />
         </View>
-        <TelButton label="Comenzar el concurso" variant="cream" size="lg" iconRight="arrowRight" onPress={start} />
         <AccountGate />
       </Screen>
     );

@@ -12,7 +12,7 @@ import { ProgressBar } from '@/components/feedback/Progress';
 import { Rutix } from '@/components/graphics/Rutix';
 import { IconButton } from '@/components/IconButton';
 import { PressableScale } from '@/components/PressableScale';
-import { Screen } from '@/components/Screen';
+import { Screen, ScreenBar } from '@/components/Screen';
 import { TelButton } from '@/components/TelButton';
 import { TelCard } from '@/components/TelCard';
 import { TelIcon } from '@/components/TelIcon';
@@ -241,19 +241,20 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
   const waiting = view.pending.length;
   const noSignal = !view.solo && (view.link !== 'online' || !view.hostAlive);
 
+  const headerRight = (
+    <View style={styles.headerRight}>
+      {!view.solo && view.link !== 'online' && <Tag tone="warning" icon="wifiOff" label="Reconectando" />}
+      {!view.solo && view.link === 'online' && !view.hostAlive && <Tag tone="warning" icon="wifiOff" label="Sin señal del stand" />}
+      {me.total > 0 && <Tag tone="glass" icon="star" label={`${formatNumber(me.total)} pts`} />}
+      <IconButton icon="close" tone="dark" size={40} accessibilityLabel="Salir de la ruta" onPress={() => setConfirmLeave(true)} />
+    </View>
+  );
+
+  // Mientras se juega, una franja de una línea: el juego recibe el alto que le quitaría la cabecera completa.
+  const gameHeader = (title: string) => <ScreenBar kicker={view.solo ? 'Modo individual' : `Ruta ${snapshot.code}`} title={title} right={headerRight} />;
+
   const header = (
-    <AppHeader
-      compact
-      onBack={() => router.back()}
-      right={
-        <View style={styles.headerRight}>
-          {!view.solo && view.link !== 'online' && <Tag tone="warning" icon="wifiOff" label="Reconectando" />}
-          {!view.solo && view.link === 'online' && !view.hostAlive && <Tag tone="warning" icon="wifiOff" label="Sin señal del stand" />}
-          {me.total > 0 && <Tag tone="glass" icon="star" label={`${formatNumber(me.total)} pts`} />}
-          <IconButton icon="close" tone="dark" size={40} accessibilityLabel="Salir de la ruta" onPress={() => setConfirmLeave(true)} />
-        </View>
-      }
-    >
+    <AppHeader compact onBack={() => router.back()} right={headerRight}>
       <RouteProgress stop={snapshot.stop} finished={snapshot.phase === 'podium'} />
       {noSignal && waiting > 0 && (
         <TelText variant="small" color="accentSoft" align="center" accessibilityLiveRegion="polite">
@@ -283,9 +284,9 @@ function LiveRoute({ view, snapshot, me }: { view: MemberView; snapshot: RouteSn
   }
 
   const b215 = (
-    <B215View header={header} snapshot={snapshot} me={me} offset={view.offset} entry={view.outbox['score:red-b215']} forceFinish={snapshot.phase !== 'play'} onStarted={() => setB215Started(true)} />
+    <B215View header={header} gameHeader={gameHeader} snapshot={snapshot} me={me} offset={view.offset} entry={view.outbox['score:red-b215']} forceFinish={snapshot.phase !== 'play'} onStarted={() => setB215Started(true)} />
   );
-  const projects = <ProjectsView header={header} snapshot={snapshot} me={me} outbox={view.outbox} active={activeProject} onActive={setActiveProject} />;
+  const projects = <ProjectsView header={header} gameHeader={gameHeader} snapshot={snapshot} me={me} outbox={view.outbox} active={activeProject} onActive={setActiveProject} />;
 
   switch (snapshot.phase) {
     case 'lobby':
@@ -465,11 +466,16 @@ function CheckinView({ header, snapshot, me, entry }: PhaseProps & { entry: Outb
   );
 }
 
-function StationGameHost({ game, seed, deadline, pace, onDone }: { game: StationGameId; seed: number; deadline?: number | null; pace: number; onDone: (result: StationGameResult) => void }) {
+function StationGameHost({ game, seed, groupSeed, deadline, pace, onDone }: { game: StationGameId; seed: number; groupSeed?: number; deadline?: number | null; pace: number; onDone: (result: StationGameResult) => void }) {
   const info = getStationGame(game);
   if (!info) return null;
   const Component = info.Component;
-  return <Component seed={seed} deadline={deadline} pace={pace} onComplete={onDone} />;
+  // Caja flexible: el juego llena todo el alto que deja la pantalla.
+  return (
+    <View style={styles.stationHost}>
+      <Component seed={seed} groupSeed={groupSeed} deadline={deadline} pace={pace} onComplete={onDone} />
+    </View>
+  );
 }
 
 function seedFor(code: string, playerId: string, game: string): number {
@@ -499,7 +505,7 @@ function B215Countdown({ header, startsAt }: { header: React.ReactNode; startsAt
   );
 }
 
-function B215View({ header, snapshot, me, offset, entry, forceFinish, onStarted }: PhaseProps & { offset: number; entry: OutboxView | undefined; forceFinish: boolean; onStarted: () => void }) {
+function B215View({ header, gameHeader, snapshot, me, offset, entry, forceFinish, onStarted }: PhaseProps & { gameHeader: (title: string) => React.ReactNode; offset: number; entry: OutboxView | undefined; forceFinish: boolean; onStarted: () => void }) {
   const submitted = me.games['red-b215'] !== undefined;
   const startsAt = snapshot.startsAt;
   const started = useHostTimeReached(startsAt);
@@ -515,11 +521,12 @@ function B215View({ header, snapshot, me, offset, entry, forceFinish, onStarted 
   if (!started && startsAt !== null) return <B215Countdown header={header} startsAt={startsAt} />;
 
   return (
-    <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
+    <Screen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B215 · Redes')} contentStyle={styles.gameContent}>
       <StationGameHost
         game="red-b215"
         pace={snapshot.settings.pace ?? 1}
         seed={seedFor(snapshot.code, me.id, 'red-b215')}
+        groupSeed={seedFor(snapshot.code, 'grupo', 'red-b215')}
         // El juego mide con la hora del teléfono: el plazo del stand se traduce a esa hora.
         deadline={forceFinish || snapshot.deadline === null ? 1 : snapshot.deadline - offset - 2500}
         onDone={(result) => routeMember.submitScore('red-b215', result.score, result.accuracy)}
@@ -612,7 +619,7 @@ function MinutesLeft({ deadline }: { deadline: number }) {
   return <>{` Quedan ~${minutes} min.`}</>;
 }
 
-function ProjectsView({ header, snapshot, me, outbox, active, onActive }: PhaseProps & { outbox: MemberView['outbox']; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
+function ProjectsView({ header, gameHeader, snapshot, me, outbox, active, onActive }: PhaseProps & { gameHeader: (title: string) => React.ReactNode; outbox: MemberView['outbox']; active: PillarId | null; onActive: (id: PillarId | null) => void }) {
   // Un pilar se enciende cuando su puntaje ya está en camino o guardado en el stand.
   const entryOf = (id: PillarId) => outbox[`score:${id}`];
   const lit = Object.fromEntries(pillarIds.map((id) => [id, me.games[id] !== undefined || (Boolean(entryOf(id)) && !isLost(entryOf(id)))])) as Record<PillarId, boolean>;
@@ -622,7 +629,7 @@ function ProjectsView({ header, snapshot, me, outbox, active, onActive }: PhaseP
 
   if (active) {
     return (
-      <Screen tone="dark" backdrop="stars" scroll={false} header={header} contentStyle={styles.gameContent}>
+      <Screen tone="dark" backdrop="stars" scroll={false} tight header={gameHeader('Sala B213 · Proyectos')} contentStyle={styles.gameContent}>
         {moved && (
           <View style={styles.movedBar} accessible accessibilityLiveRegion="polite">
             <TelIcon name="alert" size={18} color={colors.primary} />
@@ -917,6 +924,10 @@ const styles = StyleSheet.create({
   },
   gameContent: {
     flex: 1,
+  },
+  stationHost: {
+    flex: 1,
+    minHeight: 0,
   },
   movedBar: {
     flexDirection: 'row',

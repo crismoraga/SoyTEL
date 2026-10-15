@@ -248,6 +248,109 @@ export const icons = {
   temple: [path('M3 9 12 4l9 5'), path('M4 9h16'), path('M6.5 11.5v6'), path('M10.2 11.5v6'), path('M13.8 11.5v6'), path('M17.5 11.5v6'), path('M3.5 20h17')],
   podium: [path('M9 20V9h6v11'), path('M3 20v-6h6'), path('M15 20v-4h6v4'), path('M2 20.5h20')],
   door: [rect(6, 3, 12, 18, 1.5), dot(15, 12.5), path('M3 21h18')],
+
+  // ---- Juegos de redes, telecomunicaciones y computación (circuito B215, ráfagas y desafíos) ----
+  // DNS: un globo con lupa (buscar la dirección de un nombre).
+  dns: [circle(9.5, 9.5, 6.8), path('M2.7 9.5h13.6'), ellipse(9.5, 9.5, 3, 6.8), circle(17.4, 17.4, 3.3), path('M19.8 19.8l2 2')],
+  // Saludo de tres vías de TCP: SYN → , ← SYN-ACK, ACK →.
+  handshake: [path('M2.5 3v18'), path('M21.5 3v18'), path('M6 6.5h11.5'), path('M14.5 3.5l3 3-3 3'), path('M18 12.5H6.5'), path('M9.5 9.5l-3 3 3 3'), path('M6 18.5h11.5'), path('M14.5 15.5l3 3-3 3')],
+  // Paridad: tres bits de datos (1, 0, 1) alimentan un cuarto bit de control.
+  parity: [dot(5, 5.5, 2.2), circle(12, 5.5, 2), dot(19, 5.5, 2.2), path('M5.8 8.4l4.4 5.3'), path('M12 8.2v5.5'), path('M18.2 8.4l-4.4 5.3'), circle(12, 17.6, 3.6), path('M10.5 17.7l1.1 1.2 2-2.2')],
+  // Compuerta lógica AND: dos entradas, una salida.
+  logicGate: [path('M6.5 5h5.5a7 7 0 0 1 0 14H6.5z'), path('M2 9.2h4.5'), path('M2 14.8h4.5'), path('M19 12h3')],
+  // Búsqueda binaria: un árbol binario y el nodo encontrado.
+  binarySearch: [
+    dot(12, 4.2, 1.7),
+    dot(6, 11.6, 1.7),
+    dot(18, 11.6, 1.7),
+    dot(3, 19.4, 1.7),
+    dot(9, 19.4, 1.7),
+    circle(15, 19.4, 2.1),
+    dot(21, 19.4, 1.7),
+    path('M12 4.2L6 11.6'),
+    path('M12 4.2L18 11.6'),
+    path('M6 11.6L3 19.4'),
+    path('M6 11.6L9 19.4'),
+    path('M18 11.6L15.75 17.44'),
+    path('M18 11.6L21 19.4'),
+  ],
+  // Tabla de datos con encabezado y dos columnas.
+  table: [rect(3, 4, 18, 16, 2.2), path('M3 10h18'), path('M3 15h18'), path('M9.5 10v10')],
+  // Compresión: los datos se aprietan hacia el centro.
+  compress: [path('M12 3v6'), path('M9.4 6.6 12 9.2l2.6-2.6'), path('M12 21v-6'), path('M9.4 17.4 12 14.8l2.6 2.6'), path('M4 12h16')],
+  // Phishing: un anzuelo (con su ojal) y el correo que se quiere atrapar.
+  phishing: [
+    circle(14.7, 3.9, 1.5),
+    path('M14.7 5.4V15'),
+    path('M14.7 15a4 4 0 0 0 8 0'),
+    path('M22.7 15l-2-2.8'),
+    rect(2, 10.2, 9.6, 8, 1.7),
+    path('M2.9 11.6l3.9 3.2 3.9-3.2'),
+  ],
+  // Cifrado César: la A se desplaza hasta la D.
+  caesar: [
+    path('M2.5 21 5.8 12l3.3 9'),
+    path('M3.8 18.1h4'),
+    path('M14.5 12v9h2.3a4.5 4.5 0 0 0 0-9z'),
+    path('M5.8 8.6q6.2-5.6 12.2 0'),
+    path('M15.6 6.7 18 8.6l-2.7 1.2'),
+  ],
+  // Redundancia: dos caminos distintos entre los mismos dos nodos.
+  redundancy: [circle(4.5, 12, 2.3), circle(19.5, 12, 2.3), path('M6.3 10.4C8.2 5.8 15.8 5.8 17.7 10.4'), path('M6.3 13.6c1.9 4.6 9.5 4.6 11.4 0')],
+  // Velocímetro: arco de 270° y aguja.
+  gauge: [path('M5.64 19.86A9 9 0 1 1 18.36 19.86'), path('M12 13.5 15.9 8.9'), dot(12, 13.5, 1.7)],
+  // Códigos HTTP: ventana de navegador con tres luces de estado.
+  httpStatus: [rect(2.5, 4, 19, 16, 2.5), path('M2.5 9.5h19'), dot(7.5, 15, 1.3), dot(12, 15, 1.3), dot(16.5, 15, 1.3)],
+  // Topología en estrella: un nodo central y cuatro equipos.
+  topology: [circle(12, 12, 3), dot(4.8, 4.8, 2.2), dot(19.2, 4.8, 2.2), dot(4.8, 19.2, 2.2), dot(19.2, 19.2, 2.2), path('M9.9 9.9 6.6 6.6'), path('M14.1 9.9l3.3-3.3'), path('M9.9 14.1l-3.3 3.3'), path('M14.1 14.1l3.3 3.3')],
+  // Frecuencia: una onda lenta arriba y una rápida abajo.
+  frequency: [path('M2 7c2-3.6 8-3.6 10 0s8 3.6 10 0'), path('M2 17.5c1.4-3.6 3.6-3.6 5 0s3.6 3.6 5 0 3.6-3.6 5 0 3.6 3.6 5 0')],
+  // Modulación de frecuencia: la onda se va apretando.
+  modulation: [path('M2 12c1.8-5 4.2-5 6 0s4.2 5 6 0'), path('M14 12c1.2-5 2.8-5 4 0s2.8 5 4 0')],
+  // Canal de radio: la banda de frecuencias que ocupa una señal.
+  channel: [path('M2 19.5h3.2l3-11.5h5.6l3 11.5H22')],
+  // Ángulo: dos rayos y su arco (orientar una antena).
+  angle: [path('M4 19h16'), path('M4 19 14.9 6'), path('M10.5 19A6.5 6.5 0 0 0 8.18 14.02')],
+  // Ruido: una señal ruidosa, irregular.
+  noise: [path('M2 12h2.5l1.7-5.5 2.4 11 2.4-13.5 2.4 12 1.9-7 1.9 5.5 1.3-2.5H22')],
+  // Muestreo: una onda y los instantes en que se toman las muestras.
+  sampling: [
+    path('M2 8c1.9-5.5 4.8-5.5 6.67 0s4.8 5.5 6.67 0 4.8-5.5 6.66 0'),
+    path('M4.5 15.5v5'),
+    path('M9 15.5v5'),
+    path('M13.5 15.5v5'),
+    path('M18 15.5v5'),
+  ],
+  // Firewall: un muro de ladrillos con fuego encima.
+  firewallWall: [
+    rect(3, 12, 18, 9, 1.5),
+    path('M3 16.5h18'),
+    path('M12 12v4.5'),
+    path('M7.5 16.5V21'),
+    path('M16.5 16.5V21'),
+    path('M12 9.8c2.4 0 4-1.7 4-3.8 0-2.2-2.1-3.4-2.6-5.4-1.7 1-2.7 2.6-2.9 4.3-.6-.4-1-1-1.2-1.7-1 1-1.5 2.4-1.5 3.6 0 2.1 1.6 3 4.2 3z'),
+  ],
+  // Puertos de un switch: un equipo con cuatro enlaces a sus computadores.
+  switchPorts: [rect(3, 4, 18, 8, 2), dot(6.8, 8, 0.9), path('M10.5 8H17.5'), path('M6 12v4'), path('M10 12v4'), path('M14 12v4'), path('M18 12v4'), dot(6, 18.8, 1.6), dot(10, 18.8, 1.6), dot(14, 18.8, 1.6), dot(18, 18.8, 1.6)],
+  // Tabla de rutas: filas «destino → salida».
+  routerTable: [
+    rect(3, 3.5, 18, 17, 2.2),
+    path('M3 8.5h18'),
+    path('M6.5 12.2h2.5'),
+    path('M12 12.2h5.2'),
+    path('M16 10.9l1.4 1.3-1.4 1.3'),
+    path('M6.5 16.8h2.5'),
+    path('M12 16.8h5.2'),
+    path('M16 15.5l1.4 1.3-1.4 1.3'),
+  ],
+  // Circuito eléctrico: pila, resistencia y cable en lazo.
+  circuit: [
+    path('M10.5 19H6a2.5 2.5 0 0 1-2.5-2.5v-8A2.5 2.5 0 0 1 6 6h3'),
+    path('M9 6l1.25-2.6 1.75 5.2 1.75-5.2L15 6'),
+    path('M15 6h3a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 18 19h-4.5'),
+    path('M10.5 15.8v6.4'),
+    path('M13.5 17.3v3.4'),
+  ],
 } satisfies Record<string, Shape[]>;
 
 export type IconName = keyof typeof icons;

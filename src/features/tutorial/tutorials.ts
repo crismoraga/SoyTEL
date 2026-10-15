@@ -14,7 +14,7 @@ export interface Tutorial {
   steps: TutorialStep[];
 }
 
-export type TutorialId = 'burst' | 'runner' | 'puzzle-red' | 'puzzle-memoria' | 'puzzle-binario' | 'puzzle-cifrado' | 'station' | 'ruta' | 'rutix';
+export type TutorialId = 'burst' | 'runner' | 'puzzle-red' | 'puzzle-memoria' | 'puzzle-binario' | 'puzzle-cifrado' | 'puzzle-paquete' | 'station' | 'ruta' | 'rutix';
 
 export const tutorials: Record<TutorialId, Tutorial> = {
   burst: {
@@ -77,6 +77,17 @@ export const tutorials: Record<TutorialId, Tutorial> = {
       { icon: 'shuffle', title: 'Mueve el abecedario', text: 'Sube o baja el desplazamiento y mira cómo cambia el texto.' },
       { icon: 'eye', title: 'Busca palabras reales', text: 'Cuando el texto se pueda leer, encontraste la clave. Compruébalo para ganar.' },
       { icon: 'shieldCheck', title: 'Así nació la criptografía', text: 'Este truco se llama cifrado César. Hoy Internet usa claves muchísimo más difíciles de adivinar.' },
+    ],
+  },
+  'puzzle-paquete': {
+    id: 'puzzle-paquete',
+    title: 'Cómo se juega Ruta del paquete',
+    steps: [
+      { icon: 'packet', title: 'Parte del 1', text: 'El paquete sale del computador número 1. Es el punto con el paquete brillante.' },
+      { icon: 'move', title: 'Arrastra el dedo', text: 'Desliza hacia las casillas de al lado para alargar el cable: arriba, abajo, izquierda o derecha.' },
+      { icon: 'route', title: 'Pasa por los números en orden', text: 'Visita el 1, el 2, el 3… sin saltarte ninguno, y termina en el último, que es el servidor.' },
+      { icon: 'grid', title: 'Llena todas las casillas', text: 'Ganas cuando el cable cubre todo el tablero sin repetir ninguna casilla. No hay reloj.' },
+      { icon: 'refresh', title: 'Retrocede sin miedo', text: 'Toca o arrastra sobre el cable para borrar un tramo. También puedes usar Deshacer y Reiniciar.' },
     ],
   },
   station: {

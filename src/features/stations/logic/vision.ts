@@ -187,10 +187,11 @@ export function filtered(image: PixelImage, filter: FilterKind): string[] {
 
 export const filterFactor: Record<FilterKind, number> = { bordes: 1, original: 0.7, desenfoque: 0.35 };
 
+// Cada respuesta dice en una línea por qué sirve o no (y cuál era la mejor).
 export const filterFeedback: Record<FilterKind, string> = {
-  bordes: '¡Buena elección! Los bordes marcan orejas y hocico: justo lo que distingue a un gato de un perro.',
-  original: 'Funciona, pero el color confunde: hay gatos y perros de todos los colores.',
-  desenfoque: 'El desenfoque borra los detalles: al modelo le cuesta ver las orejas.',
+  bordes: '¡Bien! Los bordes marcan orejas y hocico, sin importar el color.',
+  original: 'Sirve, pero el color confunde: los bordes muestran mejor la forma.',
+  desenfoque: 'El desenfoque borra detalles: los bordes muestran mejor la forma.',
 };
 
 export const EPOCHS = 30;
@@ -240,4 +241,72 @@ export function modelQuality(labelAccuracy: number, filter: FilterKind, quality:
 // Precisión mostrada del modelo en el conjunto de prueba (50% = azar).
 export function modelAccuracy(quality: number): number {
   return 0.5 + 0.5 * Math.max(0, Math.min(1, quality));
+}
+
+export const LABEL_COUNT = 10;
+export const TEST_COUNT = 6;
+
+// Cuánto contraste tiene una imagen: suma de la salida del filtro de Sobel.
+export function edgeEnergy(image: PixelImage): number {
+  return sobel(grayscale(image)).reduce((sum, value) => sum + value, 0);
+}
+
+// La imagen con la que se muestran los filtros: la de bordes más marcados. Un animal claro sobre el fondo
+// claro casi no tiene bordes, y el filtro de bordes se vería peor que la foto original.
+export function pickDemoImage(images: PixelImage[]): PixelImage {
+  let best = images[0];
+  let bestEnergy = -1;
+  images.forEach((image) => {
+    const energy = edgeEnergy(image);
+    if (energy > bestEnergy) {
+      best = image;
+      bestEnergy = energy;
+    }
+  });
+  return best;
+}
+
+export interface TrainScoreInput {
+  dataset: PixelImage[];
+  labels: Species[];
+  filter: FilterKind | null;
+  stopEpoch: number | null;
+  best: number;
+}
+
+export interface TrainScore {
+  label: number;
+  filter: number;
+  train: number;
+  total: number;
+  labelAccuracy: number;
+  trainQuality: number;
+  quality: number;
+}
+
+// Puntaje de la partida con lo resuelto hasta ahora: lo usan la barra superior, el resumen y el cierre
+// forzado, así los tres dicen siempre lo mismo. Máximo 450 + 200 + 350 = 1000.
+export function trainScore({ dataset, labels, filter, stopEpoch, best }: TrainScoreInput): TrainScore {
+  const correct = labels.filter((label, index) => dataset[index] !== undefined && label === dataset[index].species).length;
+  const labelAccuracy = dataset.length ? correct / dataset.length : 0;
+  const trainQuality = stopEpoch === null ? 0 : stopQuality(stopEpoch, best);
+  const label = Math.round(labelAccuracy * LABEL_MAX);
+  const filterPoints = filter ? Math.round(filterFactor[filter] * FILTER_MAX) : 0;
+  const train = Math.round(trainQuality * TRAIN_MAX);
+  return {
+    label,
+    filter: filterPoints,
+    train,
+    total: label + filterPoints + train,
+    labelAccuracy,
+    trainQuality,
+    quality: modelQuality(labelAccuracy, filter ?? 'original', trainQuality),
+  };
+}
+
+// Resultado de la prueba con fotos nuevas: cuántas acierta el modelo de `count`. Es la misma cifra que se
+// dibuja en pantalla (nunca un porcentaje que no coincida con las fotos).
+export function testOutcome(quality: number, count: number): { correct: number; wrong: number; accuracy: number } {
+  const correct = Math.min(count, Math.max(0, Math.round(modelAccuracy(quality) * count)));
+  return { correct, wrong: count - correct, accuracy: count ? correct / count : 0 };
 }

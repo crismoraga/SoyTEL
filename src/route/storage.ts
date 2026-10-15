@@ -331,8 +331,3 @@ export async function clearRouteStorage(): Promise<void> {
   const routeKeys = keys.filter((key) => key.startsWith(ROUTE_STORAGE_PREFIX));
   if (routeKeys.length) await AsyncStorage.multiRemove(routeKeys);
 }
-
-export async function markRouteRecorded(code: string): Promise<void> {
-  const list = (await readPlain<string[]>(RECORDED_KEY)) ?? [];
-  await AsyncStorage.setItem(RECORDED_KEY, JSON.stringify([code, ...list.filter((item) => item !== code)].slice(0, 50)));
-}

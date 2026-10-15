@@ -1,5 +1,9 @@
 import type { IconName } from '@/graphics/icons';
 import type { KnowledgeArea, MicroGameId } from '@/types/game';
+import { datosInfo } from './packs/datos.meta';
+import { redesInfo } from './packs/redes.meta';
+import { senalesInfo } from './packs/senales.meta';
+import { sistemasInfo } from './packs/sistemas.meta';
 
 export interface MicroGameInfo {
   id: MicroGameId;
@@ -11,33 +15,38 @@ export interface MicroGameInfo {
   icon: IconName;
   area: KnowledgeArea;
   mechanic: string;
+  // Ramo de la malla donde se estudia ("Redes de Computadores · 3.er semestre").
+  course?: string;
 }
 
-// Metadatos de los 22 microjuegos (sin componentes, para listas y pruebas).
-export const microGameCatalog: MicroGameInfo[] = [
-  { id: 'connect-network', title: 'Conecta la red', instruction: 'Toca el equipo que falta para llegar a Internet.', tip: 'El router es la puerta a Internet; el switch une los equipos de una misma red.', durationSeconds: 10, icon: 'router', area: 'redes', mechanic: 'Elige' },
-  { id: 'clean-signal', title: 'Señal limpia', instruction: 'Elige el medio con menos interferencia.', tip: 'La fibra casi no sufre interferencia. Más oscilaciones en el mismo tiempo = más frecuencia.', durationSeconds: 10, icon: 'wave', area: 'teleco', mechanic: 'Compara' },
-  { id: 'ping-check', title: '¿Ping o no ping?', instruction: 'Lee la terminal: ¿hay conectividad?', tip: 'Si responde con «bytes de…» y un tiempo en ms, el otro equipo está vivo.', durationSeconds: 9, icon: 'terminal', area: 'redes', mechanic: 'Lee' },
-  { id: 'color-code', title: 'Crimpado RJ45', instruction: 'Completa el color que falta en el cable T568B.', tip: 'T568B parte así: blanco-naranja, naranja, blanco-verde, azul…', durationSeconds: 12, icon: 'plug', area: 'hardware', mechanic: 'Completa' },
-  { id: 'firewall', title: 'Firewall', instruction: 'Permite el tráfico legítimo y bloquea el malicioso.', tip: 'Desconfía de Telnet, de los archivos .exe y de muchos intentos seguidos.', durationSeconds: 14, icon: 'shieldCheck', area: 'seguridad', mechanic: 'Clasifica' },
-  { id: 'signal-timing', title: 'Sintoniza la antena', instruction: 'Detén la aguja dentro de la zona verde.', tip: 'Sigue el vaivén de la aguja y toca un instante antes de la zona verde.', durationSeconds: 8, icon: 'antenna', area: 'teleco', mechanic: 'Reflejos' },
-  { id: 'sequence-memory', title: 'Ruta de paquetes', instruction: 'Memoriza la ruta y repítela en orden.', tip: 'Di la ruta en voz baja mientras se ilumina: te ayuda a recordarla.', durationSeconds: 14, icon: 'network', area: 'redes', mechanic: 'Memoria' },
-  { id: 'packet-rush', title: 'Congestión de red', instruction: '¡Envía todos los paquetes antes de que se acabe el tiempo!', tip: 'Toca parejo y sin pausas hasta llenar la barra.', durationSeconds: 8, icon: 'send', area: 'redes', mechanic: 'Velocidad' },
-  { id: 'cable-connect', title: 'Conecta el cable', instruction: 'Arrastra cada cable a su puerto del mismo color.', tip: 'Lleva cada cable hasta el puerto de su mismo color y suéltalo encima.', durationSeconds: 12, icon: 'move', area: 'hardware', mechanic: 'Arrastra' },
-  { id: 'packet-catch', title: 'Atrapa el paquete', instruction: 'Toca 5 paquetes sanos y evita los infectados.', tip: 'Los paquetes rojos están infectados: déjalos pasar.', durationSeconds: 12, icon: 'packet', area: 'seguridad', mechanic: 'Atrapa' },
-  { id: 'wifi-boost', title: 'Wi-Fi Boost', instruction: 'Arrastra el router hasta tener señal completa.', tip: 'Acerca el router al notebook y aléjalo del microondas.', durationSeconds: 12, icon: 'wifi', area: 'teleco', mechanic: 'Ubica' },
-  { id: 'password-strong', title: 'Contraseña fuerte', instruction: 'Arma una contraseña que llegue a «Muy fuerte».', tip: 'Mezcla palabras, mayúsculas, números y símbolos. Mientras más larga, mejor.', durationSeconds: 15, icon: 'key', area: 'seguridad', mechanic: 'Construye' },
-  { id: 'binary-bits', title: 'Bits en orden', instruction: 'Enciende los bits que suman el número.', tip: 'Parte por el bit más grande que quepa y completa con los chicos.', durationSeconds: 14, icon: 'hash', area: 'hardware', mechanic: 'Binario' },
-  { id: 'layer-order', title: 'Capas de Internet', instruction: 'Toca las capas desde el cable hasta la app.', tip: 'Primero el medio (Wi-Fi o cable), luego la IP, después TCP y arriba la app.', durationSeconds: 14, icon: 'server', area: 'redes', mechanic: 'Ordena' },
-  { id: 'ip-valid', title: '¿IP válida?', instruction: 'Encuentra la dirección IPv4 bien escrita.', tip: 'Cuatro números del 0 al 255, separados por puntos. Ni más ni menos.', durationSeconds: 12, icon: 'globe', area: 'redes', mechanic: 'Elige' },
-  { id: 'fast-route', title: 'Ruta más rápida', instruction: 'Elige la ruta con menos latencia total.', tip: 'Suma los milisegundos de cada salto: gana el total más bajo.', durationSeconds: 15, icon: 'route', area: 'redes', mechanic: 'Calcula' },
-  { id: 'safe-url', title: 'Sitio verdadero', instruction: 'Elige la dirección web oficial.', tip: 'Mira el final del dominio: usm.cl.algo.ru no es de la USM.', durationSeconds: 14, icon: 'shieldLock', area: 'seguridad', mechanic: 'Detecta' },
-  { id: 'unit-order', title: 'De bit a giga', instruction: 'Ordena las unidades de menor a mayor.', tip: 'bit → byte → kilo → mega → giga. Cada paso es mil veces más (salvo el primero: 8 bits).', durationSeconds: 12, icon: 'database', area: 'software', mechanic: 'Ordena' },
-  { id: 'port-match', title: 'Puerto correcto', instruction: 'Elige el puerto que usa el servicio.', tip: 'La web segura va por el 443; la web sin candado, por el 80.', durationSeconds: 14, icon: 'door', area: 'redes', mechanic: 'Elige' },
-  { id: 'device-role', title: '¿Qué equipo es?', instruction: 'Lee la pista y elige el equipo de red.', tip: 'Router = Internet. Switch = cables. Access point = Wi-Fi.', durationSeconds: 15, icon: 'lanSwitch', area: 'hardware', mechanic: 'Identifica' },
-  { id: 'wifi-safe', title: 'Wi-Fi seguro', instruction: 'Elige la red Wi-Fi mejor protegida.', tip: 'Mira el tipo de seguridad de cada red: WPA3 le gana a todas.', durationSeconds: 14, icon: 'accessPoint', area: 'seguridad', mechanic: 'Protege' },
-  { id: 'acronym', title: 'Sigla TEL', instruction: 'Elige qué significa la sigla.', tip: 'Casi todas vienen del inglés: piensa en Network, Protocol, System…', durationSeconds: 15, icon: 'book', area: 'software', mechanic: 'Vocabulario' },
+// Metadatos de los microjuegos (sin componentes, para listas y pruebas): los originales y los de cada
+// paquete temático (src/features/burst/packs).
+const coreCatalog: MicroGameInfo[] = [
+  { id: 'connect-network', title: 'Conecta la red', instruction: 'Toca el equipo que falta para llegar a Internet.', tip: 'El router es la puerta a Internet; el switch une los equipos de una misma red.', durationSeconds: 10, icon: 'router', area: 'redes', mechanic: 'Elige', course: 'Redes de Computadores · 3.er semestre' },
+  { id: 'clean-signal', title: 'Señal limpia', instruction: 'Elige el medio con menos interferencia.', tip: 'La fibra casi no sufre interferencia. Más oscilaciones en el mismo tiempo = más frecuencia.', durationSeconds: 10, icon: 'wave', area: 'teleco', mechanic: 'Compara', course: 'Fundamentos de Transmisión de Señales · 5.º semestre' },
+  { id: 'ping-check', title: '¿Ping o no ping?', instruction: 'Lee la terminal: ¿hay conectividad?', tip: 'Si responde con «bytes de…» y un tiempo en ms, el otro equipo está vivo.', durationSeconds: 9, icon: 'terminal', area: 'redes', mechanic: 'Lee', course: 'Laboratorio de Redes de Computadores · 4.º semestre' },
+  { id: 'color-code', title: 'Crimpado RJ45', instruction: 'Completa el color que falta en el cable T568B.', tip: 'T568B parte así: blanco-naranja, naranja, blanco-verde, azul…', durationSeconds: 12, icon: 'plug', area: 'hardware', mechanic: 'Completa', course: 'Laboratorio de Redes de Computadores · 4.º semestre' },
+  { id: 'firewall', title: 'Firewall', instruction: 'Permite el tráfico legítimo y bloquea el malicioso.', tip: 'Desconfía de Telnet, de los archivos .exe y de muchos intentos seguidos.', durationSeconds: 14, icon: 'shieldCheck', area: 'seguridad', mechanic: 'Clasifica', course: 'Ingeniería en Ciberseguridad · 8.º semestre' },
+  { id: 'signal-timing', title: 'Sintoniza la antena', instruction: 'Detén la aguja dentro de la zona verde.', tip: 'Sigue el vaivén de la aguja y toca un instante antes de la zona verde.', durationSeconds: 8, icon: 'antenna', area: 'teleco', mechanic: 'Reflejos', course: 'Principios de Comunicaciones · 6.º semestre' },
+  { id: 'sequence-memory', title: 'Ruta de paquetes', instruction: 'Memoriza la ruta y repítela en orden.', tip: 'Di la ruta en voz baja mientras se ilumina: te ayuda a recordarla.', durationSeconds: 14, icon: 'network', area: 'redes', mechanic: 'Memoria', course: 'Redes de Computadores · 3.er semestre' },
+  { id: 'packet-rush', title: 'Congestión de red', instruction: '¡Envía todos los paquetes antes de que se acabe el tiempo!', tip: 'Toca parejo y sin pausas hasta llenar la barra.', durationSeconds: 8, icon: 'send', area: 'redes', mechanic: 'Velocidad', course: 'Disponibilidad y Rendimiento de Sistemas TIC · 7.º semestre' },
+  { id: 'cable-connect', title: 'Conecta el cable', instruction: 'Arrastra cada cable a su puerto del mismo color.', tip: 'Lleva cada cable hasta el puerto de su mismo color y suéltalo encima.', durationSeconds: 12, icon: 'move', area: 'hardware', mechanic: 'Arrastra', course: 'Laboratorio de Redes de Computadores · 4.º semestre' },
+  { id: 'packet-catch', title: 'Atrapa el paquete', instruction: 'Toca 5 paquetes sanos y evita los infectados.', tip: 'Los paquetes rojos están infectados: déjalos pasar.', durationSeconds: 12, icon: 'packet', area: 'seguridad', mechanic: 'Atrapa', course: 'Ingeniería en Ciberseguridad · 8.º semestre' },
+  { id: 'wifi-boost', title: 'Wi-Fi Boost', instruction: 'Arrastra el router hasta tener señal completa.', tip: 'Acerca el router al notebook y aléjalo del microondas.', durationSeconds: 12, icon: 'wifi', area: 'teleco', mechanic: 'Ubica', course: 'Laboratorio de Comunicaciones · 7.º semestre' },
+  { id: 'password-strong', title: 'Contraseña fuerte', instruction: 'Arma una contraseña que llegue a «Muy fuerte».', tip: 'Mezcla palabras, mayúsculas, números y símbolos. Mientras más larga, mejor.', durationSeconds: 15, icon: 'key', area: 'seguridad', mechanic: 'Construye', course: 'Ingeniería en Ciberseguridad · 8.º semestre' },
+  { id: 'binary-bits', title: 'Bits en orden', instruction: 'Enciende los bits que suman el número.', tip: 'Parte por el bit más grande que quepa y completa con los chicos.', durationSeconds: 14, icon: 'hash', area: 'hardware', mechanic: 'Binario', course: 'Electrónica Digital · 4.º semestre' },
+  { id: 'layer-order', title: 'Capas de Internet', instruction: 'Toca las capas desde el cable hasta la app.', tip: 'Primero el medio (Wi-Fi o cable), luego la IP, después TCP y arriba la app.', durationSeconds: 14, icon: 'server', area: 'redes', mechanic: 'Ordena', course: 'Redes de Computadores · 3.er semestre' },
+  { id: 'ip-valid', title: '¿IP válida?', instruction: 'Encuentra la dirección IPv4 bien escrita.', tip: 'Cuatro números del 0 al 255, separados por puntos. Ni más ni menos.', durationSeconds: 12, icon: 'globe', area: 'redes', mechanic: 'Elige', course: 'Redes de Computadores · 3.er semestre' },
+  { id: 'fast-route', title: 'Ruta más rápida', instruction: 'Elige la ruta con menos latencia total.', tip: 'Suma los milisegundos de cada salto: gana el total más bajo.', durationSeconds: 15, icon: 'route', area: 'redes', mechanic: 'Calcula', course: 'Administración de Redes · 5.º semestre' },
+  { id: 'safe-url', title: 'Sitio verdadero', instruction: 'Elige la dirección web oficial.', tip: 'Mira el final del dominio: usm.cl.algo.ru no es de la USM.', durationSeconds: 14, icon: 'shieldLock', area: 'seguridad', mechanic: 'Detecta', course: 'Ingeniería en Ciberseguridad · 8.º semestre' },
+  { id: 'unit-order', title: 'De bit a giga', instruction: 'Ordena las unidades de menor a mayor.', tip: 'bit → byte → kilo → mega → giga. Cada paso es mil veces más (salvo el primero: 8 bits).', durationSeconds: 12, icon: 'database', area: 'software', mechanic: 'Ordena', course: 'Sistemas Digitales y Estructura de Computadores · 5.º semestre' },
+  { id: 'port-match', title: 'Puerto correcto', instruction: 'Elige el puerto que usa el servicio.', tip: 'La web segura va por el 443; la web sin candado, por el 80.', durationSeconds: 14, icon: 'door', area: 'redes', mechanic: 'Elige', course: 'Redes de Computadores · 3.er semestre' },
+  { id: 'device-role', title: '¿Qué equipo es?', instruction: 'Lee la pista y elige el equipo de red.', tip: 'Router = Internet. Switch = cables. Access point = Wi-Fi.', durationSeconds: 15, icon: 'lanSwitch', area: 'hardware', mechanic: 'Identifica', course: 'Laboratorio de Redes de Computadores · 4.º semestre' },
+  { id: 'wifi-safe', title: 'Wi-Fi seguro', instruction: 'Elige la red Wi-Fi mejor protegida.', tip: 'Mira el tipo de seguridad de cada red: WPA3 le gana a todas.', durationSeconds: 14, icon: 'accessPoint', area: 'seguridad', mechanic: 'Protege', course: 'Ingeniería en Ciberseguridad · 8.º semestre' },
+  { id: 'acronym', title: 'Sigla TEL', instruction: 'Elige qué significa la sigla.', tip: 'Casi todas vienen del inglés: piensa en Network, Protocol, System…', durationSeconds: 15, icon: 'book', area: 'software', mechanic: 'Vocabulario', course: 'Redes de Computadores · 3.er semestre' },
 ];
+
+export const microGameCatalog: MicroGameInfo[] = [...coreCatalog, ...redesInfo, ...senalesInfo, ...datosInfo, ...sistemasInfo];
 
 export function getMicroGameInfo(id: string): MicroGameInfo | undefined {
   return microGameCatalog.find((game) => game.id === id);

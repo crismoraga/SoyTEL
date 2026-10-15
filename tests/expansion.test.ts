@@ -65,8 +65,8 @@ describe('concept micro games', () => {
     }
   });
 
-  it('registers 22 micro games with a component each', () => {
-    expect(microGameCatalog).toHaveLength(22);
+  it('registers 28 micro games with a component each', () => {
+    expect(microGameCatalog).toHaveLength(28);
     ['port-match', 'device-role', 'wifi-safe', 'acronym'].forEach((id) => {
       const game = microGameRegistry.find((item) => item.id === id);
       expect(game?.Component).toBeDefined();
@@ -107,7 +107,7 @@ describe('memory puzzle', () => {
   });
 
   it('is listed with the other untimed challenges and has a tutorial', () => {
-    expect(puzzles.map((puzzle) => puzzle.id)).toEqual(['red', 'memoria', 'binario', 'cifrado']);
+    expect(puzzles.map((puzzle) => puzzle.id)).toEqual(['red', 'memoria', 'binario', 'cifrado', 'paquete']);
     puzzles.forEach((puzzle) => expect(getTutorial(`puzzle-${puzzle.id}`)?.steps.length).toBeGreaterThanOrEqual(3));
     expect(puzzles.find((puzzle) => puzzle.id === 'memoria')?.levelName(3)).toBe('8 parejas');
   });

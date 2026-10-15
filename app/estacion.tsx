@@ -5,7 +5,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { Tag } from '@/components/Chips';
 import { Celebration } from '@/components/feedback/Celebration';
 import { Rutix } from '@/components/graphics/Rutix';
-import { Screen } from '@/components/Screen';
+import { Screen, ScreenBar } from '@/components/Screen';
 import { AccountGate } from '@/features/account/AccountGate';
 import { PauseSheet, useBackToPause } from '@/features/coach/PauseSheet';
 import { TelButton } from '@/components/TelButton';
@@ -87,40 +87,29 @@ export default function StationPracticeScreen() {
       tone="dark"
       backdrop="stars"
       scroll={false}
-      header={
-        <AppHeader
-          compact
-          onBack={() => setLeaving(true)}
-          right={
-            <View style={styles.headRight}>
-              <Tag tone="glass" icon="pin" label={info.place} />
-              <HelpButton onPress={tutorial.open} />
-            </View>
-          }
-        >
-          <TelText variant="heading" color="cream">
-            {info.title}
-          </TelText>
-        </AppHeader>
-      }
+      tight
+      header={<ScreenBar onBack={() => setLeaving(true)} kicker={info.place} title={info.title} right={<HelpButton onPress={tutorial.open} />} />}
     >
-      <Game
-        key={run.key}
-        seed={run.seed}
-        pace={pace}
-        onComplete={(value) => {
-          setResult({ score: value.score });
-          void saver.save({
-            id: run.id,
-            gameId: 'station',
-            score: value.score,
-            accuracy: value.accuracy,
-            durationSeconds: Math.max(1, Math.round((now() - run.startedAt) / 1000)),
-            completedAt: new Date().toISOString(),
-            metadata: { game: info.id },
-          });
-        }}
-      />
+      {/* El juego llena el alto que dejan la barra y el relleno: sus tableros se miden contra este espacio. */}
+      <View style={styles.host}>
+        <Game
+          key={run.key}
+          seed={run.seed}
+          pace={pace}
+          onComplete={(value) => {
+            setResult({ score: value.score });
+            void saver.save({
+              id: run.id,
+              gameId: 'station',
+              score: value.score,
+              accuracy: value.accuracy,
+              durationSeconds: Math.max(1, Math.round((now() - run.startedAt) / 1000)),
+              completedAt: new Date().toISOString(),
+              metadata: { game: info.id },
+            });
+          }}
+        />
+      </View>
       <AccountGate />
       <TutorialSheet
         tutorial={tutorials.station}
@@ -156,9 +145,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: 'auto',
   },
-  headRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+  host: {
+    flex: 1,
+    minHeight: 0,
   },
 });

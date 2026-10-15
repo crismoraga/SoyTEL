@@ -162,12 +162,12 @@ export function BinaryLabGame({ level, seed, onSolved, say }: PuzzleGameProps) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   card: {
     alignItems: 'center',
     gap: 4,
-    padding: spacing.md,
+    padding: spacing.sm,
     borderRadius: radius.lg,
     backgroundColor: colors.primarySoft,
     borderWidth: 1,
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   },
   bit: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 68,
     borderRadius: radius.md,
     borderWidth: 2,
     borderColor: 'rgba(167, 212, 237, 0.3)',
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   option: {
     flexBasis: '47%',
     flexGrow: 1,
-    minHeight: 60,
+    minHeight: 56,
     borderRadius: radius.md,
     borderWidth: 1.5,
     borderColor: 'rgba(167, 212, 237, 0.3)',

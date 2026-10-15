@@ -18,6 +18,7 @@ import { MemoryGame } from '@/features/puzzles/MemoryGame';
 import { CipherGame } from '@/features/puzzles/CipherGame';
 import { NetWalkGame } from '@/features/puzzles/NetWalkGame';
 import type { PuzzleGameProps, PuzzleResult } from '@/features/puzzles/types';
+import { ZipPuzzleGame } from '@/features/puzzles/ZipPuzzleGame';
 import { HelpButton, TutorialSheet } from '@/features/tutorial/TutorialSheet';
 import { getTutorial } from '@/features/tutorial/tutorials';
 import { now } from '@/lib/clock';
@@ -34,6 +35,7 @@ const components: Record<PuzzleId, React.ComponentType<PuzzleGameProps>> = {
   memoria: MemoryGame,
   binario: BinaryLabGame,
   cifrado: CipherGame,
+  paquete: ZipPuzzleGame,
 };
 
 interface Solved {
@@ -41,7 +43,7 @@ interface Solved {
   result: PuzzleResult;
 }
 
-// Desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado): por niveles y con Rutix de guía.
+// Desafíos sin reloj (Conecta la red, Parejas TEL, Binario, Mensaje cifrado, Ruta del paquete): por niveles y con Rutix de guía.
 export default function PuzzleScreen() {
   const { juego } = useLocalSearchParams<{ juego?: string }>();
   const info = getPuzzle(juego ?? '');
@@ -65,7 +67,7 @@ export default function PuzzleScreen() {
     );
   }
 
-  const unlocked = Math.min(info.maxLevel, progress[info.id].level + 1);
+  const unlocked = Math.min(info.maxLevel, (progress[info.id]?.level ?? 0) + 1);
   const level = Math.min(chosenLevel ?? unlocked, unlocked);
   const Game = components[info.id];
 

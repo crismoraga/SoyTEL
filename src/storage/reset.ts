@@ -3,6 +3,7 @@ import { ACCOUNT_KEYS, resetAccountLocal } from '@/account/store';
 import { hostManager } from '@/route/hostManager';
 import { routeMember } from '@/route/member';
 import { clearRouteStorage } from '@/route/storage';
+import { BURST_HISTORY_KEYS } from './burstHistory';
 import { CAREER_KEYS } from './career';
 import { INBOX_KEYS, resetInboxCache } from './inbox';
 import { exclusive } from './locks';
@@ -42,7 +43,7 @@ export function resetAllData({ keepOnboarding = true }: { keepOnboarding?: boole
       }
     };
     const storyKeys = keepOnboarding ? STORY_KEYS.filter((key) => key !== '@soytel/onboarded') : STORY_KEYS;
-    await stage('datos', () => AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...PUZZLE_KEYS, ...RUNNER_KEYS, ...MISSION_KEYS, ...TUTORIAL_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]));
+    await stage('datos', () => AsyncStorage.multiRemove([...PROFILE_KEYS, ...storyKeys, ...INBOX_KEYS, ...CAREER_KEYS, ...PUZZLE_KEYS, ...RUNNER_KEYS, ...MISSION_KEYS, ...BURST_HISTORY_KEYS, ...TUTORIAL_KEYS, ...SETTINGS_KEYS, ...ACCOUNT_KEYS]));
     await stage('ruta', clearRouteStorage);
     await stage('cuenta', resetAccountLocal);
     resetInboxCache();
